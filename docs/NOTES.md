@@ -1,0 +1,192 @@
+# Where the docs and the brief disagree with the code
+
+Every line below was checked against a running Hermes on this box, not read off a page.
+If you are building the same plugin, these are the traps.
+
+## 1. `HERMES_HOME` does not sandbox profiles
+
+The brief says test in a throwaway home. That works for config, plugins and session state,
+but **not** for profiles. `hermes_cli.profiles._get_profiles_root()` is anchored to the real
+`~/.hermes`, so a plugin that calls `create_profile` writes into the user's real profile
+directory even when `HERMES_HOME=$(mktemp -d)/hh` is set.
+
+Worse: a running gateway lists every profile under that root in `gateway_state.json`
+(`served_profiles`) and reconciles it. Delete the directory with `rm -rf` and it comes back
+within a minute, because the gateway still believes the profile exists.
+
+Verified sequence:
+
+```
+HERMES_HOME=$HH ... hire "inbox-bot"     ->  real /home/andres/.hermes/profiles/inbox-bot
+rm -rf that directory                     ->  recreated ~60s later by the gateway
+hermes profile delete inbox-bot           ->  gone, stays gone, gateway reconciled
+```
+
+Consequences we adopted:
+
+- The unit suite injects seams and never calls core. No LLM calls, no profiles.
+- The one live end-to-end run used a `bp-test-*` name and was removed with
+  `hermes profile delete`, never `rm`.
+- `remove` in the plugin goes through core's `delete_profile` for exactly this reason.
+
+## 2. `capabilities` in `plugin.yaml` must be a list, not a mapping
+
+The obvious manifest shape is wrong:
+
+```yaml
+capabilities:
+  commands: [concierge]
+```
+
+`hermes plugins validate` rejects it: `manifest 'capabilities' must be a list`. Commands are
+not declared in the manifest at all. They are registered at runtime by `register(ctx)` and
+discovered through `hermes_cli.plugins.get_plugin_commands()`. The manifest keeps
+`name`, `version`, `description`, `author`, and the hooks it provides.
+
+## 3. A plugin command handler gets exactly one argument
+
+Dispatch calls `handler(raw_text)`. A handler declared as
+`def handle_concierge(raw, *, store, seams)` raises `TypeError` the first time a real user
+types the command, while every unit test still passes. `handle_concierge` now builds its own
+`state.Store()` when none is injected.
+
+## 4. Explicit bot names use the colon form
+
+The mechanical rule takes the last meaningful word (`keeps my inbox at zero` -> `inbox-bot`).
+`hire bp-test-zero keeps my inbox at zero` therefore creates `inbox-bot`. To name it, use
+`hire bp-test-zero: keeps my inbox at zero`. Leading words before a colon are the name.
+
+## 5. Deleting a served profile stops its gateway
+
+`hermes profile delete <name>` prints `Gateway is running — it will be stopped` and takes the
+per-profile gateway down with the directory. That is the behaviour we want from `remove`, so
+we call core rather than unlinking files.
+
+## 6. A pre-hire profile list cannot be used as a receipt
+
+The first end-to-end run reported `profile NOT listed` for a bot that plainly existed, because
+the receipt was handed the profile list captured *before* `create_profile` ran. The receipt now
+re-reads the root after the write when it is not given an injected list. A receipt that can lie
+is worse than no receipt.
+
+## 7. `hermes plugins validate` warns about private core imports
+
+Validation passes, and then prints:
+
+```
+⚠ private core imports (catalog rule 9: public surfaces only; these can break on
+any release): seams.py:38 hermes_cli.plugin_catalog.load_catalog_live; ...
+```
+
+There is no `ctx.*` for "rank the live catalog", "run the installer", "create a profile" or
+"undo". A plugin that keeps all of those calls in one module (`seams.py`) is the honest shape:
+one file to fix when core moves, instead of a copy of the installer that drifts.
+
+## 8. `reset` must not replay the profile-creation record
+
+The first live `reset` deleted the whole bot, because the record from `hire` is "delete this
+profile" when replayed. That contradicts the contract ("reset leaves the bot standing").
+`reset` now always keeps the bot record and replays only the records written inside it;
+`remove` is the only path that deletes a profile. Regression test:
+`test_reset_leaves_the_bot_standing`.
+
+
+## 9. One junk sentence still surfaces a card, and three fixes measured worse
+
+`"convert my sandwich into a spreadsheet tax form for fish"` still ranks `fish-audio`
+(`form` 0.54 from its own "advisory form" boilerplate + `fish` 0.84 as a name/tool word).
+We tried to remove it three ways and measured each against the 32 realistic asks:
+
+- **Weighted query coverage** (matched word weight / all content word weight): real asks go as
+  low as 0.16, the junk ask sits at 0.36. Overlaps, no threshold works.
+- **Require a capability-text hit, not a name hit**: the junk ask passes (its `fish` word is in
+  the entry's tool text) and 8 of 32 real asks would be dropped.
+- **Require an adjacent matched pair**: the junk ask passes, and 7 real asks would still need
+  the old path.
+
+Conclusion: this is the boundary of a keyword matcher, not a tuning bug. Behaviour kept,
+claim narrowed in `README.md` (a card is not an install; nothing installs without the yes),
+and `tests/eval_match.py` keeps the case as a known leak instead of hiding it.
+
+## 10. The hand-written eval can be nudged, so there is a second one
+
+`tests/eval_match.py` uses 32 hand-written asks; whoever edits the expected lists can move the
+number. `tests/eval_recall.py` cannot be nudged: fixed seed, samples 120 of the 977 catalog
+entries, asks each entry's own lower-cased title, and checks the entry comes back top-3.
+Currently `top1=119/120 top3=120/120`. It is an easy task by construction (the title is the
+entry's own words) so it is a floor, not a ceiling.
+
+## 11. Undo of a plugin looked for a function that does not exist
+
+`undo.py` guessed core's uninstall name (`uninstall_plugin`, `remove_plugin`, ...) across three
+modules. None of them has one: core removes a plugin through `hermes_cli.plugins_cmd_remove.cmd_remove`.
+So on a real install `_default_uninstall()` raised `AttributeError`, `_run()` turned it into a
+"could not restore" line, and the record stayed. Every undo test injected its own callable, which
+is exactly why 101 green tests missed it.
+
+Fixed by pointing the three defaults at the real thing and nothing else:
+
+- plugin -> `seams.remove_plugin()`, which wraps `cmd_remove`; a core refusal is a `SystemExit`
+  there, so the seam turns it into a `RuntimeError` (undo must not take the session down).
+- skill -> `tools.skills_hub_install.uninstall_skill`, which also refuses skills Concierge did not
+  install, so a stray folder cannot be deleted by undo.
+- cron -> unchanged; it already resolved to `cron.remove_job`.
+
+`tests/test_undo_defaults.py` injects nothing: it builds a throwaway `HERMES_HOME`, puts a plugin
+and a hub-installed skill in it, and checks the paths afterwards. It also runs the production chain
+`handle_concierge("undo")` with defaults, and asserts the record is gone only when the file is.
+The suite went 101 -> 106.
+
+## 12. Dependencies ride the one yes
+
+The catalog publishes no dependency list: `plugin-catalog/*.json` has no `dependencies`,
+`requires` or `python_deps`, so `seams.declared_deps(entry)` is empty for all 977 entries and has
+no catalog-side callers. Declarations live in the downloaded tree, which `pm/plugin_declarations.py`
+reads as `read_python_declaration(...).install_requirements`.
+
+Install path: a slash command has no tty for core's dependency question, so Concierge passes
+`assume_deps_consent=True` (`seams.py:77`, `:90`) and core installs the plugin's own packages
+itself. There is no extra question, and no prompt to answer.
+
+The only thing that was missing was honesty in both directions:
+
+- before the yes, `seams.declared_deps_remote(entry)` reads the plugin's own `plugin.yaml`,
+  `pyproject.toml` or `requirements.txt` from its pinned public commit. One small HTTPS read, no
+  clone, nothing executed. The card prints `deps  httpx, websockets  installed with it, no extra
+  question`, and only when the repo actually declares something. If a spec points at git or a URL
+  the line says `installs code from git or a url, not PyPI`, because that is the one shape the
+  catalog scan cannot see.
+- after the yes, the receipt re-reads the installed tree (`seams.declared_deps(target)`) and prints
+  `deps  httpx, websockets installed`: what core installed, not what the repo promised.
+
+Measured, one shuffled sample of 40 real catalog entries at their pins (`tests/probe_deps_live.py`):
+**9 of 40 (22%) declare packages**, the other 31 declare nothing and show no line. One of the nine,
+`weather`, pulls three packages straight from git (`cfrust @ git+https://...`), which is exactly the
+case the plain-words line exists for. Cost: ~0.45s per card, worst case three reads, and it is
+skipped entirely for unpinned entries.
+
+No new command, verb, config or step: the dependency surface got a line on the card and a line on
+the receipt, nothing else. `tests/test_deps.py` covers all of it with an injected fetch, so the
+suite stays offline and deterministic (106 -> 115 tests).
+
+## 13. One card, one install, one receipt that is true
+
+Three small defects, one family: the card promised things the code did not do.
+
+1. **The second number.** The card said `Two candidates. Reply 1 or 2.` and described only the
+   first. Typing `2` installed a plugin whose tools, hooks and cost the card never showed. A number
+   that installs an undescribed thing is a decision made blind, so the number is gone: the runner-up
+   is named on the `also` line, `more` describes it, and `/concierge <its name>` installs it. `2`
+   now answers "one install at a time". `yes` always means the top match.
+2. **`more` did nothing.** It was a recognised reply that fell through to "Nothing is waiting". It
+   now prints the runner-up's `why / what / adds / cost` and says out loud that the card still holds
+   the top match, so it cannot change what `yes` installs.
+3. **Receipts promised undone work.** A failed record write was swallowed and the receipt still said
+   `Undo it with /concierge undo`, which would have found nothing. `_remember` returns a bool now;
+   on False the receipt prints `no undo  the record could not be saved`. Same check on hire and
+   train, not just the card.
+
+No new command, verb or config. `more` was already a dead branch, so this deletes a promise and adds
+no surface. Live probe in a throwaway `HERMES_HOME` against the real catalog:
+`/home/andres/.hermes/cache/scratch/live_card.txt` (card, `more`, `2`, `no`). Suite 115 -> 120, zero
+LLM calls.

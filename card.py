@@ -1,0 +1,363 @@
+"""The card: one sentence in, one decision out.
+
+Everything a person needs in order to say yes is on the card, and nothing is
+installed until they say it. The card is a plain string so it renders the same
+in the CLI, the TUI and a test.
+
+Two keystrokes are deliberate, not friction: when core rates a plugin caution
+it prints its own report, and the card makes the second yes explicit instead
+of taking one answer as consent to two different questions.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+# A second candidate stays on the card when it is close enough that showing
+# only the winner would be a guess.
+CONTENDER_RATIO = 0.75
+
+# What a confirmed sentence leaves behind until the person answers, one slot per
+# conversation: one gateway process serves many chats at once, so a "yes" must only
+# ever answer the card that same chat was shown. The entries themselves are kept, not
+# their names, so answering never re-reads the catalog.
+_PENDING: dict = {}
+
+
+def _slot(session_key: str = "") -> dict:
+    return _PENDING.setdefault(
+        session_key or "", {"sentence": "", "entries": [], "caution_accepted": False}
+    )
+
+YES = frozenset({"y", "yes", "install", "do it", "ok", "okay", "go"})
+NO = frozenset({"n", "no", "cancel", "stop", "never mind", "nvm"})
+MORE = frozenset({"more", "details", "show me"})
+
+
+def _caps(entry) -> dict:
+    from . import match
+
+    return match.capabilities(entry)
+
+
+def _adds(entry) -> str:
+    """What the plugin registers, in the catalog's own words."""
+    caps = _caps(entry)
+    parts = []
+    for key, label in (
+        ("provides_tools", "tools"),
+        ("provides_hooks", "hooks"),
+        ("provides_middleware", "middleware"),
+    ):
+        value = caps.get(key) or []
+        if value:
+            count = len(value) if isinstance(value, (list, tuple)) else 1
+            parts.append(f"{count} {label}")
+    requires = caps.get("requires_env") or []
+    if requires:
+        parts.append(f"needs {', '.join(str(r) for r in requires)}")
+    return ", ".join(parts) if parts else "no tools, no hooks, no middleware"
+
+
+def cost_line(entry) -> str:
+    """One honest line about what the plugin adds to every request."""
+    caps = _caps(entry)
+    tools = caps.get("provides_tools") or []
+    if not tools:
+        return "adds no tools, so nothing is added to the request"
+    count = len(tools) if isinstance(tools, (list, tuple)) else 1
+    # The catalog declares tool names, not schemas, so the only thing that can
+    # be said without inventing a number is that they ride along on each call.
+    return f"{count} tools, sent on every request like every other tool"
+
+
+def _pin(entry) -> str:
+    sha = str(getattr(entry, "sha", "") or "")
+    version = str(getattr(entry, "version", "") or "")
+    repo = str(getattr(entry, "repo", "") or "")
+    short = sha[:12] if sha else "unpinned"
+    tail = f"v{version} " if version else ""
+    return f"{repo} {tail}@ {short}".strip()
+
+
+def _fit(text: str, limit: int) -> str:
+    """Cut at a word boundary so the card never ends mid-word.
+
+    A description chopped inside a word reads like a bug on camera, so trim to
+    the last whole word that fits and mark the cut.
+    """
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 4]
+    space = cut.rfind(" ")
+    if space > 0:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:.") + " ..."
+
+
+def _dep_name(spec: str) -> str:
+    """The package name out of a requirement spec, so the card stays readable."""
+    import re
+
+    head = str(spec).strip().split(";")[0]
+    match = re.match(r"[A-Za-z0-9_.\-]+", head)
+    return match.group(0) if match else head
+
+
+def deps_line(deps) -> str:
+    """What the plugin brings with it, in the person's words, before the yes."""
+    from . import seams
+
+    names = [_dep_name(str(d)) for d in deps]
+    shown = ", ".join(names[:4]) + (f" (+{len(names) - 4} more)" if len(names) > 4 else "")
+    if seams.risky_deps(deps):
+        return f"  deps        {shown}  installs code from git or a url, not PyPI"
+    return f"  deps        {shown}  installed with it, no extra question"
+
+
+def render(sentence: str, candidates: list, deps: Optional[list] = None) -> str:
+    """The card for one sentence and the candidates that earned a place on it."""
+    top = candidates[0]
+    lines = [
+        "Concierge",
+        "",
+        f"  you said    {sentence.strip()}",
+        f"  best match  {top.name}  ({top.tier or 'unknown tier'}, {top.category or 'general'})",
+        f"  why         {top.why()}",
+    ]
+    description = " ".join(top.description.split())
+    if description:
+        lines.append(f"  what        {_fit(description, 160)}")
+    lines.append(f"  adds        {_adds(top.entry)}")
+    if deps:
+        lines.append(deps_line(deps))
+    lines.append(f"  cost        {cost_line(top.entry)}")
+    lines.append(f"  install     {_pin(top.entry)}")
+
+    rival = _contender(candidates)
+    if rival is not None:
+        # The runner-up is named so it can be asked for by name. It is never one
+        # keystroke away: a number that installs something the card did not describe
+        # is a decision made blind.
+        lines += ["", f"  also        {rival.name}  ({rival.tier or 'unknown tier'})"]
+    lines += ["", "Install it?  /concierge yes   or   /concierge no", ""]
+    return "\n".join(lines)
+
+
+def _contender(candidates: list):
+    if len(candidates) < 2:
+        return None
+    first, second = candidates[0], candidates[1]
+    if first.score <= 0 or second.score < first.score * CONTENDER_RATIO:
+        return None
+    return second
+
+
+def nothing(sentence: str, entries: Optional[list] = None) -> str:
+    """The honest no: nothing in the catalog does this, and nothing was installed."""
+    return "\n".join(
+        [
+            "Concierge",
+            "",
+            f"  you said    {sentence.strip()}",
+            "  best match  none",
+            "",
+            "Nothing in the catalog does that yet. Nothing was installed.",
+            "",
+        ]
+    )
+
+
+def handle(sentence: str, *, entries=None, store=None, install=None, session_key: str = "") -> str:
+    """One sentence in, one card or one receipt out."""
+    from . import match, seams
+
+    slot = _slot(session_key)
+    text = (sentence or "").strip()
+    if not text:
+        return "Concierge\n\n  Say what you want in one sentence, like: /concierge remember my notes across sessions\n"
+
+    lowered = text.lower()
+
+    if lowered in NO:
+        forgotten = slot["sentence"]
+        _reset(session_key)
+        return f"Nothing installed.{' Kept ' + forgotten + ' out.' if forgotten else ''}\n"
+
+    if lowered == "2":
+        # Refused rather than guessed: the card only ever describes one install.
+        return "One install at a time. /concierge yes takes the top match, or name the other one.\n"
+
+    if lowered in YES or lowered == "1":
+        return _answer(store=store, install=install, session_key=session_key)
+
+    if lowered in MORE:
+        return more(session_key=session_key)
+
+    catalog = entries if entries is not None else seams.catalog()
+    candidates = match.rank(text, catalog, limit=2)
+    if not candidates:
+        return nothing(text, catalog)
+
+    slot["sentence"] = text
+    slot["entries"] = candidates
+    slot["caution_accepted"] = False
+    try:  # the packages the repo declares, read before the yes; no list means none are shown
+        deps = seams.declared_deps_remote(candidates[0].entry)
+    except Exception:
+        deps = []
+    return render(text, candidates, deps=deps)
+
+
+def _answer(*, store=None, install=None, session_key: str = "") -> str:
+    picked = _slot(session_key)["entries"]
+    if not picked:
+        return "Nothing is waiting. Start with: /concierge <what you want>\n"
+    return _install(picked[0].entry, store=store, install=install, session_key=session_key)
+
+
+def more(session_key: str = "") -> str:
+    """The runner-up, described. Shows it; changes nothing about the pending yes."""
+    picked = _slot(session_key)["entries"]
+    if not picked:
+        return "Nothing is waiting. Start with: /concierge <what you want>\n"
+    if len(picked) < 2:
+        return f"{picked[0].name} is the only match on the card.\n"
+
+    rival = picked[1]
+    lines = [
+        f"{rival.name}  ({rival.tier or 'unknown tier'}, {rival.category or 'general'})",
+        "",
+        f"  why         {rival.why()}",
+    ]
+    description = " ".join(rival.description.split())
+    if description:
+        lines.append(f"  what        {_fit(description, 160)}")
+    lines.append(f"  adds        {_adds(rival.entry)}")
+    lines.append(f"  cost        {cost_line(rival.entry)}")
+    lines += [
+        "",
+        f"The card still holds {picked[0].name}: /concierge yes installs that.",
+        f"For this one instead: /concierge {rival.name}",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _install(entry, *, store=None, install=None, session_key: str = "") -> str:
+    from . import seams, state
+
+    slot = _slot(session_key)
+    install_fn = install or seams.install
+
+    # Core's report is a string, not a print: in the TUI and in the gateway
+    # stdout never reaches the conversation, so the report travels back with
+    # the reply the same way the card does.
+    shown: list[str] = []
+
+    def approve(report: str) -> bool:
+        # Core's own report is already on screen; the second yes is the answer
+        # to core's question, not a repeat of the first one.
+        if slot["caution_accepted"]:
+            return True
+        shown.append(report)
+        return False
+
+    outcome = install_fn(entry, approve=approve)
+
+    if not outcome.ok:
+        if outcome.verdict == "caution" and not slot["caution_accepted"]:
+            slot["caution_accepted"] = True
+            body = "\n".join(part for part in shown if part.strip())
+            return (
+                (body + "\n\n" if body else "")
+                + f"Core rated {entry.name} caution.\n"
+                "Accept it with /concierge yes, or /concierge no.\n"
+            )
+        _reset(session_key)
+        reason = outcome.blocked_reason or "core refused the install"
+        return f"Not installed: {reason}\n"
+
+    _reset(session_key)
+    record = state.Installed(
+        name=outcome.installed_name or str(getattr(entry, "name", "")),
+        sha=str(getattr(entry, "sha", "") or ""),
+        title=str(getattr(entry, "title", "") or ""),
+        target=outcome.target,
+        enabled=bool(outcome.enabled),
+    )
+    saved = _remember(record, store)
+    return receipt(outcome, record, saved=saved)
+
+
+def receipt(outcome, record, *, saved: bool = True) -> str:
+    """What actually happened, checked on disk rather than assumed."""
+    from pathlib import Path
+
+    from . import seams
+
+    lines = [f"Installed {record.name}", ""]
+    target = Path(record.target) if record.target else None
+    if target is not None and target.exists():
+        files = sum(1 for item in target.rglob("*") if item.is_file())
+        lines.append(f"  on disk     {target} ({files} files)")
+    else:
+        lines.append("  on disk     not found, core reported a target that is not there")
+    lines.append(f"  enabled     {'yes' if record.enabled else 'no'}")
+    try:  # re-read the installed tree: what core actually installed, not what the repo promised
+        installed = seams.declared_deps(target) if target is not None else []
+    except Exception:
+        installed = []
+    if installed:
+        names = ", ".join(_dep_name(str(d)) for d in installed[:4])
+        if len(installed) > 4:
+            names += f" (+{len(installed) - 4} more)"
+        lines.append(f"  deps        {names} installed")
+    verdict = outcome.verdict or "not scanned"
+    findings = len(outcome.findings)
+    if not findings:
+        lines.append(f"  scan        {verdict}, nothing flagged")
+    elif findings == 1:
+        lines.append(f"  scan        {verdict}, 1 note")
+    else:
+        lines.append(f"  scan        {verdict}, {findings} notes")
+    for note in outcome.notes:
+        lines.append(f"  note        {note}")
+    if saved:
+        lines += ["", "Undo it with /concierge undo", ""]
+    else:
+        # A receipt may not promise an undo that was never recorded.
+        lines += ["", "Undo is off for this one: the record could not be saved.", ""]
+    return "\n".join(lines)
+
+
+def _remember(record, store) -> bool:
+    """Persist the record so undo has something exact to reverse.
+
+    Returns False when it could not be written, so the receipt says so instead of
+    offering an undo with nothing to reverse.
+    """
+    if store is None:
+        from . import state
+
+        store = state.Store()
+    try:
+        store.add(record)
+    except Exception:  # a receipt that cannot be saved is still a receipt
+        return False
+    return True
+
+
+def _reset(session_key: str = "") -> None:
+    """Drop this conversation's card; nothing of it survives in another chat."""
+    _PENDING.pop(session_key or "", None)
+
+
+def forget(session_key: str = "") -> None:
+    """Let go of a card without answering it (undo, or a new sentence)."""
+    _reset(session_key)
+
+
+def is_waiting(session_key: str = "") -> bool:
+    """True when this conversation has a card standing open."""
+    return bool(_PENDING.get(session_key or ""))
