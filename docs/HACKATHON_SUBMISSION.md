@@ -8,8 +8,8 @@ Fork `NousResearch/hermes-agent`, then on a branch add one file: `plugin-catalog
 The exact content is in `docs/catalog-entry.yaml` in this repo. It pins a real release:
 
 - repo: https://github.com/dresraz/hermes-concierge
-- sha: 2afc787df0077707243cc6f06c9d17d3d1c419d9 (tag `v0.1.3`)
-- version: 0.1.3
+- sha: c5ef0ebdb326c8ef8a8c3cc5b761f12ff15a264a (tag `v0.1.4`)
+- version: 0.1.4
 - `hermes plugins validate . --install-deps` at that commit: **passed**, one warning (private core
   imports, disclosed in the README `## Limits` and in the PR body)
 
@@ -37,7 +37,7 @@ triggers them.
 
 ## What is already done
 
-- plugin code, tests, docs, release `v0.1.3` pushed
+- plugin code, tests, docs, release `v0.1.4` pushed
 - catalog entry written and parsed by the real loader (`hermes_cli.plugin_catalog.entry_from_mapping`)
 - validation passed at the pinned commit
 - PR body text written
