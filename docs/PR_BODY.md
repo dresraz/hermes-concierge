@@ -32,8 +32,9 @@ further.
 
 ## Disclosures (rule 13)
 
-- **Network.** It fetches the plugin catalog index from GitHub and, for the dependency line on the
-  card, one plugin manifest at its pinned commit. Nothing else goes out.
+- **Network.** It fetches the plugin catalog index from GitHub, the skill registries behind a skill
+  search, and one plugin manifest at its pinned commit for the dependency line on the card. Nothing
+  else goes out.
 - **Reads outside its own data.** It reads the active `HERMES_HOME`: the catalog, the profiles
   directory, and the plugin and skill directories. That is what lets the receipt be read back off
   the disk instead of being a claim.
@@ -41,6 +42,9 @@ further.
   from your own `config.yaml`, and Hermes's own install records.
   Listing, resetting and deleting profiles are limited to profiles Concierge created; the default
   profile can be reset to stock but never deleted.
+- **Shell commands.** An install aimed at another bot runs `hermes -p <bot> …` as a short-lived child
+  process: a profile's plugin and skill directories belong to that profile's home. Your yes is still
+  the gate, and nothing runs in the background.
 - **Credentials.** None. No API keys, no `.env`, no `auth.json`, no OAuth.
 - **Telemetry.** None.
 - **Long-running work.** None. No background processes, no watchers.
@@ -48,15 +52,15 @@ further.
 
 ## Known warnings, disclosed rather than hidden
 
-`hermes plugins validate` passes with one warning: nine imports of core modules that have no
+`hermes plugins validate` passes with one warning: 23 imports of core modules that have no
 public seam (for example "install this catalog entry" and "create a profile"). They are the same
 calls the CLI makes, nothing is rebound at runtime, and `no core override` passes. If Hermes adds
-public seams for those two operations, Concierge switches to them the same day. The warning is
+public seams for those operations, Concierge switches to them the same day. The warning is
 also in the README under `## Limits`.
 
 ## Evidence
 
 - `hermes plugins validate . --install-deps` at the pinned commit: passed, one warning
-- 154 tests, no network, no model calls
+- 170 tests, no network, no model calls
 - matcher measured against the live catalog: top pick 24/32, in the top three 31/32, eight of
   eight nonsense asks install nothing
