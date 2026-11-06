@@ -16,7 +16,8 @@ further.
 
 ## Surfaces used
 
-- one slash command, `/concierge`, shipped as a plugin skill (`skills/concierge/SKILL.md`)
+- one slash command, `/concierge`, registered with `ctx.register_command`. No `SKILL.md`, so
+  nothing is added to a profile's skill list or to the skill index
 - one `pre_gateway_dispatch` hook: turns a short reply word in the messaging gateway into the same
   confirmation the CLI takes, and consumes it so the model never sees it
 - no tools registered, so nothing is added to the model's tool list or to the request
