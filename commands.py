@@ -4,7 +4,7 @@
   /concierge hire <sentence>     make a new bot
   /concierge train <bot>: <what> teach a bot one standing habit
   /concierge bots                list the bots Concierge made
-  /concierge remove <n>          delete bot number n
+  /concierge fire <n>            delete bot number n
   /concierge reset <n>           take back what Concierge changed in bot n
   /concierge undo                take back the last thing Concierge did
 
@@ -35,7 +35,7 @@ HELP = (
     "  /concierge hire <sentence>     make a new bot\n"
     "  /concierge train <bot>: <what> teach a bot one standing habit\n"
     "  /concierge bots                list the bots Concierge made\n"
-    "  /concierge remove <n>          delete bot number n\n"
+    "  /concierge fire <n>            delete bot number n\n"
     "  /concierge reset <n>           take back what Concierge changed in bot n\n"
     "  /concierge undo                take back the last thing Concierge did\n"
     "  /concierge help                this list\n"
@@ -93,7 +93,7 @@ def handle_concierge(
     if low in UNDO_WORDS:
         card.forget(session_key)
         _forget("", session_key)
-        return handle_undo(store=store, undo=undo)
+        return handle_undo(store=store, undo=undo, seams=seams)
 
     head, _, _ = low.partition(" ")
     rest = text[len(head):].strip()
@@ -103,16 +103,19 @@ def handle_concierge(
         _forget("", session_key)
         return lifecycle.card(store)
 
-    if head in ("remove", "reset"):
-        # "remove duplicate photos from my phone" is a sentence, not a bot.
-        if not lifecycle.is_selector(store, rest):
+    if head in ("fire", "reset"):
+        # "fire the intern" is a sentence, not a bot: only a selector fires.
+        parts = rest.split()
+        selector = parts[0] if parts else ""
+        confirm = " ".join(parts[1:])
+        if not lifecycle.is_selector(store, selector):
             return card.handle(text, session_key=session_key)
         card.forget(session_key)
         _forget("", session_key)
         try:
-            if head == "remove":
-                return lifecycle.remove(store, rest, seams=seams)
-            return lifecycle.reset(store, rest, seams=seams)
+            if head == "fire":
+                return lifecycle.fire(store, selector, confirm=confirm, seams=seams)
+            return lifecycle.reset(store, selector, seams=seams)
         except lifecycle.Refused as exc:
             return "  {}\n".format(exc)
 
@@ -247,14 +250,19 @@ def handle_train(
     )
 
 
-def handle_undo(*, store: Any = None, undo: Optional[Callable[..., Any]] = None) -> str:
+def handle_undo(*, store: Any = None, undo: Optional[Callable[..., Any]] = None, seams: Any = None) -> str:
     """Reverse the last record, then check on disk that it is really gone."""
     store = store if store is not None else _store()
     record = store.latest()
     if record is None:
         return "Nothing to undo. Concierge has not changed anything yet.\n"
 
-    lines = _undo_record(record, undo=undo)
+    lines = _undo_record(record, undo=undo, seams=seams)
+    if any(line.startswith("kept:") for line in lines):
+        # A refusal is not an undo: the receipt stays so the bot is still tracked.
+        return "\n".join(
+            ["Not undone: {}".format(record.name), ""] + ["  " + line for line in lines] + [""]
+        )
     problems = [line for line in lines if line.startswith(("could not", "still there"))]
     if problems:
         head = "Not fully undone"
@@ -270,13 +278,19 @@ def handle_undo(*, store: Any = None, undo: Optional[Callable[..., Any]] = None)
     )
 
 
-def _undo_record(record: Any, *, seams: Any = None, undo: Optional[Callable[..., Any]] = None) -> list:
+def _undo_record(
+    record: Any,
+    *,
+    seams: Any = None,
+    undo: Optional[Callable[..., Any]] = None,
+    guard: bool = True,
+) -> list:
     """Reverse one record. The seam is chosen by what kind of record it is."""
     from . import effects
 
     kind = getattr(record, "kind", "") or "plugin"
     if kind == "bot":
-        return _undo_bot(record, seams if seams is not None else _seams())
+        return _undo_bot(record, seams if seams is not None else _seams(), guard=guard)
     if kind == "skill":
         return _undo_skill(record, effects)
     from . import undo as undo_mod
@@ -284,7 +298,7 @@ def _undo_record(record: Any, *, seams: Any = None, undo: Optional[Callable[...,
     return list((undo or undo_mod.undo)(record))
 
 
-def _undo_bot(record: Any, seams: Any) -> list:
+def _undo_bot(record: Any, seams: Any, *, guard: bool = True) -> list:
     name = getattr(record, "name", "") or ""
     try:
         home = seams.profile_home(name)
@@ -295,6 +309,19 @@ def _undo_bot(record: Any, seams: Any) -> list:
         # Already absent is the outcome undo wanted, not a failure. Reporting it
         # as one kept the record forever and made every later undo repeat it.
         return ["already gone: profile {}".format(name)]
+    if guard:
+        # Undo takes back a change. It never deletes a bot someone has lived in,
+        # because there is nothing to restore it from. Fire is that sentence.
+        from . import lifecycle
+
+        history = lifecycle.history_of(name, seams)
+        if history:
+            return [
+                "kept: {} has history ({}) and undo never deletes a used bot".format(
+                    name, ", ".join(history)
+                ),
+                "to delete it on purpose: /concierge fire <its number> {}".format(name),
+            ]
     try:
         seams.remove_profile(name)
     except Exception as exc:
@@ -349,8 +376,8 @@ def register(ctx: Any) -> None:
     ctx.register_command(
         "concierge",
         handler=handle_concierge,
-        description="Bots and skills in one sentence: install, hire, train, list, remove, reset, undo.",
-        args_hint="<sentence> | hire | train | bots | remove | reset | undo | help",
+        description="Bots and skills in one sentence: install, hire, train, list, fire, reset, undo.",
+        args_hint="<sentence> | hire | train | bots | fire | reset | undo | help",
     )
     # On a messaging surface the catalog card's "yes" is a bare word. The CLI has no such seam, so
     # there the card says /concierge yes and this hook simply never fires.

@@ -62,7 +62,7 @@ Everything is a word after `/concierge`. There is no `/hire` and no `/train` to 
   /concierge hire <sentence>     make a new bot
   /concierge train <bot>: <what> teach a bot one standing habit
   /concierge bots                list the bots Concierge made
-  /concierge remove <n>          delete bot number n
+  /concierge fire <n>            delete bot number n
   /concierge reset <n>           take back what Concierge changed in bot n
   /concierge undo                take back the last thing Concierge did
   /concierge help                this list
@@ -121,22 +121,35 @@ Trained bp-test-zero
    1  inbox-bot       Triage my inbox
    2  newsletter-bot  Writes my weekly newsletter
 
-  remove <n>  delete that bot
+  fire <n>    delete that bot
   reset <n>   take back what Concierge changed in it
 ```
 
-`remove` deletes a bot Concierge created. `reset` takes back only Concierge's own changes and leaves the bot standing:
+`fire` deletes a bot Concierge created. `reset` takes back only Concierge's own changes and leaves the bot standing:
 
 ```
 Reset: inbox-bot (2 changes)
 
   removed: skill $HERMES_HOME/profiles/inbox-bot/skills/always-answer-in-one-line
-  kept: the bot itself (delete it with /concierge remove)
+  kept: the bot itself (delete it with /concierge fire)
 ```
 
 Both take a number or a name.
 
-**`default` is never deleted.** `remove default` is refused and points at `reset default`, which replays only the records Concierge wrote for that profile. Same for any profile Concierge did not create: it is refused, because deleting something it cannot name is not a concierge's job.
+A bot that has never been used fires on one word. A bot with sessions, memory or cron jobs makes you type its name back first, because that history is the one thing no undo can return:
+
+```
+/concierge fire 2
+
+  Not fired: inbox-bot
+
+    inbox-bot has history: 14 sessions, 2 memory files. Firing it throws that away, and nothing brings it back.
+    To do it anyway: /concierge fire 2 inbox-bot
+```
+
+`undo` never deletes a used bot. Undo on a stock hire kills it; undo on a bot that has been lived in says `kept: ... has history ...` and points at `fire`.
+
+**`default` is never deleted.** `fire default` is refused and points at `reset default`, which replays only the records Concierge wrote for that profile. Same for any profile Concierge did not create: it is refused, because deleting something it cannot name is not a concierge's job.
 
 ## Why a plugin and not a prompt
 
@@ -147,7 +160,7 @@ A prompt cannot read the live catalog, cannot rank every real entry in it agains
 - `commands.py` is the whole command surface: one verb table, one card protocol, one record store.
 - `match.py` ranks the live catalog against your sentence. Pure, deterministic, no model call, no network. Tokenize, fold plurals, bridge an outcome to a mechanism with a small hand-written vocabulary so *"remember this forever"* reaches memory providers instead of scoring zero. Each candidate carries the words that earned it, which is what `why` prints.
 - `card.py` renders the catalog card, takes the yes or no, and prints the receipt once an install lands.
-- `lifecycle.py` lists, removes and resets — the only place that decides what may be deleted.
+- `lifecycle.py` lists, fires and resets — the only place that decides what may be deleted.
 - `bots.py` turns a sentence into a profile name, a title, a duty list and a `SOUL.md`.
 - `training.py` turns a sentence into one `SKILL.md` in that bot's skills directory.
 - `seams.py` is the only module that calls Hermes core: catalog, installer, scan gate, profiles, hook registration.
@@ -181,8 +194,8 @@ Concierge adds no tools to the request. The only per-request cost is the plugin'
 - Installs only through `hermes_cli`'s catalog install, so the same platform check, scan, dependency consent and pinning that `hermes plugins install` gives you apply here.
 - A `caution` rating costs a second explicit yes, as text, so it reaches you in the CLI, the TUI and the gateway alike. A `dangerous` rating is never installed.
 - The card never asks for, holds, or prints a secret. If an entry needs one, it shows the requirement label and nothing else.
-- `default` cannot be removed; it can only be reset to what Concierge changed.
-- Anything Concierge did not create cannot be removed through Concierge.
+- `default` cannot be fired; it can only be reset to what Concierge changed.
+- Anything Concierge did not create cannot be fired through Concierge.
 - `undo` is a record diff, not a guess: it reverses exactly what the record says was written, then checks the disk. A partial undo keeps the record so you can run it again.
 - No background processes, no self-updater, no telemetry, no network calls of its own.
 

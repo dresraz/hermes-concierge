@@ -134,6 +134,57 @@ def profile_home(name: str) -> Path:
     return get_profile_dir(name)
 
 
+def _nonempty_files(folder: Path) -> int:
+    try:
+        return sum(1 for path in folder.rglob("*") if path.is_file() and path.stat().st_size)
+    except OSError:
+        return 0
+
+
+def profile_history(name: str) -> dict:
+    """What a bot has accumulated since it was made: sessions, memory, cron jobs.
+
+    A fresh profile comes from core with empty ``sessions/`` and ``memories/`` and
+    no cron file, so anything counted here is something a person would lose if the
+    profile were deleted. Filesystem only, and every read is allowed to fail: this
+    runs just before a delete, so it must never be the thing that blocks one.
+    """
+    counts = {"sessions": 0, "memories": 0, "cron": 0}
+    try:
+        home = profile_home(name)
+    except Exception:
+        return counts
+    if not home.exists():
+        return counts
+    db = home / "state.db"
+    if db.exists():
+        try:
+            from sqlite3 import connect
+
+            conn = connect("file:{}?mode=ro".format(db), uri=True)
+            try:
+                row = conn.execute("select count(*) from sessions").fetchone()
+            finally:
+                conn.close()
+            counts["sessions"] = int(row[0] or 0) if row else 0
+        except Exception:
+            counts["sessions"] = 0
+    if not counts["sessions"]:
+        counts["sessions"] = _nonempty_files(home / "sessions")
+    counts["memories"] = _nonempty_files(home / "memories")
+    jobs = home / "cron" / "jobs.json"
+    if jobs.exists():
+        try:
+            import json
+
+            raw = json.loads(jobs.read_text() or "[]")
+            listed = raw if isinstance(raw, list) else (raw.get("jobs") or [])
+            counts["cron"] = len(listed)
+        except Exception:
+            counts["cron"] = 0
+    return counts
+
+
 def create_profile(name: str, *, soul: str, description: str = "") -> Path:
     from hermes_cli.profiles import create_profile as core_create_profile
 

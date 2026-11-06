@@ -1,7 +1,7 @@
 """The bots Concierge made, and the three things you can do to them.
 
   bots          list them, numbered
-  remove <n>    delete that bot's profile
+  fire <n>      delete that bot's profile
   reset <n>     take back every change Concierge made in that profile
 
 Three rules, enforced here rather than in the text of a card:
@@ -9,6 +9,9 @@ Three rules, enforced here rather than in the text of a card:
   default       never deleted. On it, reset only replays Concierge's own records.
   ownership     a profile is only touchable if Concierge wrote a record for it.
   receipts      every removal is a replay of a record, never a guessed path.
+
+Hire and fire are the two halves of one idea, and undo is not a third: undo takes
+back a change, it never deletes a bot that has been lived in. Fire says the name.
 
 Nothing in this module imports core. The profile calls arrive through
 `seams`, so a test can watch every one of them.
@@ -53,7 +56,7 @@ def resolve(store: Any, token: Any) -> Optional[str]:
     """Turn `1`, `2`, `inbox-bot` or `default` into a profile name.
 
     Returns None when the word is not a bot at all, which is how the caller
-    tells `remove 2` apart from `remove duplicate photos from my phone`.
+    tells `fire 2` apart from `fire the intern`.
     """
     text = " ".join(str(token or "").split())
     low = text.lower()
@@ -105,7 +108,7 @@ def card(store: Any = None) -> str:
                 title = title[:43].rstrip() + "..."
             lines.append("  {:>2}  {:<{w}}  {}".format(index, name, title, w=width))
         lines.append("")
-        lines.append("  remove <n>  delete that bot")
+        lines.append("  fire <n>    delete that bot")
         lines.append("  reset <n>   take back what Concierge changed in it")
 
     touched = for_profile(store, DEFAULT)
@@ -125,16 +128,52 @@ def _target(store: Any, token: Any, verb: str) -> str:
     if name is None:
         raise Refused(
             "{} {} is not one of the bots Concierge made. /concierge bots shows the numbers.".format(
-                verb.capitalize() if verb == "remove" else "Reset", text
+                verb.capitalize(), text
             )
         )
     return name
 
 
-def remove(store: Any = None, token: Any = "", *, seams: Any = None) -> str:
-    """Delete a bot's profile, then drop every receipt that pointed at it."""
+def history_of(name: str, seams: Any = None) -> list:
+    """The things a bot has done since it was made, in words, or nothing.
+
+    Empty means the bot is still stock: safe to delete on one word, and safe for
+    undo to take back. Anything here means a person would lose it.
+    """
+    if seams is None:
+        from . import seams as seams_mod
+
+        seams = seams_mod
+    try:
+        counts = seams.profile_history(name)
+    except Exception:
+        return []
+    words = []
+    for key, one, many in (
+        ("sessions", "session", "sessions"),
+        ("memories", "memory file", "memory files"),
+        ("cron", "cron job", "cron jobs"),
+    ):
+        count = int(counts.get(key) or 0)
+        if count:
+            words.append("{} {}".format(count, one if count == 1 else many))
+    return words
+
+
+def fire(
+    store: Any = None,
+    token: Any = "",
+    *,
+    confirm: Any = "",
+    seams: Any = None,
+) -> str:
+    """Delete a bot's profile, then drop every receipt that pointed at it.
+
+    A stock bot goes on one word. A bot that has been lived in needs its own name
+    typed back, because that history is the one thing no undo can return.
+    """
     store = store if store is not None else state.Store()
-    name = _target(store, token, "remove")
+    name = _target(store, token, "fire")
     if name == DEFAULT:
         raise Refused(
             "default is never deleted. To take back only what Concierge changed there: "
@@ -147,20 +186,27 @@ def remove(store: Any = None, token: Any = "", *, seams: Any = None) -> str:
             "Concierge did not create {}, so it will not delete it. It only removes bots it made.".format(name)
         )
 
+    history = history_of(name, seams)
+    if history and " ".join(str(confirm or "").split()).lower() != name.lower():
+        raise Refused(
+            "{} has history: {}. Firing it throws that away, and nothing brings it back.\n"
+            "  To do it anyway: /concierge fire {} {}".format(name, ", ".join(history), token, name)
+        )
+
     from . import commands
 
-    lines = commands._undo_record(record, seams=seams)
+    lines = commands._undo_record(record, seams=seams, guard=False)
     problems = [line for line in lines if line.startswith(("could not", "still there"))]
     if problems:
         return "\n".join(
-            ["Not removed: {}".format(name), ""]
+            ["Not fired: {}".format(name), ""]
             + ["  " + line for line in lines]
-            + ["", "  the receipt is kept, so /concierge remove {} tries again".format(name), ""]
+            + ["", "  the receipt is kept, so /concierge fire {} tries again".format(name), ""]
         )
 
     for other in for_profile(store, name):
         store.drop(other.name)
-    return "\n".join(["Removed: {}".format(name), ""] + ["  " + line for line in lines] + [""])
+    return "\n".join(["Fired: {}".format(name), ""] + ["  " + line for line in lines] + [""])
 
 
 def reset(store: Any = None, token: Any = "", *, seams: Any = None) -> str:
@@ -177,9 +223,10 @@ def reset(store: Any = None, token: Any = "", *, seams: Any = None) -> str:
     failed = 0
     for record in reversed(touched):
         # reset never deletes a profile: it takes back what was written inside it.
-        # Removing the bot itself is `remove`, a separate sentence with a separate yes.
+        # Removing the bot itself is `fire`, a separate sentence with its own name
+        # typed back when the bot has history.
         if (getattr(record, "kind", "") or "") == BOT:
-            lines.append("kept: the bot itself (delete it with /concierge remove)")
+            lines.append("kept: the bot itself (delete it with /concierge fire)")
             continue
         got = commands._undo_record(record, seams=seams)
         problems = [line for line in got if line.startswith(("could not", "still there"))]
@@ -205,10 +252,11 @@ __all__ = [
     "bots",
     "card",
     "for_profile",
+    "history_of",
     "is_selector",
     "name_of",
     "records",
-    "remove",
+    "fire",
     "reset",
     "resolve",
 ]

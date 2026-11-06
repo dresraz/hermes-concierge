@@ -53,9 +53,13 @@ class FakeSeams:
     def __init__(self, homes: dict) -> None:
         self.homes = {name: pathlib.Path(path) for name, path in homes.items()}
         self.removed: list = []
+        self.history: dict = {}
 
     def profile_home(self, name: str) -> pathlib.Path:
         return self.homes.get(name, pathlib.Path(tempfile.gettempdir()) / "gone" / name)
+
+    def profile_history(self, name: str) -> dict:
+        return self.history.get(name, {"sessions": 0, "memories": 0, "cron": 0})
 
     def remove_profile(self, name: str, yes: bool = True) -> None:
         self.removed.append(name)
@@ -70,7 +74,7 @@ class Help(unittest.TestCase):
     def test_bare_command_is_the_menu(self):
         text = commands.handle_concierge("")
         self.assertIn("CONCIERGE", text)
-        for verb in ("hire", "train", "bots", "remove", "reset", "undo", "help"):
+        for verb in ("hire", "train", "bots", "fire", "reset", "undo", "help"):
             self.assertIn(verb, text)
 
     def test_help_word_is_the_same_text(self):
@@ -194,24 +198,44 @@ class Bots(unittest.TestCase):
         self.assertIn("No bots yet", commands.handle_concierge("bots", store=store()))
 
 
-class Remove(unittest.TestCase):
+class Fire(unittest.TestCase):
     def setUp(self):
         self.home = pathlib.Path(tempfile.mkdtemp())
         (self.home / "SOUL.md").write_text("x\n", encoding="utf-8")
 
-    def test_remove_deletes_only_what_concierge_made(self):
+    def test_fire_deletes_only_what_concierge_made(self):
         made = store(bot("inbox-bot"))
         seams = FakeSeams({"inbox-bot": self.home})
-        text = commands.handle_concierge("remove 1", store=made, seams=seams)
-        self.assertIn("Removed: inbox-bot", text)
+        text = commands.handle_concierge("fire 1", store=made, seams=seams)
+        self.assertIn("Fired: inbox-bot", text)
         self.assertEqual(seams.removed, ["inbox-bot"])
         self.assertFalse(self.home.exists())
         self.assertEqual(made.all(), [])
 
-    def test_default_cannot_be_removed(self):
+    def test_fire_refuses_a_used_bot_until_its_name_is_typed(self):
+        made = store(bot("inbox-bot"))
+        seams = FakeSeams({"inbox-bot": self.home})
+        seams.history["inbox-bot"] = {"sessions": 14, "memories": 2, "cron": 0}
+        text = commands.handle_concierge("fire 1", store=made, seams=seams)
+        self.assertIn("has history: 14 sessions, 2 memory files", text)
+        self.assertIn("fire 1 inbox-bot", text)
+        self.assertEqual(seams.removed, [])
+        self.assertTrue(self.home.exists())
+        self.assertEqual([r.name for r in made.all()], ["inbox-bot"])
+
+    def test_fire_with_the_name_typed_goes_through(self):
+        made = store(bot("inbox-bot"))
+        seams = FakeSeams({"inbox-bot": self.home})
+        seams.history["inbox-bot"] = {"sessions": 14, "memories": 0, "cron": 0}
+        text = commands.handle_concierge("fire 1 inbox-bot", store=made, seams=seams)
+        self.assertIn("Fired: inbox-bot", text)
+        self.assertEqual(seams.removed, ["inbox-bot"])
+        self.assertFalse(self.home.exists())
+
+    def test_default_cannot_be_fired(self):
         made = store(bot("inbox-bot"))
         seams = FakeSeams({})
-        text = commands.handle_concierge("remove default", store=made, seams=seams)
+        text = commands.handle_concierge("fire default", store=made, seams=seams)
         self.assertIn("default is never deleted", text)
         self.assertIn("/concierge reset default", text)
         self.assertEqual(seams.removed, [])
@@ -220,18 +244,39 @@ class Remove(unittest.TestCase):
         made = store(bot("inbox-bot"))
         made.add(state.Installed(name="work", kind="skill", profile="work", title="x"))
         seams = FakeSeams({"work": self.home})
-        text = commands.handle_concierge("remove work", store=made, seams=seams)
+        text = commands.handle_concierge("fire work", store=made, seams=seams)
         self.assertIn("did not create work", text)
         self.assertEqual(seams.removed, [])
         self.assertTrue(self.home.exists())
 
-    def test_a_sentence_starting_with_remove_is_not_a_selector(self):
+    def test_a_sentence_starting_with_fire_is_not_a_selector(self):
         made = store(bot("inbox-bot"))
-        self.assertFalse(lifecycle.is_selector(made, "duplicate photos from my phone"))
+        self.assertFalse(lifecycle.is_selector(made, "the intern before friday"))
 
     def test_out_of_range_index_says_so(self):
-        text = commands.handle_concierge("remove 9", store=store(bot("inbox-bot")), seams=FakeSeams({}))
+        text = commands.handle_concierge("fire 9", store=store(bot("inbox-bot")), seams=FakeSeams({}))
         self.assertIn("not one of the bots", text)
+
+    def test_undo_never_deletes_a_bot_that_has_been_used(self):
+        made = store(bot("inbox-bot"))
+        seams = FakeSeams({"inbox-bot": self.home})
+        seams.history["inbox-bot"] = {"sessions": 3, "memories": 1, "cron": 0}
+        text = commands.handle_concierge("undo", store=made, seams=seams)
+        self.assertIn("Not undone: inbox-bot", text)
+        self.assertIn("undo never deletes a used bot", text)
+        self.assertIn("/concierge fire", text)
+        self.assertEqual(seams.removed, [])
+        self.assertTrue(self.home.exists())
+        self.assertEqual([r.name for r in made.all()], ["inbox-bot"])
+
+    def test_undo_takes_back_a_stock_hire(self):
+        made = store(bot("inbox-bot"))
+        seams = FakeSeams({"inbox-bot": self.home})
+        text = commands.handle_concierge("undo", store=made, seams=seams)
+        self.assertIn("Undone: inbox-bot", text)
+        self.assertEqual(seams.removed, ["inbox-bot"])
+        self.assertFalse(self.home.exists())
+        self.assertEqual(made.all(), [])
 
 
 class Reset(unittest.TestCase):
@@ -275,7 +320,7 @@ class BareYes(unittest.TestCase):
     def test_a_yes_with_no_card_is_not_a_command(self):
         text = commands.handle_concierge("yes", store=store())
         self.assertNotIn("Hired", text)
-        self.assertNotIn("Removed", text)
+        self.assertNotIn("Fired", text)
 
 
 if __name__ == "__main__":
