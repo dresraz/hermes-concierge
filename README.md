@@ -90,6 +90,28 @@ Hired bp-test-zero
 
 The word before the colon is the name. Without a colon the name is the last meaningful word, so `/concierge hire keeps my inbox at zero` hires `inbox-bot`.
 
+Ten roles also bring their skills, so the bot arrives able to work:
+
+```text
+/concierge hire a researcher for papers
+
+Hired researcher-bot
+
+    home     /home/andres/.hermes/profiles/researcher-bot
+    soul     SOUL.md, 241 chars
+    skills   0 installed
+    profile  listed by hermes profile list
+  skills   researcher 3/3 installed: parallel-cli, scrapling, rss-feeds
+
+  next     /concierge train researcher-bot: <habit>
+  undo     /concierge undo
+```
+
+The roles are `researcher`, `writer`, `coder`, `assistant`, `marketer`,
+`watcher`, `designer`, `analyst`, `tutor`, `planner`. Each one installs three
+to five optional skills through core's own `hermes -p <profile> skills install`,
+then checks the disk before saying so. The full table is `docs/PRESETS.md`.
+
 The bot is created through core's own `create_profile`, so it shows up in `hermes profile list` like any other profile, with its own memory, skills and cron.
 
 Training is a sentence too:
@@ -163,6 +185,7 @@ A prompt cannot read the live catalog, cannot rank every real entry in it agains
 - `lifecycle.py` lists, fires and resets — the only place that decides what may be deleted.
 - `bots.py` turns a sentence into a profile name, a title, a duty list and a `SOUL.md`.
 - `training.py` turns a sentence into one `SKILL.md` in that bot's skills directory.
+- `presets.py` holds the ten roles: cue detection, the three-to-five optional skills each one lands, and the install-verify loop that believes the disk over the exit code.
 - `seams.py` is the only module that calls Hermes core: catalog, installer, scan gate, profiles, hook registration.
 - `effects.py` holds the filesystem writes, injected so tests never touch a real directory.
 - `undo.py` reverses the last thing Concierge did, then checks the disk before dropping the record.

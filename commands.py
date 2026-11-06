@@ -44,6 +44,10 @@ HELP = (
     "  On a card: yes installs it, no drops it, more describes the runner-up.\n"
     "  Bots and training act straight away and show a receipt.\n"
     "\n"
+    "  Roles hire with their skills: researcher, writer, coder, assistant,\n"
+    "  marketer, watcher, designer, analyst, tutor, planner.\n"
+    "\n"
+    "  Example: /concierge hire a researcher for papers\n"
     "  Example: /concierge hire keeps my inbox at zero\n"
     "  Name it: /concierge hire inbox-zero: keeps my inbox at zero\n"
 )
@@ -183,11 +187,13 @@ def handle_hire(
         ),
         store,
     )
+    preset_lines = _apply_preset(text, plan.name, path)
     head = "Hired {}".format(plan.name) if ok else "Hired {}, but check this".format(plan.name)
     undo_line = "  undo     /concierge undo" if saved else "  no undo  the record could not be saved"
     return "\n".join(
         [head, ""]
         + ["  " + line for line in lines]
+        + preset_lines
         + [
             "",
             "  next     /concierge train {}: <habit>".format(plan.name),
@@ -195,6 +201,20 @@ def handle_hire(
             "",
         ]
     )
+
+
+def _apply_preset(text: str, name: str, profile_path: Any) -> list[str]:
+    """A role sentence also installs that role's skills. Never fatal: the bot exists."""
+    from . import presets
+
+    role = presets.detect(text)
+    if role is None:
+        return []
+    try:
+        report = presets.install(name, Path(str(profile_path)), role)
+    except Exception as exc:
+        return ["  skills   preset skipped: {}: {}".format(type(exc).__name__, exc)]
+    return report.lines() if report.wanted else []
 
 
 def handle_train(

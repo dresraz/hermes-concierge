@@ -190,3 +190,42 @@ No new command, verb or config. `more` was already a dead branch, so this delete
 no surface. Live probe in a throwaway `HERMES_HOME` against the real catalog:
 `/home/andres/.hermes/cache/scratch/live_card.txt` (card, `more`, `2`, `no`). Suite 115 -> 120, zero
 LLM calls.
+
+## 14. Roles install real skills, and the disk is the only receipt
+
+What the brief implied: a preset is a list of skill names. What the CLI actually
+does, measured on this machine:
+
+1. **`hermes skills install` has no `--profile` flag.** Scope comes from the
+   global `-p`: `hermes -p <profile> skills install official/<category>/<name> --yes`.
+   The identifier is the three-part `official/...` form, not the bare name and
+   not `optional-skills/...`.
+2. **The exit code is not the truth.** `--yes` returns 0 for the install, and the
+   first version of `verify()` still reported 0/3 because it looked for
+   `skills/<name>/SKILL.md`. Skills land at `skills/<category>/<name>/SKILL.md`,
+   so the check now globs both shapes. The spike caught it: 3 `SKILL.md` on disk
+   while the report said all three failed.
+3. **A fresh profile starts with no skills directory.** The 44 bundled skills are
+   seeded on the profile's first real run, not at `create_profile`. So a preset
+   only lists optional skills, and a receipt that says `skills 0 installed`
+   before the preset line is correct, not a bug.
+4. **Cost of an install is per skill, not per profile.** 0.6s to create a profile,
+   1.2s for three skills installed three-at-a-time, 16s for the designer role's
+   four (`comfyui` dominates). Fine inside one command; the reason installs run
+   in a thread pool rather than a loop.
+5. **A skill that fails to install must not lose the bot.** The profile is already
+   created and recorded by then. The receipt names the failures, `undo` still
+   removes the whole profile, and no exception escapes.
+
+Spike, three roles, throwaway `bp-test-*` profiles, all deleted afterwards:
+
+```
+researcher  install 1.21s  3/3  parallel-cli, scrapling, rss-feeds
+watcher     install 1.20s  3/3  watchers, blogwatcher, live-dashboard
+designer    install 16.32s 4/4  sketch, impeccable, design-md, comfyui
+```
+
+Every identifier was checked against the Hermes tree twice: a one-off scan while
+choosing them, and `tests/test_presets.py::Contract` on every run, which fails if
+a name is not a real `optional-skills/<category>/<name>/SKILL.md`. Suite 120 -> 134,
+zero LLM calls, no new command.

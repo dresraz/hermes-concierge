@@ -31,11 +31,18 @@ Date: 2026-11-05
   were tried and all measured worse on real asks (`docs/NOTES.md` #9). A card is not an install.
 - Undo of a plugin runs core's real removal (`cmd_remove`), not a guessed name; `tests/test_undo_defaults.py`
   proves it in a throwaway home with nothing injected, through the real command too (`docs/NOTES.md` #11).
-- 120 unit tests, 0 LLM calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
+- Ten roles hire with their skills: say `researcher`, `writer`, `coder`, `assistant`, `marketer`,
+  `watcher`, `designer`, `analyst`, `tutor` or `planner` and the new bot gets three to five real
+  optional skills, installed through core's own `hermes -p <profile> skills install` and then read
+  back off disk. Every identifier exists in the Hermes tree; a test fails if one does not
+  (`docs/NOTES.md` #14, `docs/PRESETS.md`).
+- 134 unit tests, 0 LLM calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
 - Live probe of the new card, throwaway `HERMES_HOME`, real 977-entry catalog: two-candidate ask,
   `more`, `2`, `no` (`/home/andres/.hermes/cache/scratch/live_card.txt`).
-- Docs: `README.md` (pitch, card, receipts, lifecycle), `SPEC.md`, `docs/NOTES.md` (13 places the
-  code disagrees with the brief or the docs).
+- Role spike, throwaway `bp-test-*` profiles, all deleted: researcher 3/3 in 1.2s, watcher 3/3 in
+  1.2s, designer 4/4 in 16.3s (`comfyui` is the slow one).
+- Docs: `README.md` (pitch, card, receipts, lifecycle, roles), `SPEC.md`, `docs/PRESETS.md` (the ten
+  roles and their skills), `docs/NOTES.md` (14 places the code disagrees with the brief or the docs).
 
 ## Failed / open
 - The junk-sentence card cannot be removed without losing real asks; claim narrowed in `README.md`.
@@ -44,8 +51,9 @@ Date: 2026-11-05
   public `ctx.*` for ranking the live catalog, installing, creating a profile, or undoing.
 
 ## Packaged, nothing public
-- Local commit `f6755de`, tag `v0.1.0`, 38 files, MIT licence, branch `main`.
-- A fresh clone of that commit passes `hermes plugins validate` and 120 tests.
+- Public repo `https://github.com/dresraz/hermes-concierge`, 6 commits all authored `dresraz`,
+  tag `v0.1.0`, MIT licence, branch `main`.
+- A fresh clone of that commit passes `hermes plugins validate` and 134 tests.
 - Ready to send: `docs/catalog-entry.yaml` (repo + sha blank until the repo exists),
   `docs/PR.md`, `docs/SUBMIT.md`.
 
