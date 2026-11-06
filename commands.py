@@ -1,6 +1,8 @@
 """The command surface: one command, one sentence, one result.
 
-  /concierge <sentence>          install the best match from the live catalog
+  /concierge <sentence>          install a plugin or skill into this profile
+  /concierge <sentence> into <bot>
+                                 install it into that bot instead
   /concierge hire <sentence>     make a new bot
   /concierge train <bot>: <what> teach a bot one standing habit
   /concierge bots                list the bots Concierge made
@@ -29,9 +31,9 @@ HELP_WORDS = frozenset({"help", "?", "-h", "--help", "h", "commands"})
 HELP = (
     "\n"
     "  CONCIERGE\n"
-    "  Bots and skills, one sentence at a time.\n"
+    "  Bots, plugins and skills, one sentence at a time.\n"
     "\n"
-    "  /concierge <sentence>          install the best match from the catalog\n"
+    "  /concierge <sentence>          install a plugin or skill, this profile\n"
     "  /concierge hire <sentence>     make a new bot\n"
     "  /concierge train <bot>: <what> teach a bot one standing habit\n"
     "  /concierge bots                list the bots Concierge made\n"
@@ -40,13 +42,15 @@ HELP = (
     "  /concierge undo                take back the last thing Concierge did\n"
     "  /concierge help                this list\n"
     "\n"
-    "  A catalog install shows one card and waits for your yes.\n"
+    "  Add \"into <bot>\" to install into a bot instead of this profile.\n"
+    "  A marketplace install shows one card and waits for your yes.\n"
     "  On a card: yes installs it, no drops it, more describes the runner-up.\n"
     "  Bots and training act straight away and show a receipt.\n"
     "\n"
     "  Roles hire with their skills: researcher, writer, coder, assistant,\n"
     "  marketer, watcher, designer, analyst, tutor, planner.\n"
     "\n"
+    "  Example: /concierge install stripe payments into intern\n"
     "  Example: /concierge hire a researcher for papers\n"
     "  Example: /concierge hire keeps my inbox at zero\n"
     "  Name it: /concierge hire inbox-zero: keeps my inbox at zero\n"
@@ -133,8 +137,57 @@ def handle_concierge(
         _forget("", session_key)
         return handle_train(rest, store=store, train=train, known=known)
 
-    # Bare yes/no/more belong to a catalog card this conversation was shown.
+    # "install <what> into <bot>" is the same sentence as a plain request, with
+    # the destination said out loud. Both shelves are searched: plugins first,
+    # then skills, and whichever answers gets one card and one yes.
+    if head == "install":
+        from . import market as market_mod
+
+        card.forget(session_key)
+        market_mod.forget(session_key)
+        _forget("", session_key)
+        return handle_install(rest, store=store, session_key=session_key)
+
+    # Bare yes/no/more belong to a card this conversation was shown.
+    from . import market as market_mod
+
+    if market_mod.is_waiting(session_key):
+        return market_mod.handle(text, session_key=session_key, store=store)
     return card.handle(text, session_key=session_key)
+
+
+def handle_install(
+    raw: Any,
+    *,
+    store: Any = None,
+    session_key: str = "",
+    catalog: Optional[list] = None,
+    search: Optional[Callable[..., list]] = None,
+) -> str:
+    """Install anything the marketplace holds, into this profile or a named bot."""
+    from . import card, market, match, seams
+
+    text = _clean(raw)
+    if not text:
+        return (
+            "Install what? Say it plainly, for example:\n"
+            "  /concierge install stripe payments\n"
+            "  /concierge install stripe payments into intern\n"
+        )
+
+    query, target = market.split_target(text)
+
+    # The plugin shelf answers first because its card carries the scan verdict.
+    if catalog is None:
+        try:
+            catalog = seams.catalog()
+        except Exception:
+            catalog = []
+    if match.rank(query, catalog, limit=1):
+        return card.handle(query, entries=catalog, store=store,
+                           session_key=session_key, target=target)
+    return market.handle(query, target=target, session_key=session_key,
+                         store=store, search_fn=search)
 
 
 def handle_hire(
@@ -330,11 +383,70 @@ def _undo_record(
     kind = getattr(record, "kind", "") or "plugin"
     if kind == "bot":
         return _undo_bot(record, seams if seams is not None else _seams(), guard=guard)
+    profile = getattr(record, "profile", "") or ""
+    # Checked before the kind, because a skill in another bot has to leave that
+    # bot's home, and undo.py only ever looks at this profile.
+    if profile and profile != _current_profile():
+        return _undo_in(record, profile, seams if seams is not None else _seams())
     if kind == "skill":
         return _undo_skill(record, effects)
     from . import undo as undo_mod
 
     return list((undo or undo_mod.undo)(record))
+
+
+def _current_profile() -> str:
+    from . import seams
+
+    try:
+        return seams.current_profile()
+    except Exception:
+        return "default"
+
+
+def _undo_in(record: Any, profile: str, seams: Any) -> list:
+    """Take back an install that went into another bot, not into this profile.
+
+    Leaving this to undo.undo would remove the same name from the wrong home and
+    then say "already gone" while the bot kept the plugin, so the profile is the
+    first thing this asks for.
+    """
+    name = getattr(record, "name", "") or ""
+    kind = getattr(record, "kind", "") or "plugin"
+    # A skill carries its name in the same field, so only a plugin record is
+    # looked up as a plugin.
+    plugin = name if kind != "skill" or getattr(record, "plugin", "") else ""
+    lines = []
+    try:
+        home = seams.profile_home(profile)
+    except Exception as exc:
+        return ["could not find {}: {}: {}({})".format(profile, type(exc).__name__, exc)]
+    if not plugin and not list(getattr(record, "skills", None) or []):
+        return ["nothing to remove: the receipt has no name"]
+    if plugin and seams.plugin_dir_in(home, (plugin,)) is None:
+        lines.append("already gone: plugin {} in {}".format(plugin, profile))
+    elif plugin:
+        try:
+            seams.remove_plugin_in(profile, plugin)
+        except Exception as exc:
+            lines.append("could not remove {}: {}: {}".format(plugin, type(exc).__name__, exc))
+        else:
+            left = seams.plugin_dir_in(home, (plugin,))
+            lines.append("removed: plugin {} from {}".format(plugin, profile)
+                         if left is None else "still there: {}".format(left))
+    for path in list(getattr(record, "skills", None) or []):
+        leaf = str(path).rstrip("/").rsplit("/", 1)[-1]
+        if seams.skill_dir_in(home, leaf) is None:
+            lines.append("already gone: skill {} in {}".format(leaf, profile))
+            continue
+        try:
+            gone = seams.remove_skill_in(profile, leaf)
+        except Exception as exc:
+            lines.append("could not remove skill {}: {}: {}".format(leaf, type(exc).__name__, exc))
+            continue
+        lines.append("removed: skill {} from {}".format(leaf, profile)
+                     if gone else "still there: skill {} in {}".format(leaf, profile))
+    return lines
 
 
 def _undo_bot(record: Any, seams: Any, *, guard: bool = True) -> list:
@@ -415,7 +527,7 @@ def register(ctx: Any) -> None:
     ctx.register_command(
         "concierge",
         handler=handle_concierge,
-        description="Bots and skills in one sentence: install, hire, train, list, fire, reset, undo.",
+        description="Bots, plugins and skills in one sentence: install, hire, train, list, fire, reset, undo.",
         args_hint="<sentence> | hire | train | bots | fire | reset | undo | help",
     )
     # On a messaging surface the catalog card's "yes" is a bare word. The CLI has no such seam, so

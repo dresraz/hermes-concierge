@@ -138,6 +138,19 @@ def profile_home(name: str) -> Path:
     return get_profile_dir(name)
 
 
+def current_profile() -> str:
+    """The profile this conversation is running in, as core names it."""
+    from hermes_cli.profiles import current_profile_name
+
+    return current_profile_name() or "default"
+
+
+def profile_exists(name: str) -> bool:
+    from hermes_cli.profiles import profile_exists as _exists
+
+    return bool(name) and _exists(name)
+
+
 def _nonempty_files(folder: Path) -> int:
     try:
         return sum(1 for path in folder.rglob("*") if path.is_file() and path.stat().st_size)
@@ -433,3 +446,151 @@ def risky_deps(specs) -> list[str]:
     """Specs that resolve to code nobody screened: git, http, or a local path."""
     return [str(s) for s in specs
             if "://" in str(s) or str(s).startswith(("-", ".", "/", "git+"))]
+
+
+# ---- installing into a bot ----------------------------------------------------
+# A bot is a profile, and core binds HERMES_HOME when it imports. So an install
+# aimed at a bot runs core's own command line as a child with `-p`: this process
+# keeps serving the profile it was started in, and no global home is swapped.
+
+
+def _hermes() -> str:
+    return shutil.which("hermes") or "hermes"
+
+
+def _run_core(args: Sequence[str], timeout: int = 600) -> tuple[int, str]:
+    """Run core's CLI and return (code, output). Never raises: undo and cards report."""
+    import subprocess
+
+    try:
+        done = subprocess.run(
+            [_hermes(), *args], capture_output=True, text=True, timeout=timeout
+        )
+        return done.returncode, (done.stdout or "") + (done.stderr or "")
+    except Exception as exc:  # missing binary, timeout, permissions
+        return 1, "{}: {}".format(type(exc).__name__, exc)
+
+
+def _last_lines(text: str, count: int = 3) -> str:
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    return " / ".join(lines[-count:])
+
+
+def _plugin_dirs(home: Path) -> list[Path]:
+    root = Path(home) / "plugins"
+    if not root.is_dir():
+        return []
+    return [manifest.parent for manifest in sorted(root.rglob("plugin.yaml"))
+            if ".archive" not in manifest.parts]
+
+
+def plugin_dir_in(home: Path, names: Sequence[str]) -> Optional[Path]:
+    """The installed plugin folder in *home* that answers to one of *names*.
+
+    Matches the folder name and the manifest name, so a catalog key that installs
+    under a different directory still resolves.
+    """
+    wanted = {name for name in names if name}
+    for folder in _plugin_dirs(home):
+        if folder.name in wanted:
+            return folder
+        try:
+            import yaml
+
+            data = yaml.safe_load((folder / "plugin.yaml").read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        if str(data.get("name") or "") in wanted:
+            return folder
+    return None
+
+
+def enabled_in(home: Path, name: str) -> bool:
+    """True while *home* switches the plugin on. Absent from both lists counts as on."""
+    try:
+        import yaml
+
+        data = yaml.safe_load((Path(home) / "config.yaml").read_text(encoding="utf-8")) or {}
+    except Exception:
+        return True
+    plugins = data.get("plugins") or {}
+    if name in (plugins.get("disabled") or ()):
+        return False
+    enabled = plugins.get("enabled") or ()
+    return not enabled or name in enabled
+
+
+def install_in(entry, profile: str, *, replace_existing: bool = False) -> Outcome:
+    """Install one catalog entry into *profile* through core's own installer.
+
+    The child process runs core's full gate: security scan, caution decision,
+    dependency consent, kill list, admission. Concierge passes the dependency
+    answer the card already showed, and nothing else.
+    """
+    name = str(getattr(entry, "name", "") or "")
+    args = ["-p", profile, "plugins", "install", name, "--yes-deps", "--enable"]
+    if replace_existing:
+        args.append("--force")
+    code, output = _run_core(args)
+
+    home = profile_home(profile)
+    slug = str(getattr(entry, "install_identifier", "") or "").rstrip("/").rsplit("/", 1)[-1]
+    target = plugin_dir_in(home, (name, slug))
+    if target is None:
+        return Outcome(ok=False, verdict="", blocked_reason=(
+            _last_lines(output) or "core did not put a plugin in {}".format(profile)))
+
+    outcome = Outcome(ok=True, installed_name=target.name, target=str(target), verdict="safe")
+    outcome.verdict, outcome.findings = _verdict_of(entry, target)
+    outcome.enabled = enabled_in(home, target.name)
+    if not outcome.enabled:
+        outcome.notes = ["installed but switched off in {}".format(profile)]
+    return outcome
+
+
+def skill_dir_in(home: Path, name: str) -> Optional[Path]:
+    """Folder holding *name*'s SKILL.md under *home*/skills, or None."""
+    skills = Path(home) / "skills"
+    if not skills.is_dir() or not name:
+        return None
+    for manifest in sorted(skills.rglob("SKILL.md")):
+        if ".archive" in manifest.parts:
+            continue
+        if manifest.parent.name == name:
+            return manifest.parent
+    return None
+
+
+def install_skill_in(profile: str, identifier: str, *, name: str = "") -> tuple[bool, str, str]:
+    """Install a skill from a hub identifier into *profile*: (ok, folder, message)."""
+    code, output = _run_core(["-p", profile, "skills", "install", identifier, "--yes"])
+    leaf = name or identifier.rstrip("/").rsplit("/", 1)[-1].rsplit("@", 1)[-1]
+    found = skill_dir_in(profile_home(profile), leaf)
+    if found is None:
+        return False, "", _last_lines(output) or "core did not write a SKILL.md in {}".format(profile)
+    return True, str(found), ""
+
+
+def bundled_skill(name: str) -> bool:
+    """True when *name* is a skill Hermes ships with, so it can be copied offline."""
+    try:
+        from tools import skills_sync
+    except Exception:
+        skills_sync = None
+    root = _bundled_root(skills_sync)
+    for folder in root.glob("*/" + name):
+        if ".archive" not in folder.relative_to(root).parts and (folder / "SKILL.md").is_file():
+            return True
+    return (root / name / "SKILL.md").is_file()
+
+
+def remove_plugin_in(profile: str, name: str) -> bool:
+    """Remove *name* from *profile* and report whether it is really gone."""
+    _run_core(["-p", profile, "plugins", "remove", name])
+    return plugin_dir_in(profile_home(profile), (name,)) is None
+
+
+def remove_skill_in(profile: str, name: str) -> bool:
+    """Remove *name* from *profile* and report whether it is really gone."""
+    _run_core(["-p", profile, "skills", "uninstall", name, "--yes"])
+    return skill_dir_in(profile_home(profile), name) is None

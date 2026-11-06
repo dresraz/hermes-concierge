@@ -309,3 +309,22 @@ receipt says `your setup, N switches, M not available here`; with no switches of
 Prove it: hire into a throwaway home with `enabled: [web/fastcrw]` and a local plugin folder, and
 read the new `config.yaml` plus the receipt line. `tests/test_plugins_inherit.py` holds the contract,
 including that a name listed in both lists appears once in the "left behind" list.
+
+## 22. Installing into a bot is a child process, and nothing else would work
+
+`hermes` resolves a profile from its own home, and `HERMES_HOME` does not relocate the profiles
+root: pointing it at a temp directory leaves `create_profile` writing into the real
+`~/.hermes/profiles/` (proved with `mktemp -d`, which created a real `bp-test-intern`). So a
+bot-targeted install shells out to `hermes -p <profile> ...` as a child process and reads the disk
+afterwards, instead of swapping an environment variable inside the running agent.
+
+The destination rides on the sentence: `split_target` takes the last ` into `, requires one word and
+an existing profile, and keeps the user's casing for the catalog query. A typo yields no target, so
+the card says `this profile` rather than installing somewhere else quietly. Undo reads `profile` off
+the receipt and routes there before it looks at the kind, because a skill installed into `intern`
+has to leave `intern`'s home and `undo.py` only ever looks at this profile.
+
+Prove it: `accent picker into <bot>` then `yes` lands 9 files under that bot's `plugins/` and undo
+empties it; `a skill for writing commit messages into <bot>` lands 3 files under its `skills/`;
+`tests/test_market.py` holds the card split, both undo routes and the no-`plugin` line on a skill
+receipt.

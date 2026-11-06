@@ -1,6 +1,6 @@
 # Concierge
 
-Install a bot or a skill set like an app: **one sentence, one card, one yes, a receipt, and an undo.**
+Install a bot, a plugin or a skill like an app: **one sentence, one card, one yes, a receipt, and an undo.**
 
 Concierge is a Hermes Agent plugin. It answers one question, *"can I add that?"*, without making
 you learn the catalog, read a manifest, or guess which of the a thousand-odd entries does the thing.
@@ -59,9 +59,11 @@ Everything is a word after `/concierge`. There is no `/hire` and no `/train` to 
 
 ```
   CONCIERGE
-  Bots and skills, one sentence at a time.
+  Bots, plugins and skills, one sentence at a time.
 
-  /concierge <sentence>          install the best match from the catalog
+  /concierge <sentence>          install a plugin or skill, this profile
+  /concierge <sentence> into <bot>
+                                 install it into that bot instead
   /concierge hire <sentence>     make a new bot
   /concierge train <bot>: <what> teach a bot one standing habit
   /concierge bots                list the bots Concierge made
@@ -99,6 +101,40 @@ What it adds is the boring part. It matches against the real catalog, so it cann
 or plugin name. It shows one card and waits for a yes. It reads the disk before it claims the
 install, and it records what it wrote so `undo` reverses exactly that. When nothing fits it installs
 nothing and says so. No model call, no tokens, same answer every time.
+
+## Install anything: plugins and skills, here or into a bot
+
+The sentence search covers both shelves the marketplace has: the plugin catalog and the skill
+registries. Say what you want and where it should land.
+
+```
+/concierge stripe payments
+/concierge a skill for writing commit messages into intern
+```
+
+```
+CONCIERGE
+  you said    a skill for writing commit messages
+  best match  writing-for-agents  (skill)
+  into        bot intern  (not this profile)
+  install     anthropics/skills v1.0.0
+Install it?  /concierge yes   or   /concierge no
+```
+
+```
+Installed writing-for-agents
+  on disk     /home/andres/.hermes/profiles/intern/skills/writing-for-agents (3 files)
+  into        intern
+Undo it with /concierge undo
+```
+
+Leave out the bot and it goes into the profile you are talking to. The word after `into` has to be
+an existing profile; a typo means the card says `this profile` instead of landing somewhere else
+quietly. Undo follows the receipt, so a skill installed into `intern` comes back out of `intern`.
+
+One caution: Concierge does not recommend **memory plugins**. They hook the agent's own memory, so
+they can depend on your setup, a hosted service or a paid plan, and a bad one changes every
+conversation you have. Install those by hand, one at a time, after reading what they need.
 
 ## Hire: a sentence becomes a bot
 
@@ -246,6 +282,8 @@ plugin or a bot that does not exist.
   hand-written vocabulary, so *"remember this forever"* reaches memory providers instead of scoring
   zero. Each candidate carries the words that earned it, which is what `why` prints.
 - `card.py` renders the catalog card, takes the yes or no, and prints the receipt once an install lands.
+- `market.py` is the other shelf: skills from the registries, into this profile or a named bot, with
+  the same card, yes, receipt and undo. `split_target` reads `into <bot>` off the sentence.
 - `lifecycle.py` lists, fires and resets. It is the only place that decides what may be deleted.
 - `bots.py` turns a sentence into a profile name, a title, a duty list and a `SOUL.md`.
 - `training.py` turns a sentence into one `SKILL.md` in that bot's skills directory.
@@ -294,8 +332,8 @@ number there would be a guess.
 
 ## Limits
 
-- The sentence search is the plugin catalog. It does not install skills or make bots: `train` and
-  `hire` do those, and they are their own words.
+- The sentence search installs plugins and skills. It does not make bots: `hire` does that, and
+  `train` writes one habit into a bot you already have.
 - `hermes plugins validate` passes with one warning: Concierge imports core modules that are not
   public API, because Hermes has no public seam yet for "install this catalog entry" or "create a
   profile". They are the same calls the CLI makes. If one moves in a core release, Concierge breaks,

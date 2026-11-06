@@ -120,8 +120,11 @@ def deps_line(deps) -> str:
     return f"  deps        {shown}  installed with it, no extra question"
 
 
-def render(sentence: str, candidates: list, deps: Optional[list] = None) -> str:
+def render(sentence: str, candidates: list, deps: Optional[list] = None,
+           target: str = "") -> str:
     """The card for one sentence and the candidates that earned a place on it."""
+    from . import seams
+
     top = candidates[0]
     lines = [
         "Concierge",
@@ -136,6 +139,10 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None) -> str:
     lines.append(f"  adds        {_adds(top.entry)}")
     if deps:
         lines.append(deps_line(deps))
+    if target:
+        lines.append(f"  into        bot {target}  (not this profile)")
+    else:
+        lines.append(f"  into        this profile ({seams.current_profile()})")
     lines.append(f"  cost        {cost_line(top.entry)}")
     lines.append(f"  install     {_pin(top.entry)}")
 
@@ -173,7 +180,8 @@ def nothing(sentence: str, entries: Optional[list] = None) -> str:
     )
 
 
-def handle(sentence: str, *, entries=None, store=None, install=None, session_key: str = "") -> str:
+def handle(sentence: str, *, entries=None, store=None, install=None,
+           session_key: str = "", target: str = "") -> str:
     """One sentence in, one card or one receipt out."""
     from . import match, seams
 
@@ -181,6 +189,14 @@ def handle(sentence: str, *, entries=None, store=None, install=None, session_key
     text = (sentence or "").strip()
     if not text:
         return "Concierge\n\n  Say what you want in one sentence, like: /concierge remember my notes across sessions\n"
+
+    if not target:
+        # A plain sentence can name a bot too, not only the install verb.
+        from . import market
+
+        text, target = market.split_target(text)
+        if not text:
+            return "Install what? Name the thing you want and the bot after it.\n"
 
     lowered = text.lower()
 
@@ -206,19 +222,22 @@ def handle(sentence: str, *, entries=None, store=None, install=None, session_key
 
     slot["sentence"] = text
     slot["entries"] = candidates
+    slot["target"] = target
     slot["caution_accepted"] = False
     try:  # the packages the repo declares, read before the yes; no list means none are shown
         deps = seams.declared_deps_remote(candidates[0].entry)
     except Exception:
         deps = []
-    return render(text, candidates, deps=deps)
+    return render(text, candidates, deps=deps, target=target)
 
 
 def _answer(*, store=None, install=None, session_key: str = "") -> str:
-    picked = _slot(session_key)["entries"]
+    slot = _slot(session_key)
+    picked = slot["entries"]
     if not picked:
         return "Nothing is waiting. Start with: /concierge <what you want>\n"
-    return _install(picked[0].entry, store=store, install=install, session_key=session_key)
+    return _install(picked[0].entry, store=store, install=install,
+                    session_key=session_key, target=slot.get("target") or "")
 
 
 def more(session_key: str = "") -> str:
@@ -249,7 +268,8 @@ def more(session_key: str = "") -> str:
     return "\n".join(lines)
 
 
-def _install(entry, *, store=None, install=None, session_key: str = "") -> str:
+def _install(entry, *, store=None, install=None, session_key: str = "",
+             target: str = "") -> str:
     from . import seams, state
 
     slot = _slot(session_key)
@@ -268,10 +288,16 @@ def _install(entry, *, store=None, install=None, session_key: str = "") -> str:
         shown.append(report)
         return False
 
-    outcome = install_fn(entry, approve=approve)
+    if target:
+        # A named bot is a profile, and core binds HERMES_HOME at import, so this
+        # runs core's own command line as a child with -p. The child runs the
+        # same scan and admission; Concierge only reports what it wrote.
+        outcome = seams.install_in(entry, target)
+    else:
+        outcome = install_fn(entry, approve=approve)
 
     if not outcome.ok:
-        if outcome.verdict == "caution" and not slot["caution_accepted"]:
+        if not target and outcome.verdict == "caution" and not slot["caution_accepted"]:
             slot["caution_accepted"] = True
             body = "\n".join(part for part in shown if part.strip())
             return (
@@ -289,6 +315,7 @@ def _install(entry, *, store=None, install=None, session_key: str = "") -> str:
         sha=str(getattr(entry, "sha", "") or ""),
         title=str(getattr(entry, "title", "") or ""),
         target=outcome.target,
+        profile=target or seams.current_profile(),
         enabled=bool(outcome.enabled),
     )
     saved = _remember(record, store)
@@ -309,6 +336,8 @@ def receipt(outcome, record, *, saved: bool = True) -> str:
     else:
         lines.append("  on disk     not found, core reported a target that is not there")
     lines.append(f"  enabled     {'yes' if record.enabled else 'no'}")
+    if record.profile:
+        lines.append(f"  into        {record.profile}")
     try:  # re-read the installed tree: what core actually installed, not what the repo promised
         installed = seams.declared_deps(target) if target is not None else []
     except Exception:
