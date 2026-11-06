@@ -8,7 +8,7 @@ Fork `NousResearch/hermes-agent`, then on a branch add one file: `plugin-catalog
 The exact content is in `docs/catalog-entry.yaml` in this repo. It pins a real release:
 
 - repo: https://github.com/dresraz/hermes-concierge
-- sha: 40f5c701e37f04e65a4b895401bfb91341a1b7ca (tag `v0.1.5`)
+- sha: 59cab6430baf248d0b03dc70bd1c7ff2dfca0adb (tag `v0.1.5`)
 - version: 0.1.5
 - `hermes plugins validate . --install-deps` at that commit: **passed**, one warning (private core
   imports, disclosed in the README `## Limits` and in the PR body)
