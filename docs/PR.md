@@ -16,10 +16,10 @@ been used makes you type its name back, and `undo` never deletes a used bot.
 - Pin: `<sha>`
 - `hermes plugins validate` at the pin: pass (one advisory on private core
   imports, explained below)
-- Tests: 120 unit tests, zero LLM calls, zero network, run in a throwaway
+- Tests: 148 unit tests, zero LLM calls, zero network, run in a throwaway
   `HERMES_HOME`
-- Matching, two independent measures against the live catalog: 25/32 top-1 and
-  32/32 top-3 on hand-written asks; 119/120 top-1 on un-tunable recall
+- Matching, two independent measures against the live catalog: 24/32 top-1 and
+  31/32 top-3 on hand-written asks; 119/120 top-1 on un-tunable recall
 - Default profile: `fire default` is refused; `reset default` only replays
   records Concierge wrote
 - No self-updater, no telemetry, no credentials

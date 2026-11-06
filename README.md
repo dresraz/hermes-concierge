@@ -39,6 +39,8 @@ Installed cognee
 Undo it with /concierge undo
 ```
 
+The `notes` count is core's own advisory list from its isolation report, not a finding. The verdict word is the decision.
+
 When nothing fits, it installs nothing:
 
 ```
@@ -238,11 +240,11 @@ plugin or a bot that does not exist.
 
 | | result |
 |---|---|
-| correct entry in the top 3 | **32/32** |
-| correct entry ranked first | 25/32 |
-| nonsense installs nothing | 7/8 |
+| correct entry in the top 3 | **31/32** |
+| correct entry ranked first | 24/32 |
+| nonsense installs nothing | 8/8 |
 
-No LLM call is involved, so those numbers are the same on every run. The single nonsense miss is a sentence with real words in it; the card still asks first, which is the point of the card.
+No LLM call is involved, so those numbers are the same on every run. They are also my own set, written while tuning the matcher, so read them as an upper bound. On a second set I did not tune on, 16 everyday asks: it refused 9, and of the 7 it carded, 2 were defensible (a weather plugin for a weather question, a light plugin for a light question) and 5 were near misses. On 8 asks that do have a fitting plugin, it carded all 8 but named the best one first only 3 times. The card says what it would add before anything happens, so a near miss costs one no.
 
 ## Cost
 

@@ -1,6 +1,8 @@
 # Concierge demo script (90 seconds)
 
-One sentence in, one card out, one decision. This shot list is the recording script. Total run time is 70 seconds, under the 90 second cap.
+Superseded by `docs/DEMO_SHOTLIST.md`, which is the verified recording script. This one is kept for its offline fallback note at the bottom.
+
+One sentence in, one card out, one decision. This is the older 75 second cut.
 
 ## Shot list
 
@@ -9,7 +11,7 @@ One sentence in, one card out, one decision. This shot list is the recording scr
 | 1 | 0:00-0:10 | Hermes prompt, blank line | `/concierge remember my notes across sessions` | One sentence goes in. |
 | 2 | 0:10-0:20 | The Concierge card: best match, why, adds, cost, install line | <enter> | The card names the match, the words that earned it, and what it adds. |
 | 3 | 0:20-0:25 | Card asks Install it? | `yes` | One answer: yes. |
-| 4 | 0:25-0:40 | Hermes's own scan report prints, then the caution prompt again | `yes` | Core's report lands before the final yes; a caution needs a second yes. |
+| 4 | 0:25-0:40 | Hermes's own scan report prints | none | Core's report lands before the receipt. A plugin flagged for caution needs a second yes; a safe one goes straight through. |
 | 5 | 0:40-0:55 | Receipt: on disk path with file count, enabled, scan verdict | none | The receipt reports what is actually on disk, counted file by file. |
 | 6 | 0:55-1:10 | Second card: best match none, nothing installed | `/concierge pilot my spaceship` | When nothing fits, Concierge says so and installs nothing. |
 

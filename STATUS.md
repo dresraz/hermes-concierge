@@ -1,17 +1,26 @@
 # STATUS
 
-GATE: build complete
+GATE: build complete, ready to submit
 Date: 2026-11-06
 
+## Release
+
+- `plugin.yaml` version `0.1.4`, tag `v0.1.4`, commit `c5ef0ebdb326c8ef8a8c3cc5b761f12ff15a264a`.
+- `docs/catalog-entry.yaml` pins that sha and `version: "0.1.4"`; the entry passes Hermes core's own
+  `scripts/validate_plugin_catalog.py` (exit 0).
+- 148 tests, 0 model calls, 0 network calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
+- Live catalog at match time: 1,063 entries.
+
 ## Done
-- Plugin loads and validates (`hermes plugins validate /home/andres/concierge`: pass; one
-  advisory about private core imports, explained in `docs/NOTES.md` #7).
+
+- Plugin loads and validates (`hermes plugins validate`: pass; one advisory about private core
+  imports, explained in `docs/NOTES.md` #7).
 - One command only: `/concierge`. `/hire` and `/train` are sentences inside it, not registry
   commands (verified by probing `get_plugin_commands()`: the registry key is `concierge` alone).
 - Prose pass: no em dashes in the plugin's own writing (one quoted core message stays verbatim),
   no banned phrases, long paragraphs split. `scripts/soul_lint.py` still bans em dashes in souls.
 - `/concierge help` lists every verb, and the three words a card accepts (yes / no / more).
-  Card + one yes install. Hire, train, bots, remove, reset, undo all run end to end in a
+  Card plus one yes installs. Hire, train, bots, remove, reset, undo all run end to end in a
   throwaway home.
 - The card describes exactly one install. The runner-up is named (`also  jet-browser`) but has no
   number: `/concierge more` describes it, `/concierge <its name>` installs it. A bare `2` states
@@ -25,14 +34,18 @@ Date: 2026-11-06
 - Receipts are read off disk after the write, never predicted. Undo verified by re-reading.
 - No receipt offers an undo it did not record: card, hire and train all report a failed record
   write and drop the undo line instead of promising a reversal with nothing behind it (#13).
-- Matcher, two independent measures against the live 977-entry catalog, zero network, zero LLM:
-  hand-written asks (`tests/eval_match.py`) top1 25/32, top3 32/32, 7 of 8 nonsense return nothing;
+- Matcher, two independent measures against the live 1,063-entry catalog, zero network, zero model:
+  hand-written asks (`tests/eval_match.py`) top1 24/32, top3 31/32, 8 of 8 nonsense return nothing;
   un-tunable recall (`tests/eval_recall.py`, 120 sampled entries asked their own titles) top1 119/120,
   top3 120/120.
 - Known limit, measured not hidden: one junk sentence still surfaces a card. Three candidate fixes
   were tried and all measured worse on real asks (`docs/NOTES.md` #9). A card is not an install.
-- Undo of a plugin runs core's real removal (`cmd_remove`), not a guessed name; `tests/test_undo_defaults.py`
-  proves it in a throwaway home with nothing injected, through the real command too (`docs/NOTES.md` #11).
+- Untuned check 2026-11-06 (set never used for tuning): 16 everyday asks, 9 refused, 7 carded
+  (weather and lights defensible, 5 near misses); of 8 asks that do have a fitting plugin, the best
+  one came first 3 times. README quotes these numbers next to the tuned set.
+- Undo of a plugin runs core's real removal (`cmd_remove`), not a guessed name;
+  `tests/test_undo_defaults.py` proves it in a throwaway home with nothing injected, through the
+  real command too (`docs/NOTES.md` #11).
 - Ten roles hire with the smallest skill set that finishes the job, 7-9 picks each (77 total,
   down from 129): optional skills installed through core's own `hermes -p <profile> skills install`
   plus bundled-tree skills copied in after the install pool. Every identifier exists in the Hermes
@@ -50,32 +63,30 @@ Date: 2026-11-06
 - The receipt counts real skills: `_skills_on_disk` walks `SKILL.md` and skips dot entries and
   `.archive/`, so folders and lock files stopped inflating the number (`docs/NOTES.md` #17,
   `tests/test_receipt.py`).
-- 145 tests, 0 LLM calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
-  pytest: 143 passed, 131 subtests.
-- Live probe of the new card, throwaway `HERMES_HOME`, real 977-entry catalog: two-candidate ask,
-  `more`, `2`, `no` (`/home/andres/.hermes/cache/scratch/live_card.txt`).
 - All-ten readable check, `bp-test-*` profiles, deleted after each: every role lands its full pick
-  list, zero failures, zero `.archive/` leaks. `planner` re-run under a throwaway `HERMES_HOME`
-  after the CLI-home fix: 11/11. Note: profiles are HOME-anchored, so `HERMES_HOME` does not isolate
-  them (`docs/NOTES.md` #15).
-- Docs: `README.md` (pitch, card, receipts, lifecycle, roles), `SPEC.md`, `docs/PRESETS.md` (the ten
-  roles and their skills), `docs/NOTES.md` (20 places the code disagrees with the brief or the docs).
+  list, zero failures, zero `.archive/` leaks. Note: profiles are HOME-anchored, so `HERMES_HOME`
+  does not isolate them (`docs/NOTES.md` #15).
 
-## Failed / open
-- The junk-sentence card cannot be removed without losing real asks; claim narrowed in `README.md`.
-- Cosmetics left alone: `adds 1 tools` does not singularise, and a long `what` is cut mid-word.
-- Nothing blocking. `hermes plugins validate` advisory on private core imports stays: there is no
-  public `ctx.*` for ranking the live catalog, installing, creating a profile, or undoing.
+## Adversarial pass, what it caught
 
-## Packaged, nothing public
-- Public repo `https://github.com/dresraz/hermes-concierge`, 6 commits all authored `dresraz`,
-  tag `v0.1.0`, MIT licence, branch `main`.
-- A fresh clone of that commit passes `hermes plugins validate` and 145 tests.
-- Ready to send: `docs/catalog-entry.yaml` (repo + sha blank until the repo exists),
-  `docs/PR.md`, `docs/SUBMIT.md`.
+- Undo reported success for a plugin that was not there. It now checks presence first and prints
+  `already gone: plugin <name>`, shipped in 0.1.4.
+- The pty harness behind the demo never sent Enter, so the card beat looked proven when it was not.
+  Harness fixed, full loop re-run in one session: ask, card, yes, install, receipt, undo.
+- Doc drift: this file still said v0.1.0 and 145 tests, `docs/DEMO.md` was a second older script
+  disagreeing with the shotlist, and the README showed a note count with no explanation. All fixed.
 
-## Next (user calls, not done on purpose)
-- Create the public repo, push, fill the two blank fields, open the catalog PR: all need a yes.
+## Recording script
+
+- `docs/DEMO_SHOTLIST.md` is the one to record: 88 seconds, seven beats, real screen output.
+- `docs/DEMO.md` is superseded and kept only for its offline fallback note.
+
+## Left, user only
+
+- Open the catalog PR from `dresraz` (entry and body are ready).
+- Post the demo on X, under 90 seconds, tagging `@NousResearch`.
+- Submit both links at the Typeform.
 
 ## Budget
+
 - $0 of ~$10. No paid model calls were made; every test is deterministic.
