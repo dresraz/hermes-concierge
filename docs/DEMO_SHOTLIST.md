@@ -41,6 +41,33 @@ Concierge
 Install it?  /concierge yes   or   /concierge no
 ```
 
+Hire beat (verified on 2026-11-06, real session):
+
+```
+Hired inbox-bot
+
+    home     /home/andres/.hermes/profiles/inbox-bot
+    soul     SOUL.md, 985 chars
+    skills   8 installed
+    profile  listed by hermes profile list
+  skills   assistant 7/7 installed: email-inbox-triage, google-workspace, microsoft-office,
+           pdf, document-to-action-items, weekly-review-planning +1 more
+
+  next     /concierge train inbox-bot: <habit>
+  undo     /concierge undo
+```
+
+Bots beat:
+
+```
+  BOTS  1
+
+   1  inbox-bot  Keeps my inbox at zero
+
+  fire <n>    delete that bot
+  reset <n>   take back what Concierge changed in it
+```
+
 Nothing-fits beat:
 
 ```
@@ -53,6 +80,10 @@ Nothing in the catalog does that yet. Nothing was installed.
 ```
 
 ## Rules for a clean recording
+
+- A card and its `/concierge yes` must happen in the same session. That is normal in one chat, but
+  it will not work if you show the card in one session and answer in another.
+
 
 - Rehearse once, then run `/concierge undo` and `hermes profile delete researcher-bot --yes` so the
   recorded run starts clean.
