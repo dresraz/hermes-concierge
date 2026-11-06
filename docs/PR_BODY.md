@@ -47,6 +47,6 @@ also in the README under `## Limits`.
 ## Evidence
 
 - `hermes plugins validate . --install-deps` at the pinned commit: passed, one warning
-- 148 tests, no network, no model calls
+- 154 tests, no network, no model calls
 - matcher measured against the live catalog: top pick 24/32, in the top three 31/32, eight of
   eight nonsense asks install nothing
