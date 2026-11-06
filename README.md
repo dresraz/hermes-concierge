@@ -70,6 +70,32 @@ Everything is a word after `/concierge`. There is no `/hire` and no `/train` to 
 
 `/concierge` with nothing after it prints that same list.
 
+## The point: a working bot in one sentence
+
+Hermes gives you a lot of power and expects you to assemble it. That is the slow part: read the
+catalog, guess which of the ~977 entries matters, install six of them into a profile, write the
+instructions that make the profile behave, then find out it was the wrong six.
+
+Concierge is built to remove that stretch. You say the job, it picks the skills that finish the
+job, writes the soul that makes the bot act like that job, and shows you the disk before it calls
+it done. A researcher arrives on its first sentence able to read papers, cite sources, save notes
+and get past a blocked page, without you knowing those four skills exist.
+
+Then it stays cheap to change. Behaviour is one sentence (`train`) and it takes effect as a normal
+skill, not a rewrite of the profile. Trying a bot costs one sentence and one undo, so people
+experiment instead of deliberating. That is the whole speed argument: opinionated starting sets,
+one-sentence changes, and a receipt that tells the truth.
+
+## Why not just ask the agent?
+
+You can. Your `default` agent has a terminal, so "add the pdf skill to researcher-bot" already
+works, and so does writing the soul by hand. Concierge does not add power it did not have.
+
+What it adds is the boring part: it matches against the real catalog, so it cannot invent a skill
+or plugin name; it shows one card and waits for a yes; it reads the disk before it claims the
+install; it records what it wrote so `undo` reverses exactly that; and when nothing fits it installs
+nothing and says so. No model call, no tokens, same answer every time.
+
 ## Hire: a sentence becomes a bot
 
 ```
@@ -108,12 +134,14 @@ Hired researcher-bot
 ```
 
 The roles are `researcher`, `writer`, `coder`, `assistant`, `marketer`,
-`watcher`, `designer`, `analyst`, `tutor`, `planner`. Each role lands between six
-and nine skills: optional skills installed through core's own `hermes -p <profile>
-skills install`, plus bundled-tree skills copied in after that pool, then the disk
-is read before the receipt says anything. Each role also lands a soul written for
-that job, so the bot knows how to behave on its first sentence. The full table is
-`docs/PRESETS.md`.
+`watcher`, `designer`, `analyst`, `tutor`, `planner`. Each role lands seven to
+nine catalog skills: optional skills installed through core's own `hermes -p
+<profile> skills install`, plus bundled-tree skills copied in after that pool,
+then the disk is read before the receipt says anything. The receipt counts every
+real `SKILL.md` in the profile, including the `hermes-agent` skill every profile
+starts with, so it can read one higher than the role's pick count. Each role also
+lands a soul written for that job, so the bot knows how to behave on its first
+sentence. The full table is `docs/PRESETS.md`.
 
 The bot is created through core's own `create_profile`, so it shows up in `hermes profile list` like any other profile, with its own memory, skills and cron.
 
