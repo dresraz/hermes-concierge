@@ -3,14 +3,14 @@
 #   1. create the public repo, 2. push, 3. `git rev-parse HEAD` -> sha
 name: concierge
 repo: "https://github.com/dresraz/hermes-concierge"
-sha: "5aade7e3c2896a6315aaf670de801d22c2fef4f1"
+sha: "a4c890da63f467e79e5b505cea81632b90aa9447"
 description: "Install a bot or a skill set like an app: one card, one yes, a receipt, an undo. Say what you want in a sentence and Concierge matches it against the live catalog, installs it through Hermes's own installer and scan gate, then reads the result back off the disk; /concierge undo removes exactly what it added. Disclosure — registers one /concierge command and one pre_gateway_dispatch hook (Telegram reply words). It creates, lists, resets and deletes Hermes profiles under the active HERMES_HOME for the bots it hires, and it refuses to delete the default profile. Installs and removals call the same core commands the CLI uses (hermes plugins install/remove, skill install/uninstall), so every install still passes Hermes's own scan and consent gate. It reads catalog metadata and, for the pre-install dependency line, the plugin's own manifest at its pinned commit over the network. Nothing runs at load time, no credentials, no telemetry, no self-updater."
 maintainer: dresraz
 tier: community
 category: general
 requires_hermes: ">=0.22.7"
 docs_url: "https://github.com/dresraz/hermes-concierge#readme"
-version: "0.1.0"
+version: "0.1.1"
 platforms: []
 capabilities:
   provides_tools: []
