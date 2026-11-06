@@ -9,7 +9,10 @@ and prints a receipt. `/concierge undo` removes exactly what it added. When noth
 fits, it installs nothing and says so.
 
 It also creates bots: `/concierge hire a researcher for papers` makes a `researcher-bot` profile
-with a role, nine catalog skills and a `SOUL.md`, then tells you how to train it further.
+with a role, its catalog skills (eight for the researcher, the count varies by role), a `SOUL.md`
+and a copy of your own plugin switches, so the bot starts from your setup instead of the bundled
+defaults. The receipt counts what came along and what stayed behind, then tells you how to train it
+further.
 
 ## Surfaces used
 
@@ -28,7 +31,8 @@ with a role, nine catalog skills and a `SOUL.md`, then tells you how to train it
 - **Reads outside its own data.** It reads the active `HERMES_HOME`: the catalog, the profiles
   directory, and the plugin and skill directories. That is what lets the receipt be read back off
   the disk instead of being a claim.
-- **Writes.** A new profile per hire, skills into it, a `SOUL.md`, and Hermes's own install records.
+- **Writes.** A new profile per hire, skills into it, a `SOUL.md`, its `plugins:` switches copied
+  from your own `config.yaml`, and Hermes's own install records.
   Listing, resetting and deleting profiles are limited to profiles Concierge created; the default
   profile can be reset to stock but never deleted.
 - **Credentials.** None. No API keys, no `.env`, no `auth.json`, no OAuth.

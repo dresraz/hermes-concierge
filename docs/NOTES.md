@@ -293,3 +293,19 @@ minute, with a fresh `state.db`, and `served_profiles` in `gateway_state.json` s
 `hermes profile delete <name> --yes` is the only removal that sticks: it asks the gateway to
 unserve the profile (`gateway.control_socket.request_unserve_profile`), so the next reconcile
 does not recreate it. Prove it: delete, wait 45s, list.
+
+## 21. A profile is born with no `plugins:` block, so the bot gets the app's defaults
+
+`create_profile` writes memory, skills and cron, and leaves config alone. Core then resolves every
+bundled plugin's switch from its own default, which is the author's pick and not yours. A hired bot
+therefore came up with switches nobody chose, and the receipt could not tell you which.
+
+`plugins_inherit.py` copies the owner's `enabled` and `disabled` lists into the new profile's
+`config.yaml` and drops the names that resolve inside the owner's home (`plugins/`,
+`plugins/<kind>/`), because a profile is a different home and those folders are not inside it. The
+receipt says `your setup, N switches, M not available here`; with no switches of your own it says
+`stock defaults` and writes nothing. A copy error degrades to the same line and never fails a hire.
+
+Prove it: hire into a throwaway home with `enabled: [web/fastcrw]` and a local plugin folder, and
+read the new `config.yaml` plus the receipt line. `tests/test_plugins_inherit.py` holds the contract,
+including that a name listed in both lists appears once in the "left behind" list.
