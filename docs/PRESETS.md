@@ -25,14 +25,14 @@ Hired researcher-bot
 | role | say this | skills it lands |
 |---|---|---|
 | researcher | a researcher for papers | `research/parallel-cli`, `research/scrapling`, `research/rss-feeds` |
-| writer | write my blog | `research/research-paper-writing`, `creative/baoyu-article-illustrator`, `creative/social-media-content-calendar` |
+| writer | write my blog | `research/research-paper-writing`, `creative/creative-ideation`, `creative/simple-english`, `creative/baoyu-article-illustrator` |
 | coder | debug this repo | `software-development/python-debugpy`, `software-development/rest-graphql-debug`, `software-development/ast-grep`, `software-development/pr-lens` |
 | assistant | my inbox is a mess | `email/agentmail`, `productivity/box`, `security/1password`, `productivity/shop` |
 | marketer | growth for my instagram | `creative/social-media-content-calendar`, `social-media/reddit-reading`, `creative/meme-generation` |
 | watcher | keep an eye on prices | `devops/watchers`, `research/blogwatcher`, `productivity/live-dashboard` |
 | designer | design a landing page | `creative/sketch`, `creative/impeccable`, `creative/design-md`, `creative/comfyui` |
 | analyst | analyse my sales spreadsheet | `finance/excel-author`, `data-science/jupyter-notebook`, `finance/stocks`, `productivity/live-dashboard` |
-| tutor | teach me spanish | `productivity/memento-flashcards`, `creative/baoyu-comic`, `research/qmd` |
+| tutor | teach me spanish | `productivity/memento-flashcards`, `creative/concept-diagrams`, `creative/baoyu-comic`, `research/qmd` |
 | planner | keep me on track with the roadmap | `productivity/decision-questionnaire`, `communication/one-three-one-rule`, `software-development/subagent-driven-development` |
 
 ## Rules the list obeys

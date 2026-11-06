@@ -125,13 +125,14 @@ class Install(unittest.TestCase):
     def test_disk_beats_exit_code(self):
         """A zero exit with nothing on disk is a failure, not a success."""
         home = self._home()
+        role = presets.get("tutor")
         report = presets.install(
-            "bp-test-a", home, presets.get("tutor"),
+            "bp-test-a", home, role,
             runner=lambda args: (0, "installed"), hermes="hermes",
         )
         self.assertFalse(report.ok)
         self.assertEqual(report.installed, [])
-        self.assertEqual(len(report.failed), 3)
+        self.assertEqual(len(report.failed), len(role.skills))
         self.assertIn("failed", report.lines()[0])
 
     def test_partial_install_reports_both(self):

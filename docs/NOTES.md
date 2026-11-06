@@ -221,8 +221,10 @@ Spike, three roles, throwaway `bp-test-*` profiles, all deleted afterwards:
 
 ```
 researcher  install 1.21s  3/3  parallel-cli, scrapling, rss-feeds
+writer      install 2.40s  4/4  research-paper-writing, creative-ideation, simple-english, baoyu-article-illustrator
 watcher     install 1.20s  3/3  watchers, blogwatcher, live-dashboard
 designer    install 16.32s 4/4  sketch, impeccable, design-md, comfyui
+tutor       install 2.26s  4/4  memento-flashcards, concept-diagrams, baoyu-comic, qmd
 ```
 
 Every identifier was checked against the Hermes tree twice: a one-off scan while
