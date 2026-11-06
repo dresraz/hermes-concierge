@@ -177,6 +177,10 @@ def handle_hire(
     # card reports the generic soul the hire flow wrote a moment earlier. A preset
     # failure never costs the bot: it exists, and the receipt says what is missing.
     try:
+        plugin_lines = _inherit_plugins(path)
+    except Exception as exc:
+        plugin_lines = ["  plugins  stock defaults, copy failed: {}".format(type(exc).__name__)]
+    try:
         preset_lines = _apply_preset(text, plan.name, path)
     except Exception:
         preset_lines = []
@@ -200,6 +204,7 @@ def handle_hire(
     return "\n".join(
         [head, ""]
         + ["  " + line for line in lines]
+        + plugin_lines
         + preset_lines
         + [
             "",
@@ -208,6 +213,13 @@ def handle_hire(
             "",
         ]
     )
+
+
+def _inherit_plugins(profile_path: Any) -> list[str]:
+    """Your plugin switches ride along. Never fatal: the bot exists either way."""
+    from . import plugins_inherit
+
+    return plugins_inherit.inherit(profile_path).lines()
 
 
 def _apply_preset(text: str, name: str, profile_path: Any) -> list[str]:

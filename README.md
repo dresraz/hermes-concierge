@@ -112,6 +112,7 @@ Hired bp-test-zero
     soul     SOUL.md, 265 chars
     skills   0 installed
     profile  listed by hermes profile list
+  plugins  your setup, 46 switches, 5 not available here
 
   next     /concierge train bp-test-zero: <habit>
   undo     /concierge undo
@@ -130,6 +131,7 @@ Hired researcher-bot
     soul     SOUL.md, 1084 chars
     skills   9 installed
     profile  listed by hermes profile list
+  plugins  your setup, 46 switches, 5 not available here
   skills   researcher 8/8 installed: parallel-cli, qmd, llm-wiki, rss-feeds, arxiv, grounded-citations, blocked-page-recovery, pdf
 
   next     /concierge train researcher-bot: <habit>
@@ -147,6 +149,25 @@ lands a soul written for that job, so the bot knows how to behave on its first
 sentence. The full table is `docs/PRESETS.md`.
 
 The bot is created through core's own `create_profile`, so it shows up in `hermes profile list` like any other profile, with its own memory, skills and cron.
+
+## What the bot is made of
+
+| part | comes from |
+|---|---|
+| `SOUL.md` | your sentence, written before the receipt prints |
+| skills | the role's picks, nothing when no role matched |
+| plugins | your own switches, copied in |
+| memory, cron, sessions | empty, and the bot's own from its first turn |
+
+**Plugins follow your setup, not the app's defaults.** A new profile has no `plugins:` block, so every bundled plugin falls back to whatever Hermes ships and the bot comes up with switches you never chose. Concierge copies your switch lists into the bot and drops any name that only exists in your home, since those folders are not inside the profile. The receipt counts both:
+
+```
+  plugins  your setup, 46 switches, 5 not available here
+```
+
+When you have no switches of your own it says `plugins  stock defaults` and writes nothing.
+
+**A role can carry skills, not plugins.** A skill is a folder copied into the bot's own `skills/`, so a role brings it. A plugin install writes into a home, and the bot is a different home, so when a job wants one the card names it and you install it in your own profile.
 
 Training is a sentence too:
 
@@ -229,6 +250,8 @@ plugin or a bot that does not exist.
 - `training.py` turns a sentence into one `SKILL.md` in that bot's skills directory.
 - `presets.py` holds the ten roles: cue detection, the seven-to-nine skills each one lands, and the
   install-verify loop that believes the disk over the exit code.
+- `plugins_inherit.py` copies your `plugins:` switches into a new bot and drops the names that only
+  exist in your own home.
 - `seams.py` is the only module that calls Hermes core: catalog, installer, scan gate, profiles, hook registration.
 - `effects.py` holds the filesystem writes, injected so tests never touch a real directory.
 - `undo.py` reverses the last thing Concierge did, then checks the disk before dropping the record.
@@ -270,6 +293,8 @@ number there would be a guess.
 
 ## Limits
 
+- The sentence search is the plugin catalog. It does not install skills or make bots: `train` and
+  `hire` do those, and they are their own words.
 - `hermes plugins validate` passes with one warning: Concierge imports core modules that are not
   public API, because Hermes has no public seam yet for "install this catalog entry" or "create a
   profile". They are the same calls the CLI makes. If one moves in a core release, Concierge breaks,
