@@ -284,3 +284,12 @@ names a workflow and an output default and a refusal, that it only claims skills
 the role actually lands, and that no paragraph repeats across roles. All ten pass
 at 969-1109 characters. `tests/test_souls.py` makes the gate binding and proves
 the hired profile ends up with the role soul rather than the generic one.
+
+## 20. Deleting a profile with `rm -rf` while the gateway runs does not delete it
+
+This host runs a multiplex gateway, and it reconciles `~/.hermes/profiles/` on a timer and on
+config changes. A directory removed behind its back comes back as an empty scaffold within a
+minute, with a fresh `state.db`, and `served_profiles` in `gateway_state.json` still lists it.
+`hermes profile delete <name> --yes` is the only removal that sticks: it asks the gateway to
+unserve the profile (`gateway.control_socket.request_unserve_profile`), so the next reconcile
+does not recreate it. Prove it: delete, wait 45s, list.
