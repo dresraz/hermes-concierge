@@ -257,3 +257,30 @@ isolates Hermes' data, not its profiles. Test profiles are real profiles under
    any same-name skill it finds, so the receipt named a skill that had just been retired. Bundled
    copies now happen after the install pool, and `copy_bundled` never selects a path under
    `.archive/` and prefers the shallowest match when a name exists in two categories.
+
+## 17. A third receipt lie: the skills line counted folders and lock files
+
+`bots.receipt` reported `len(skills_dir.iterdir())`. That counts category folders
+(`research/`, `creative/`) and dot bookkeeping (`.hub`, `.usage.json`,
+`.usage.json.lock`), so a profile with seven real skills printed "8 installed" by
+coincidence and would drift with every core change to that folder. `_skills_on_disk`
+now walks `SKILL.md` markers and skips any relative part beginning with `.`, so a
+retired copy under `.archive/` and a category folder cannot be counted. Proven in
+`tests/test_receipt.py`; the live check is `skills == picks + 1` (the seeded
+`hermes-agent` skill).
+
+## 18. The soul path is core's own
+
+`write_soul` writes `<profile home>/SOUL.md`. That is exactly what core reads:
+`agent/prompt_builder.load_soul_md` resolves `HERMES_HOME / "SOUL.md"` as identity
+slot #1 (`agent/prompt_builder.py:1512`). Profiles are HOME-anchored, which is why
+`install()` passes the real root; writing anywhere else would leave the bot with
+the generic soul the hire flow wrote a second earlier.
+
+## 19. Souls are gated, not written once
+
+`scripts/soul_lint.py` checks length (420-1200), filler phrases, that the text
+names a workflow and an output default and a refusal, that it only claims skills
+the role actually lands, and that no paragraph repeats across roles. All ten pass
+at 969-1109 characters. `tests/test_souls.py` makes the gate binding and proves
+the hired profile ends up with the role soul rather than the generic one.

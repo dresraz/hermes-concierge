@@ -69,11 +69,11 @@ class Detection(unittest.TestCase):
 
 
 class Contract(unittest.TestCase):
-    def test_every_role_is_ten_to_fifteen_relevant_skills(self):
+    def test_every_role_is_five_to_fifteen_relevant_skills(self):
         for role in presets.ROLES:
             with self.subTest(role=role.name):
                 total = len(role.picks)
-                self.assertGreaterEqual(total, 10, role.name)
+                self.assertGreaterEqual(total, 5, role.name)
                 self.assertLessEqual(total, 15, role.name)
                 self.assertGreaterEqual(len(role.bundled), 1)
                 for skill in role.skills:

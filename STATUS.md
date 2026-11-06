@@ -1,7 +1,7 @@
 # STATUS
 
 GATE: build complete
-Date: 2026-11-05
+Date: 2026-11-06
 
 ## Done
 - Plugin loads and validates (`hermes plugins validate /home/andres/concierge`: pass; one
@@ -31,13 +31,25 @@ Date: 2026-11-05
   were tried and all measured worse on real asks (`docs/NOTES.md` #9). A card is not an install.
 - Undo of a plugin runs core's real removal (`cmd_remove`), not a guessed name; `tests/test_undo_defaults.py`
   proves it in a throwaway home with nothing injected, through the real command too (`docs/NOTES.md` #11).
-- Ten roles hire with 10-15 genuinely relevant skills each (11-15 picks, all ten roles): a mix of
-  optional skills installed through core's own `hermes -p <profile> skills install` and bundled-tree
-  skills copied in after the install pool. Every identifier exists in the Hermes tree and the bundled
-  names are written on the receipt; a test fails on any invented name or a role outside 10-15.
-  Verified role by role, all ten green: `installed == picks`, `failed == []`, nothing stranded in
-  `.archive/` (`docs/NOTES.md` #14-16, `docs/PRESETS.md`).
-- 134 unit tests, 0 LLM calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
+- Ten roles hire with the smallest skill set that finishes the job, 7-9 picks each (77 total,
+  down from 129): optional skills installed through core's own `hermes -p <profile> skills install`
+  plus bundled-tree skills copied in after the install pool. Every identifier exists in the Hermes
+  tree and the bundled names are written on the receipt; a test fails on any invented name or a role
+  outside 5-15. Verified role by role, all ten green: only real `SKILL.md` leaves counted,
+  `failed == []`, nothing stranded in `.archive/` (`docs/NOTES.md` #14-17, `docs/PRESETS.md`).
+- Lean set agreed by two adversarial reviewers (one mechanical, one end-to-end): four changes
+  applied — `comfyui` out of marketer, `xurl` into watcher, `grill-me` into planner,
+  `node-inspect-debugger` out of coder (`docs/PRESETS.md` § The bar).
+- A soul per role: standing instructions, 969-1109 chars, written to `<profile>/SOUL.md` before the
+  skills so a failed install never costs the bot. That path is core's own identity slot
+  (`agent/prompt_builder.py:1512`). `scripts/soul_lint.py` gates length, filler, workflow, output
+  default, refusal, truthful skill claims and cross-role copying; all ten clean, and
+  `tests/test_souls.py` makes the gate binding (`docs/NOTES.md` #18-19).
+- The receipt counts real skills: `_skills_on_disk` walks `SKILL.md` and skips dot entries and
+  `.archive/`, so folders and lock files stopped inflating the number (`docs/NOTES.md` #17,
+  `tests/test_receipt.py`).
+- 145 tests, 0 LLM calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
+  pytest: 143 passed, 131 subtests.
 - Live probe of the new card, throwaway `HERMES_HOME`, real 977-entry catalog: two-candidate ask,
   `more`, `2`, `no` (`/home/andres/.hermes/cache/scratch/live_card.txt`).
 - All-ten readable check, `bp-test-*` profiles, deleted after each: every role lands its full pick
@@ -45,7 +57,7 @@ Date: 2026-11-05
   after the CLI-home fix: 11/11. Note: profiles are HOME-anchored, so `HERMES_HOME` does not isolate
   them (`docs/NOTES.md` #15).
 - Docs: `README.md` (pitch, card, receipts, lifecycle, roles), `SPEC.md`, `docs/PRESETS.md` (the ten
-  roles and their skills), `docs/NOTES.md` (14 places the code disagrees with the brief or the docs).
+  roles and their skills), `docs/NOTES.md` (19 places the code disagrees with the brief or the docs).
 
 ## Failed / open
 - The junk-sentence card cannot be removed without losing real asks; claim narrowed in `README.md`.
@@ -56,7 +68,7 @@ Date: 2026-11-05
 ## Packaged, nothing public
 - Public repo `https://github.com/dresraz/hermes-concierge`, 6 commits all authored `dresraz`,
   tag `v0.1.0`, MIT licence, branch `main`.
-- A fresh clone of that commit passes `hermes plugins validate` and 134 tests.
+- A fresh clone of that commit passes `hermes plugins validate` and 145 tests.
 - Ready to send: `docs/catalog-entry.yaml` (repo + sha blank until the repo exists),
   `docs/PR.md`, `docs/SUBMIT.md`.
 

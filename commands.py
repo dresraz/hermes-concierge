@@ -173,6 +173,14 @@ def handle_hire(
     except Exception as exc:
         return "Not hired: {}: {}\n".format(type(exc).__name__, exc)
 
+    # The role's soul and skills must land before the receipt is computed, or the
+    # card reports the generic soul the hire flow wrote a moment earlier. A preset
+    # failure never costs the bot: it exists, and the receipt says what is missing.
+    try:
+        preset_lines = _apply_preset(text, plan.name, path)
+    except Exception:
+        preset_lines = []
+
     lines, ok = bots.receipt(
         plan, path, known=(taken + [plan.name] if known is not None else None)
     )
@@ -187,7 +195,6 @@ def handle_hire(
         ),
         store,
     )
-    preset_lines = _apply_preset(text, plan.name, path)
     head = "Hired {}".format(plan.name) if ok else "Hired {}, but check this".format(plan.name)
     undo_line = "  undo     /concierge undo" if saved else "  no undo  the record could not be saved"
     return "\n".join(

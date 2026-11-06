@@ -158,6 +158,23 @@ def hire(
     return plan, path
 
 
+def _skills_on_disk(home) -> int:
+    """Count installed skills, not categories: dot entries are bookkeeping, and a
+    skill retired under ``.archive/`` is not installed any more."""
+    skills_dir = home / "skills"
+    if not skills_dir.is_dir():
+        return 0
+    found = 0
+    for marker in skills_dir.rglob("SKILL.md"):
+        rel = marker.relative_to(skills_dir)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        if ".archive" in rel.parts:
+            continue
+        found += 1
+    return found
+
+
 def receipt(plan: Spec, path: object, known: Sequence[str] | None = None) -> tuple[list[str], bool]:
     """Read the new profile off the disk and report what is really there."""
     from pathlib import Path
@@ -165,8 +182,7 @@ def receipt(plan: Spec, path: object, known: Sequence[str] | None = None) -> tup
     home = Path(str(path))
     soul_file = home / "SOUL.md"
     soul_text = soul_file.read_text(encoding="utf-8") if soul_file.exists() else ""
-    skills_dir = home / "skills"
-    skills = len([p for p in skills_dir.iterdir()]) if skills_dir.is_dir() else 0
+    skills = _skills_on_disk(home)
     listed = plan.name in (list(known) if known is not None else names())
     ok = home.is_dir() and bool(soul_text.strip()) and listed
     lines = [

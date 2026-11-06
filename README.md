@@ -98,19 +98,22 @@ Ten roles also bring their skills, so the bot arrives able to work:
 Hired researcher-bot
 
     home     /home/andres/.hermes/profiles/researcher-bot
-    soul     SOUL.md, 241 chars
-    skills   0 installed
+    soul     SOUL.md, 1084 chars
+    skills   9 installed
     profile  listed by hermes profile list
-  skills   researcher 3/3 installed: parallel-cli, scrapling, rss-feeds
+  skills   researcher 8/8 installed: parallel-cli, qmd, llm-wiki, rss-feeds, arxiv, grounded-citations, blocked-page-recovery, pdf
 
   next     /concierge train researcher-bot: <habit>
   undo     /concierge undo
 ```
 
 The roles are `researcher`, `writer`, `coder`, `assistant`, `marketer`,
-`watcher`, `designer`, `analyst`, `tutor`, `planner`. Each one installs three
-to five optional skills through core's own `hermes -p <profile> skills install`,
-then checks the disk before saying so. The full table is `docs/PRESETS.md`.
+`watcher`, `designer`, `analyst`, `tutor`, `planner`. Each role lands between six
+and nine skills: optional skills installed through core's own `hermes -p <profile>
+skills install`, plus bundled-tree skills copied in after that pool, then the disk
+is read before the receipt says anything. Each role also lands a soul written for
+that job, so the bot knows how to behave on its first sentence. The full table is
+`docs/PRESETS.md`.
 
 The bot is created through core's own `create_profile`, so it shows up in `hermes profile list` like any other profile, with its own memory, skills and cron.
 

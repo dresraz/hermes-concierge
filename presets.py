@@ -43,74 +43,57 @@ class Role:
 # Order matters: first match wins, so the narrower cues come first.
 ROLES: tuple[Role, ...] = (
     Role("researcher", "researcher",
-         ("research/parallel-cli", "research/scrapling", "research/rss-feeds",
-          "research/qmd", "research/blogwatcher", "research/llm-wiki",
-          "research/osint-investigation", "research/domain-intel",
-          "research/research-paper-writing"),
+         ("research/parallel-cli", "research/qmd", "research/llm-wiki",
+          "research/rss-feeds"),
          ("arxiv", "grounded-citations", "blocked-page-recovery", "pdf"),
          "reads sources, follows feeds, keeps citations"),
     Role("writer", "writer",
-         ("research/research-paper-writing", "creative/creative-ideation",
-          "creative/simple-english", "creative/baoyu-article-illustrator",
-          "creative/brag", "research/parallel-cli", "research/qmd",
-          "web-development/scrollcraft", "web-development/publish-site"),
+         ("creative/creative-ideation", "creative/baoyu-article-illustrator",
+          "research/parallel-cli", "web-development/publish-site"),
          ("humanizer", "youtube-content", "grounded-citations", "obsidian"),
          "finds the angle, writes it plain, illustrates and ships it"),
     Role("coder", "coder",
          ("software-development/python-debugpy", "software-development/rest-graphql-debug",
-          "software-development/ast-grep", "software-development/code-wiki",
-          "software-development/node-inspect-debugger", "software-development/pr-lens"),
+          "software-development/ast-grep", "software-development/code-wiki"),
          ("github", "systematic-debugging", "test-driven-development",
-          "requesting-code-review", "simplify-code", "spike", "codebase-inspection",
-          "sdlc-review", "dogfood"),
+          "requesting-code-review"),
          "debugs, searches structure, reviews, documents the repo"),
     Role("assistant", "assistant",
-         ("email/agentmail", "productivity/box", "productivity/siyuan"),
-         ("email-inbox-triage", "himalaya", "google-workspace", "microsoft-office",
-          "pdf", "maps", "document-to-action-items", "meeting-action-items",
-          "weekly-review-planning", "obsidian"),
+         (),
+         ("email-inbox-triage", "google-workspace", "microsoft-office",
+          "pdf", "document-to-action-items", "weekly-review-planning", "obsidian"),
          "own inbox, calendar, files and notes"),
     Role("marketer", "marketer",
-         ("creative/social-media-content-calendar", "creative/meme-generation",
-          "creative/baoyu-article-illustrator", "creative/brag",
-          "media/gif-search", "research/parallel-cli", "social-media/reddit-reading",
-          "web-development/publish-site"),
-         ("xurl", "youtube-content", "humanizer", "baoyu-infographic",
-          "competitor-news-monitor"),
+         ("creative/baoyu-article-illustrator", "creative/social-media-content-calendar",
+          "social-media/reddit-reading", "research/parallel-cli"),
+         ("xurl", "humanizer", "baoyu-infographic"),
          "plans campaigns, reads communities, makes the assets"),
     Role("watcher", "watcher",
-         ("devops/watchers", "research/blogwatcher", "research/rss-feeds",
-          "research/scrapling", "research/parallel-cli", "research/domain-intel",
-          "productivity/live-dashboard", "social-media/reddit-reading"),
+         ("devops/watchers", "research/rss-feeds", "research/scrapling",
+          "productivity/live-dashboard"),
          ("product-price-monitor", "competitor-news-monitor", "blocked-page-recovery",
           "xurl"),
          "polls sources, dedupes, pings you, keeps a board"),
     Role("designer", "designer",
-         ("creative/sketch", "creative/impeccable", "creative/design-md",
-          "creative/comfyui", "creative/excalidraw", "creative/archify",
-          "creative/mono-color", "creative/auteur", "web-development/scrollcraft"),
-         ("baoyu-infographic", "architecture-diagram", "popular-web-designs",
-          "claude-design", "p5js"),
+         ("creative/sketch", "creative/design-md", "creative/comfyui",
+          "creative/excalidraw", "web-development/publish-site"),
+         ("baoyu-infographic", "popular-web-designs", "claude-design"),
          "mocks, diagrams, tokens, generated images"),
     Role("analyst", "analyst",
          ("finance/excel-author", "finance/pptx-author", "finance/stocks",
-          "finance/dcf-model", "finance/comps-analysis", "finance/3-statement-model",
           "data-science/jupyter-notebook", "productivity/live-dashboard",
-          "productivity/box", "research/parallel-cli"),
-         ("microsoft-office", "google-workspace", "pdf"),
+          "research/parallel-cli"),
+         ("google-workspace", "pdf", "grounded-citations"),
          "workbooks, decks, notebooks, live numbers"),
     Role("tutor", "tutor",
          ("productivity/memento-flashcards", "creative/concept-diagrams",
-          "creative/baoyu-comic", "creative/excalidraw", "creative/anatomy",
-          "research/qmd", "research/llm-wiki", "creative/simple-english"),
-         ("arxiv", "grounded-citations", "manim-video", "youtube-content"),
+          "creative/baoyu-comic", "research/qmd"),
+         ("grounded-citations", "manim-video", "obsidian"),
          "cards, diagrams, explainers, search over your own notes"),
     Role("planner", "planner",
-         ("productivity/decision-questionnaire", "productivity/siyuan",
-          "software-development/subagent-driven-development",
-          "software-development/grill-me", "communication/one-three-one-rule"),
-         ("weekly-review-planning", "document-to-action-items", "meeting-action-items",
-          "teams-meeting-pipeline", "obsidian", "google-workspace"),
+         ("productivity/decision-questionnaire", "communication/one-three-one-rule",
+          "software-development/grill-me", "research/qmd"),
+         ("document-to-action-items", "obsidian", "google-workspace"),
          "turns a fog into options, a pick, and a plan of record"),
 )
 
@@ -248,6 +231,23 @@ def _copy_bundled(home: Path, names: Sequence[str]) -> list[str]:
     return seams.copy_bundled(home, names)
 
 
+def write_soul(home: Path, role: Role) -> int:
+    """Write the role's soul over the generic one; 0 when the role has none."""
+    try:
+        from . import souls
+    except ImportError:  # loaded as a flat module by the tests and spikes
+        import souls
+    text = souls.get(role.name)
+    if not text:
+        return 0
+    try:
+        path = Path(home) / "SOUL.md"
+        path.write_text(text, encoding="utf-8")
+    except OSError:  # no home yet, no perms: the receipt shows the old soul
+        return 0
+    return len(text)
+
+
 def install(
     profile: str,
     home: Path,
@@ -260,6 +260,11 @@ def install(
     """Land the role's skills in one profile, then believe the disk."""
     binary = hermes or _which_hermes()
     copy = copier or _copy_bundled
+
+    # The soul goes in first: if the skills half fails, the bot still knows how
+    # to behave, and the receipt below reads the file to prove what landed.
+    write_soul(home, role)
+
     # Profiles are HOME-anchored by core, so the CLI must be told the same root
     # the profile actually lives under, or it looks in HERMES_HOME and finds none.
     env = {**os.environ, "HERMES_HOME": str(Path(home).parent.parent)}

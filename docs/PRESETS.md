@@ -1,7 +1,7 @@
 # Roles
 
-A role is the short sentence a person already says, plus the skills that make
-the resulting bot able to do the job. Ten of them, nothing else to learn.
+A role is the short sentence a person already says, plus the skills and the soul
+that make the resulting bot able to do the job. Ten of them, nothing else to learn.
 
 ```text
 /concierge hire a researcher for papers
@@ -11,10 +11,10 @@ the resulting bot able to do the job. Ten of them, nothing else to learn.
 Hired researcher-bot
 
     home     /home/andres/.hermes/profiles/researcher-bot
-    soul     SOUL.md, 241 chars
-    skills   0 installed
+    soul     SOUL.md, 1084 chars
+    skills   9 installed
     profile  listed by hermes profile list
-  skills   researcher 3/3 installed: parallel-cli, scrapling, rss-feeds
+  skills   researcher 8/8 installed: parallel-cli, qmd, llm-wiki, rss-feeds, arxiv, grounded-citations, blocked-page-recovery, pdf
 
   next     /concierge train researcher-bot: <habit>
   undo     /concierge undo
@@ -22,35 +22,77 @@ Hired researcher-bot
 
 ## The ten
 
-| role | say this | skills it lands |
-|---|---|---|
-| researcher | a researcher for papers | `research/parallel-cli`, `research/scrapling`, `research/rss-feeds` |
-| writer | write my blog | `research/research-paper-writing`, `creative/creative-ideation`, `creative/simple-english`, `creative/baoyu-article-illustrator` |
-| coder | debug this repo | `software-development/python-debugpy`, `software-development/rest-graphql-debug`, `software-development/ast-grep`, `software-development/pr-lens` |
-| assistant | my inbox is a mess | `email/agentmail`, `productivity/box`, `security/1password`, `productivity/shop` |
-| marketer | growth for my instagram | `creative/social-media-content-calendar`, `social-media/reddit-reading`, `creative/meme-generation` |
-| watcher | keep an eye on prices | `devops/watchers`, `research/blogwatcher`, `productivity/live-dashboard` |
-| designer | design a landing page | `creative/sketch`, `creative/impeccable`, `creative/design-md`, `creative/comfyui` |
-| analyst | analyse my sales spreadsheet | `finance/excel-author`, `data-science/jupyter-notebook`, `finance/stocks`, `productivity/live-dashboard` |
-| tutor | teach me spanish | `productivity/memento-flashcards`, `creative/concept-diagrams`, `creative/baoyu-comic`, `research/qmd` |
-| planner | keep me on track with the roadmap | `productivity/decision-questionnaire`, `communication/one-three-one-rule`, `software-development/subagent-driven-development` |
+Bold picks are optional skills installed through core. Plain names are bundled
+skills copied in after that pool, because core's installer archives a same-name
+skill that is already present.
+
+| role | job in one line | picks | bundled |
+|---|---|---|---|
+| researcher | reads sources, follows feeds, keeps citations | `parallel-cli`, `qmd`, `llm-wiki`, `rss-feeds` | arxiv, grounded-citations, blocked-page-recovery, pdf |
+| writer | finds the angle, writes it plain, illustrates and ships it | `creative-ideation`, `baoyu-article-illustrator`, `parallel-cli`, `publish-site` | humanizer, youtube-content, grounded-citations, obsidian |
+| coder | debugs, searches structure, reviews, documents the repo | `python-debugpy`, `rest-graphql-debug`, `ast-grep`, `code-wiki` | github, systematic-debugging, test-driven-development, requesting-code-review |
+| assistant | owns inbox, calendar, files and notes | none | email-inbox-triage, google-workspace, microsoft-office, pdf, document-to-action-items, weekly-review-planning, obsidian |
+| marketer | plans campaigns, reads communities, makes the assets | `xurl`, `humanizer`, `baoyu-infographic`, `baoyu-article-illustrator`, `social-media-content-calendar`, `reddit-reading`, `parallel-cli` | none |
+| watcher | polls sources, dedupes, pings you, keeps a board | `product-price-monitor`, `competitor-news-monitor`, `blocked-page-recovery`, `xurl`, `watchers`, `rss-feeds`, `scrapling`, `live-dashboard` | none |
+| designer | mocks, diagrams, tokens, generated images | `baoyu-infographic`, `popular-web-designs`, `claude-design`, `sketch`, `design-md`, `comfyui`, `excalidraw`, `publish-site` | none |
+| analyst | workbooks, decks, notebooks, live numbers | `google-workspace`, `pdf`, `grounded-citations`, `excel-author`, `pptx-author`, `stocks`, `jupyter-notebook`, `live-dashboard`, `parallel-cli` | none |
+| tutor | cards, diagrams, explainers, search over your own notes | `grounded-citations`, `manim-video`, `obsidian`, `memento-flashcards`, `concept-diagrams`, `baoyu-comic`, `qmd` | none |
+| planner | turns a fog into options, a pick, and a plan of record | `document-to-action-items`, `obsidian`, `google-workspace`, `decision-questionnaire`, `one-three-one-rule`, `grill-me`, `qmd` | none |
+
+Counts: researcher 8, writer 8, coder 8, assistant 7, marketer 7, watcher 8,
+designer 8, analyst 9, tutor 7, planner 7 = **77 picks**, down from 129.
+
+## The bar: lean
+
+The rule is the smallest set that finishes the job end to end, not the largest
+set that sounds impressive. Five is right when five do the work; fifteen is right
+only when the job really has fifteen separate steps. If dropping a skill still
+lets the bot finish, it is dropped.
+
+Two adversarial reviewers applied that rule, one mechanical and one end-to-end,
+and the sets above are where they agreed. The four things they changed:
+
+- `comfyui` out of marketer: the campaign asset step is finished by
+  `baoyu-infographic` and `baoyu-article-illustrator`, and the diffusion-GPU
+  setup stalls a no-budget run.
+- `xurl` into watcher: RSS and page polling cannot see X posts, so a watcher
+  asked to watch an X account failed without it.
+- `grill-me` into planner: turning options into a defended pick needs the
+  adversarial interview, or the plan reads as a list of maybes.
+- `node-inspect-debugger` out of coder: the Python debugger plus
+  `systematic-debugging` finishes solo debugging.
 
 ## Rules the list obeys
 
-- **Only optional skills.** The bundled tree (44 skills) arrives with core and
-  is seeded into a profile the first time it runs, so a preset lists only the
-  optional skills that are *not* already there. Suggesting the bundled tree
-  would be noise on the receipt.
+- **Every name is real.** Optional identifiers resolve to
+  `optional-skills/<category>/<name>/SKILL.md`; bundled names resolve in the
+  core tree. `tests/test_presets.py` fails on any invented name.
 - **No memory plugins.** Memory is core, and swapping it is a decision, not a
   hiring default.
-- **No invented names.** Every identifier is a real `optional-skills/<category>/<name>`
-  with a `SKILL.md`. `tests/test_presets.py` checks that against the Hermes tree
-  and the whole list is installed for real in `docs/NOTES.md` §14.
-- **Three to five per role, best first.** More than that and the bot is a junk
-  drawer, not a specialist.
-- **The disk is the receipt.** A skill counts as installed only if
-  `skills/<category>/<name>/SKILL.md` exists afterwards. A zero exit code with
-  nothing on disk is reported as a failure.
+- **The disk is the receipt.** A skill counts as installed only if its
+  `SKILL.md` is on disk, not under `.archive/`, and not a dot entry. A zero exit
+  code with nothing on disk is reported as a failure.
+- **Bundled copies land last.** `hermes skills install` archives a same-name
+  skill already present, so a copy made before the install pool would be retired
+  under `.archive/` while the receipt claimed it.
+- **The soul is written before the skills.** If the skills half fails, the bot
+  still knows how to behave, and the receipt reads the file to prove what landed.
+
+## Souls
+
+Each role ships a soul: a standing instruction set, not a bio. It names the
+workflow, the shape of the reply, what the bot refuses, and how it talks about
+the skills it actually has. `scripts/soul_lint.py` gates every one:
+
+- 420 to 1200 characters, and it must name a workflow, an output default and a
+  refusal;
+- no filler ("as an AI", "delve into", "seamless", "game-changing", and friends);
+- it may only claim skills the role really lands;
+- no paragraph shared between two roles.
+
+Ten souls, 969 to 1109 characters each, all clean. `tests/test_souls.py` makes
+the gate binding and proves the hired profile gets the role soul, not the generic
+one.
 
 ## Detection
 
@@ -58,21 +100,21 @@ Hired researcher-bot
 longest cue wins, plural and `-ing` forms included. `assistant` is deliberately
 *not* a cue, because people say "a research assistant" and mean researcher.
 
-No role matched means no preset: the bot is still hired with its soul, and the
-receipt simply has no skills line. Nothing is guessed.
+No role matched means no preset: the bot is still hired with its generic soul,
+and the receipt simply has no skills line. Nothing is guessed.
 
 ## Installs go through core
 
-Each skill is installed as
+Each optional skill is installed as
 
 ```text
 hermes -p <profile> skills install official/<category>/<name> --yes
 ```
 
-three at a time, so the new profile gets core's own scan, provenance and
-`skills_guard` verdict rather than a file copy. Measured on this machine:
-0.6s to create the profile, 1.2s to land three skills, 16s for the designer
-role's four (the `comfyui` skill is the slow one).
+several at a time, so the new profile gets core's own scan, provenance and
+`skills_guard` verdict rather than a file copy. Measured on this machine: about
+0.4s to create a profile, and 1.5s to 2.9s to land a whole role's set from a
+warm cache (a cold `comfyui` install was 50s the first time).
 
 If the installer is missing or refuses a skill, the bot still exists; the
 receipt says which skills failed and `undo` still removes the whole profile.
