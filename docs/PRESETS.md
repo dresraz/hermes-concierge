@@ -22,22 +22,48 @@ Hired researcher-bot
 
 ## The ten
 
-Bold picks are optional skills installed through core. Plain names are bundled
-skills copied in after that pool, because core's installer archives a same-name
-skill that is already present.
+Each line below lists what a role lands. Names before the `+` are optional skills installed through
+core. Names after it are bundled skills copied in once the install finishes, because core's installer
+archives a same-name skill that is already present. The assistant line opens with the `+`, so all
+seven of its picks are bundled.
 
-| role | job in one line | picks | bundled |
-|---|---|---|---|
-| researcher | reads sources, follows feeds, keeps citations | `parallel-cli`, `qmd`, `llm-wiki`, `rss-feeds` | arxiv, grounded-citations, blocked-page-recovery, pdf |
-| writer | finds the angle, writes it plain, illustrates and ships it | `creative-ideation`, `baoyu-article-illustrator`, `parallel-cli`, `publish-site` | humanizer, youtube-content, grounded-citations, obsidian |
-| coder | debugs, searches structure, reviews, documents the repo | `python-debugpy`, `rest-graphql-debug`, `ast-grep`, `code-wiki` | github, systematic-debugging, test-driven-development, requesting-code-review |
-| assistant | owns inbox, calendar, files and notes | none | email-inbox-triage, google-workspace, microsoft-office, pdf, document-to-action-items, weekly-review-planning, obsidian |
-| marketer | plans campaigns, reads communities, makes the assets | `xurl`, `humanizer`, `baoyu-infographic`, `baoyu-article-illustrator`, `social-media-content-calendar`, `reddit-reading`, `parallel-cli` | none |
-| watcher | polls sources, dedupes, pings you, keeps a board | `product-price-monitor`, `competitor-news-monitor`, `blocked-page-recovery`, `xurl`, `watchers`, `rss-feeds`, `scrapling`, `live-dashboard` | none |
-| designer | mocks, diagrams, tokens, generated images | `baoyu-infographic`, `popular-web-designs`, `claude-design`, `sketch`, `design-md`, `comfyui`, `excalidraw`, `publish-site` | none |
-| analyst | workbooks, decks, notebooks, live numbers | `google-workspace`, `pdf`, `grounded-citations`, `excel-author`, `pptx-author`, `stocks`, `jupyter-notebook`, `live-dashboard`, `parallel-cli` | none |
-| tutor | cards, diagrams, explainers, search over your own notes | `grounded-citations`, `manim-video`, `obsidian`, `memento-flashcards`, `concept-diagrams`, `baoyu-comic`, `qmd` | none |
-| planner | turns a fog into options, a pick, and a plan of record | `document-to-action-items`, `obsidian`, `google-workspace`, `decision-questionnaire`, `one-three-one-rule`, `grill-me`, `qmd` | none |
+| role | job in one line |
+|---|---|
+| researcher | reads sources, follows feeds, keeps citations |
+| writer | finds the angle, writes it plain, illustrates and ships it |
+| coder | debugs, searches structure, reviews, documents the repo |
+| assistant | owns inbox, calendar, files and notes |
+| marketer | plans campaigns, reads communities, makes the assets |
+| watcher | polls sources, dedupes, pings you, keeps a board |
+| designer | mocks, diagrams, tokens, generated images |
+| analyst | workbooks, decks, notebooks, live numbers |
+| tutor | cards, diagrams, explainers, search over your own notes |
+| planner | turns a fog into options, a pick, and a plan of record |
+
+What each one lands:
+
+```
+researcher  parallel-cli qmd llm-wiki rss-feeds
+            + arxiv grounded-citations blocked-page-recovery pdf
+writer      creative-ideation baoyu-article-illustrator parallel-cli publish-site
+            + humanizer youtube-content grounded-citations obsidian
+coder       python-debugpy rest-graphql-debug ast-grep code-wiki
+            + github systematic-debugging test-driven-development requesting-code-review
+assistant   + email-inbox-triage google-workspace microsoft-office pdf
+            document-to-action-items weekly-review-planning obsidian
+marketer    baoyu-article-illustrator social-media-content-calendar reddit-reading
+            parallel-cli + xurl humanizer baoyu-infographic
+watcher     watchers rss-feeds scrapling live-dashboard
+            + product-price-monitor competitor-news-monitor blocked-page-recovery xurl
+designer    sketch design-md comfyui excalidraw publish-site
+            + baoyu-infographic popular-web-designs claude-design
+analyst     excel-author pptx-author stocks jupyter-notebook live-dashboard parallel-cli
+            + google-workspace pdf grounded-citations
+tutor       memento-flashcards concept-diagrams baoyu-comic qmd
+            + grounded-citations manim-video obsidian
+planner     decision-questionnaire one-three-one-rule grill-me qmd
+            + document-to-action-items obsidian google-workspace
+```
 
 Counts: researcher 8, writer 8, coder 8, assistant 7, marketer 7, watcher 8,
 designer 8, analyst 9, tutor 7, planner 7 = **77 picks**, down from 129.

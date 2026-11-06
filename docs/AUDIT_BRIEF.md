@@ -68,8 +68,8 @@ End with a compact report, no preamble:
 ```
 ROLE <name>
 KEEP: <count>/<total> earn their place
-CUT: <identifier> — <why it is dead weight, one line>
-SWAP IN: <identifier> — <what gap it closes, one line>
+CUT: <identifier> : <why it is dead weight, one line>
+SWAP IN: <identifier> : <what gap it closes, one line>
 VERDICT: strong | thin | wrong-shaped
 ```
 

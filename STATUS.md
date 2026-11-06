@@ -8,6 +8,8 @@ Date: 2026-11-06
   advisory about private core imports, explained in `docs/NOTES.md` #7).
 - One command only: `/concierge`. `/hire` and `/train` are sentences inside it, not registry
   commands (verified by probing `get_plugin_commands()`: the registry key is `concierge` alone).
+- Prose pass: no em dashes in the plugin's own writing (one quoted core message stays verbatim),
+  no banned phrases, long paragraphs split. `scripts/soul_lint.py` still bans em dashes in souls.
 - `/concierge help` lists every verb, and the three words a card accepts (yes / no / more).
   Card + one yes install. Hire, train, bots, remove, reset, undo all run end to end in a
   throwaway home.
@@ -38,7 +40,7 @@ Date: 2026-11-06
   outside 5-15. Verified role by role, all ten green: only real `SKILL.md` leaves counted,
   `failed == []`, nothing stranded in `.archive/` (`docs/NOTES.md` #14-17, `docs/PRESETS.md`).
 - Lean set agreed by two adversarial reviewers (one mechanical, one end-to-end): four changes
-  applied — `comfyui` out of marketer, `xurl` into watcher, `grill-me` into planner,
+  applied: `comfyui` out of marketer, `xurl` into watcher, `grill-me` into planner,
   `node-inspect-debugger` out of coder (`docs/PRESETS.md` § The bar).
 - A soul per role: standing instructions, 969-1109 chars, written to `<profile>/SOUL.md` before the
   skills so a failed install never costs the bot. That path is core's own identity slot
@@ -57,7 +59,7 @@ Date: 2026-11-06
   after the CLI-home fix: 11/11. Note: profiles are HOME-anchored, so `HERMES_HOME` does not isolate
   them (`docs/NOTES.md` #15).
 - Docs: `README.md` (pitch, card, receipts, lifecycle, roles), `SPEC.md`, `docs/PRESETS.md` (the ten
-  roles and their skills), `docs/NOTES.md` (19 places the code disagrees with the brief or the docs).
+  roles and their skills), `docs/NOTES.md` (20 places the code disagrees with the brief or the docs).
 
 ## Failed / open
 - The junk-sentence card cannot be removed without losing real asks; claim narrowed in `README.md`.

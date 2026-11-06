@@ -20,7 +20,7 @@ import harness  # noqa: E402
 match = harness.load("match")
 seams = harness.load("seams")
 
-# (ask, [acceptable entry names]) — hit if any acceptable name is in top-3;
+# (ask, [acceptable entry names]), hit if any acceptable name is in top-3;
 # top-1 hits when the first ranked candidate is acceptable.
 REALISTIC = [
     ("search my gmail inbox and read emails", ["gmail"]),

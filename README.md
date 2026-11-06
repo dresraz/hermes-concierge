@@ -2,7 +2,8 @@
 
 Install a bot or a skill set like an app: **one sentence, one card, one yes, a receipt, and an undo.**
 
-Concierge is a Hermes Agent plugin. It answers one question — *"can I add that?"* — without making you learn the catalog, read a manifest, or remember which of the ~977 entries does the thing.
+Concierge is a Hermes Agent plugin. It answers one question, *"can I add that?"*, without making
+you learn the catalog, read a manifest, or guess which of the ~977 entries does the thing.
 
 ```
 /concierge remember what I told you across sessions
@@ -70,30 +71,30 @@ Everything is a word after `/concierge`. There is no `/hire` and no `/train` to 
 
 `/concierge` with nothing after it prints that same list.
 
-## The point: a working bot in one sentence
+## The point: a working bot in one sentence, trainable later
 
-Hermes gives you a lot of power and expects you to assemble it. That is the slow part: read the
-catalog, guess which of the ~977 entries matters, install six of them into a profile, write the
+Hermes gives you a lot of power and asks you to assemble it. That is the slow part. You read the
+catalog, guess which of the ~977 entries matters, install six into a profile, write the
 instructions that make the profile behave, then find out it was the wrong six.
 
-Concierge is built to remove that stretch. You say the job, it picks the skills that finish the
-job, writes the soul that makes the bot act like that job, and shows you the disk before it calls
-it done. A researcher arrives on its first sentence able to read papers, cite sources, save notes
-and get past a blocked page, without you knowing those four skills exist.
+Concierge removes that stretch. You say the job and it picks the skills that finish the job,
+writes the soul that makes the bot act like that job, then reads the disk before it calls it done.
+A researcher arrives on its first sentence able to read papers, cite sources, save notes and get
+past a blocked page, without you knowing those four skills exist.
 
-Then it stays cheap to change. Behaviour is one sentence (`train`) and it takes effect as a normal
-skill, not a rewrite of the profile. Trying a bot costs one sentence and one undo, so people
-experiment instead of deliberating. That is the whole speed argument: opinionated starting sets,
-one-sentence changes, and a receipt that tells the truth.
+Then it stays cheap to change. `train` adds one habit in one sentence, written as a normal skill,
+so nothing gets rebuilt. Trying a bot costs a sentence and an undo, so people experiment instead
+of deliberating. Opinionated starting sets, one-sentence changes, a receipt that tells the truth:
+that is the speed argument.
 
 ## Why not just ask the agent?
 
 You can. Your `default` agent has a terminal, so "add the pdf skill to researcher-bot" already
-works, and so does writing the soul by hand. Concierge does not add power it did not have.
+works, and so does writing the soul by hand. Concierge adds no new power.
 
-What it adds is the boring part: it matches against the real catalog, so it cannot invent a skill
-or plugin name; it shows one card and waits for a yes; it reads the disk before it claims the
-install; it records what it wrote so `undo` reverses exactly that; and when nothing fits it installs
+What it adds is the boring part. It matches against the real catalog, so it cannot invent a skill
+or plugin name. It shows one card and waits for a yes. It reads the disk before it claims the
+install, and it records what it wrote so `undo` reverses exactly that. When nothing fits it installs
 nothing and says so. No model call, no tokens, same answer every time.
 
 ## Hire: a sentence becomes a bot
@@ -200,23 +201,32 @@ A bot that has never been used fires on one word. A bot with sessions, memory or
     To do it anyway: /concierge fire 2 inbox-bot
 ```
 
-`undo` never deletes a used bot. Undo on a stock hire kills it; undo on a bot that has been lived in says `kept: ... has history ...` and points at `fire`.
+`undo` never deletes a used bot. On a stock hire it kills it. On a bot that has been lived in it
+says `kept: ... has history ...` and points at `fire`.
 
-**`default` is never deleted.** `fire default` is refused and points at `reset default`, which replays only the records Concierge wrote for that profile. Same for any profile Concierge did not create: it is refused, because deleting something it cannot name is not a concierge's job.
+**`default` is never deleted.** `fire default` is refused and points at `reset default`, which
+replays only the records Concierge wrote for that profile. Any profile Concierge did not create is
+refused too, since it cannot safely delete what it cannot name.
 
 ## Why a plugin and not a prompt
 
-A prompt cannot read the live catalog, cannot rank every real entry in it against your sentence, cannot call core's installer, cannot write an install record, and cannot undo it. Concierge does all five, and it never invents a plugin or a bot that does not exist.
+A prompt cannot read the live catalog, rank every real entry in it against your sentence, call
+core's installer, write an install record, or undo it. Concierge does all five and never invents a
+plugin or a bot that does not exist.
 
 ## How it works
 
 - `commands.py` is the whole command surface: one verb table, one card protocol, one record store.
-- `match.py` ranks the live catalog against your sentence. Pure, deterministic, no model call, no network. Tokenize, fold plurals, bridge an outcome to a mechanism with a small hand-written vocabulary so *"remember this forever"* reaches memory providers instead of scoring zero. Each candidate carries the words that earned it, which is what `why` prints.
+- `match.py` ranks the live catalog against your sentence. Pure and deterministic: no model call, no
+  network. It tokenizes, folds plurals, and bridges an outcome to a mechanism with a small
+  hand-written vocabulary, so *"remember this forever"* reaches memory providers instead of scoring
+  zero. Each candidate carries the words that earned it, which is what `why` prints.
 - `card.py` renders the catalog card, takes the yes or no, and prints the receipt once an install lands.
-- `lifecycle.py` lists, fires and resets — the only place that decides what may be deleted.
+- `lifecycle.py` lists, fires and resets. It is the only place that decides what may be deleted.
 - `bots.py` turns a sentence into a profile name, a title, a duty list and a `SOUL.md`.
 - `training.py` turns a sentence into one `SKILL.md` in that bot's skills directory.
-- `presets.py` holds the ten roles: cue detection, the three-to-five optional skills each one lands, and the install-verify loop that believes the disk over the exit code.
+- `presets.py` holds the ten roles: cue detection, the seven-to-nine skills each one lands, and the
+  install-verify loop that believes the disk over the exit code.
 - `seams.py` is the only module that calls Hermes core: catalog, installer, scan gate, profiles, hook registration.
 - `effects.py` holds the filesystem writes, injected so tests never touch a real directory.
 - `undo.py` reverses the last thing Concierge did, then checks the disk before dropping the record.
@@ -236,7 +246,10 @@ No LLM call is involved, so those numbers are the same on every run. The single 
 
 ## Cost
 
-Concierge adds no tools to the request. The only per-request cost is the plugin's own registration. The card tells you when a plugin you are about to add does add tools, hooks, or middleware, counting what the catalog declares. It prints no token figure, because the catalog carries no schemas and a number there would be a guess.
+Concierge adds no tools to the request. The only per-request cost is its own registration. The card
+tells you when a plugin you are about to add brings tools, hooks or middleware, counted from what
+the catalog declares. It prints no token figure, because the catalog carries no schemas and any
+number there would be a guess.
 
 ## Safety
 
