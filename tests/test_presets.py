@@ -69,36 +69,62 @@ class Detection(unittest.TestCase):
 
 
 class Contract(unittest.TestCase):
-    def test_every_skill_is_three_to_five_and_namespaced(self):
+    def test_every_role_is_ten_to_fifteen_relevant_skills(self):
         for role in presets.ROLES:
             with self.subTest(role=role.name):
-                self.assertGreaterEqual(len(role.skills), 3)
-                self.assertLessEqual(len(role.skills), 5)
+                total = len(role.picks)
+                self.assertGreaterEqual(total, 10, role.name)
+                self.assertLessEqual(total, 15, role.name)
+                self.assertGreaterEqual(len(role.bundled), 1)
                 for skill in role.skills:
                     self.assertEqual(skill.count("/"), 1, skill)
                     self.assertFalse(skill.startswith("official/"))
+                for name in role.bundled:
+                    self.assertNotIn("/", name, name)
+
+    def test_no_skill_is_named_twice_in_a_role(self):
+        for role in presets.ROLES:
+            with self.subTest(role=role.name):
+                picks = list(role.picks)
+                self.assertEqual(len(picks), len(set(picks)), picks)
 
     def test_identifiers_exist_in_the_hermes_tree(self):
-        """Names are not invented: each one is a real optional skill on disk."""
-        roots = [
-            Path("/home/andres/.hermes/hermes-agent/optional-skills"),
-            Path("/home/andres/.hermes/hermes-agent/skills"),
-        ]
-        if not any(root.is_dir() for root in roots):
+        """Names are not invented: each one is a real skill on disk."""
+        root = Path("/home/andres/.hermes/hermes-agent")
+        optional = root / "optional-skills"
+        bundled = root / "skills"
+        if not (optional.is_dir() and bundled.is_dir()):
             self.skipTest("Hermes tree not present")
         for role in presets.ROLES:
             for skill in role.skills:
                 with self.subTest(skill=skill):
                     self.assertTrue(
-                        any((root / skill / "SKILL.md").exists() for root in roots),
-                        "{} is not a real skill".format(skill),
+                        (optional / skill / "SKILL.md").exists(),
+                        "{} is not a real optional skill".format(skill),
                     )
+            for name in role.bundled:
+                with self.subTest(skill=name):
+                    found = list(bundled.glob("*/" + name + "/SKILL.md"))
+                    self.assertTrue(found, "{} is not a real bundled skill".format(name))
 
 
 class Install(unittest.TestCase):
     def _home(self) -> Path:
         tmp = tempfile.mkdtemp(prefix="preset-")
         return Path(tmp) / "profiles" / "bp-test-a"
+
+    @staticmethod
+    def _copier(home: Path):
+        """Stand in for core's bundled-tree copy: put the files where verify looks."""
+
+        def copy(path, names):
+            for name in names:
+                folder = Path(path) / "skills" / "misc" / name
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / "SKILL.md").write_text("x")
+            return list(names)
+
+        return copy
 
     def test_commands_are_scoped_to_the_profile(self):
         home = self._home()
@@ -112,10 +138,12 @@ class Install(unittest.TestCase):
             (folder / "SKILL.md").write_text("x")
             return 0, "ok"
 
-        report = presets.install("bp-test-a", home, presets.get("watcher"),
-                                 runner=runner, hermes="hermes")
+        role = presets.get("watcher")
+        report = presets.install("bp-test-a", home, role, runner=runner,
+                                 hermes="hermes", copier=self._copier(home))
         self.assertTrue(report.ok)
-        self.assertEqual(len(report.installed), 3)
+        self.assertEqual(len(report.installed), len(role.picks))
+        self.assertEqual(len(seen), len(role.skills))
         for args in seen:
             self.assertEqual(args[:4], ["hermes", "-p", "bp-test-a", "skills"])
             self.assertEqual(args[4], "install")
@@ -131,9 +159,26 @@ class Install(unittest.TestCase):
             runner=lambda args: (0, "installed"), hermes="hermes",
         )
         self.assertFalse(report.ok)
-        self.assertEqual(report.installed, [])
-        self.assertEqual(len(report.failed), len(role.skills))
+        # Only the bundled picks really landed; every optional one is a failure
+        # even though the installer claimed success.
+        self.assertEqual(sorted(report.installed), sorted(role.bundled))
+        self.assertEqual(
+            sorted(report.failed), sorted(s.rsplit("/", 1)[-1] for s in role.skills)
+        )
         self.assertIn("failed", report.lines()[0])
+
+    def test_bundled_skills_land_even_if_installs_fail(self):
+        home = self._home()
+        role = presets.get("watcher")
+        report = presets.install(
+            "bp-test-a", home, role,
+            runner=lambda args: (1, "no network"), hermes="hermes",
+            copier=self._copier(home),
+        )
+        for name in role.bundled:
+            self.assertIn(name, report.installed)
+        self.assertEqual(sorted(report.failed),
+                         sorted(s.rsplit("/", 1)[-1] for s in role.skills))
 
     def test_partial_install_reports_both(self):
         home = self._home()
@@ -148,7 +193,8 @@ class Install(unittest.TestCase):
             return 0, "ok"
 
         report = presets.install("bp-test-a", home, presets.get("researcher"),
-                                 runner=runner, hermes="hermes")
+                                 runner=runner, hermes="hermes",
+                                 copier=self._copier(home))
         self.assertFalse(report.ok)
         self.assertEqual(report.failed, ["rss-feeds"])
         self.assertIn("parallel-cli", report.installed)

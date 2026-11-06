@@ -31,16 +31,19 @@ Date: 2026-11-05
   were tried and all measured worse on real asks (`docs/NOTES.md` #9). A card is not an install.
 - Undo of a plugin runs core's real removal (`cmd_remove`), not a guessed name; `tests/test_undo_defaults.py`
   proves it in a throwaway home with nothing injected, through the real command too (`docs/NOTES.md` #11).
-- Ten roles hire with their skills: say `researcher`, `writer`, `coder`, `assistant`, `marketer`,
-  `watcher`, `designer`, `analyst`, `tutor` or `planner` and the new bot gets three to five real
-  optional skills, installed through core's own `hermes -p <profile> skills install` and then read
-  back off disk. Every identifier exists in the Hermes tree; a test fails if one does not
-  (`docs/NOTES.md` #14, `docs/PRESETS.md`).
+- Ten roles hire with 10-15 genuinely relevant skills each (11-15 picks, all ten roles): a mix of
+  optional skills installed through core's own `hermes -p <profile> skills install` and bundled-tree
+  skills copied in after the install pool. Every identifier exists in the Hermes tree and the bundled
+  names are written on the receipt; a test fails on any invented name or a role outside 10-15.
+  Verified role by role, all ten green: `installed == picks`, `failed == []`, nothing stranded in
+  `.archive/` (`docs/NOTES.md` #14-16, `docs/PRESETS.md`).
 - 134 unit tests, 0 LLM calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
 - Live probe of the new card, throwaway `HERMES_HOME`, real 977-entry catalog: two-candidate ask,
   `more`, `2`, `no` (`/home/andres/.hermes/cache/scratch/live_card.txt`).
-- Role spike, throwaway `bp-test-*` profiles, all deleted: researcher 3/3 in 1.2s, watcher 3/3 in
-  1.2s, designer 4/4 in 16.3s (`comfyui` is the slow one).
+- All-ten readable check, `bp-test-*` profiles, deleted after each: every role lands its full pick
+  list, zero failures, zero `.archive/` leaks. `planner` re-run under a throwaway `HERMES_HOME`
+  after the CLI-home fix: 11/11. Note: profiles are HOME-anchored, so `HERMES_HOME` does not isolate
+  them (`docs/NOTES.md` #15).
 - Docs: `README.md` (pitch, card, receipts, lifecycle, roles), `SPEC.md`, `docs/PRESETS.md` (the ten
   roles and their skills), `docs/NOTES.md` (14 places the code disagrees with the brief or the docs).
 

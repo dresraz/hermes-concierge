@@ -231,3 +231,29 @@ Every identifier was checked against the Hermes tree twice: a one-off scan while
 choosing them, and `tests/test_presets.py::Contract` on every run, which fails if
 a name is not a real `optional-skills/<category>/<name>/SKILL.md`. Suite 120 -> 134,
 zero LLM calls, no new command.
+
+## 15. Profiles are HOME-anchored; the CLI has to be told the same root
+
+`hermes_cli.profiles.create_profile()` writes to `~/.hermes/profiles/<name>` no matter what
+`HERMES_HOME` says: the profiles root is deliberately HOME-anchored so profiles survive a moved
+data dir. But `hermes -p <name> skills install` honours `HERMES_HOME`, so the two disagreed the
+moment Concierge ran under a custom home: the profile was created for real, and every optional
+install went looking in the throwaway tree and found no profile (`installed 0 of 11`).
+
+Fix: `install()` passes `HERMES_HOME=<root of the profile>` to the CLI, derived from the profile
+path it just got, instead of inheriting whatever the session had. One role re-run under a
+throwaway `HERMES_HOME` now lands 11 of 11.
+
+Consequence for testing, recorded because the brief asks for a throwaway home: `HERMES_HOME`
+isolates Hermes' data, not its profiles. Test profiles are real profiles under
+`~/.hermes/profiles/`, named `bp-test-*` and deleted in the same run. Nothing else is touched.
+
+## 16. Two receipt lies fixed: `.archive/` counts, and the installer eats copies
+
+1. `verify()` counted a skill as present if `skills/*/<name>` existed, and `.archive/<name>` matches
+   that glob: a retired copy read as installed. `_present` now skips any folder whose parent starts
+   with `.`.
+2. Copying a bundled skill before `hermes skills install` runs is pointless: the installer archives
+   any same-name skill it finds, so the receipt named a skill that had just been retired. Bundled
+   copies now happen after the install pool, and `copy_bundled` never selects a path under
+   `.archive/` and prefers the shallowest match when a name exists in two categories.

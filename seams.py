@@ -16,7 +16,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
+
+import os
+import shutil
+import sys
 
 
 @dataclass
@@ -185,10 +189,103 @@ def profile_history(name: str) -> dict:
     return counts
 
 
-def create_profile(name: str, *, soul: str, description: str = "") -> Path:
+def create_profile(
+    name: str, *, soul: str, description: str = "", lean: bool = True
+) -> Path:
+    """Create a profile with a chosen brain, not the whole 44-skill tree.
+
+    ``lean`` passes ``no_skills`` to core: the profile starts with essentials only
+    (``hermes-agent``) and core writes the ``.no-bundled-skills`` marker so
+    ``hermes update`` never re-seeds it. The caller then copies exactly the bundled
+    skills it named on the receipt (``copy_bundled``).
+    """
     from hermes_cli.profiles import create_profile as core_create_profile
 
-    return core_create_profile(name, description=description or None, soul=soul)
+    home = core_create_profile(
+        name, description=description or None, soul=soul, no_skills=lean
+    )
+    if lean:
+        # Core's create path does not run the sync that seeds essentials, so a
+        # lean profile would start with no skills at all. `hermes-agent` is the
+        # one skill every profile must carry.
+        from agent.skill_utils import ESSENTIAL_SKILLS
+
+        copy_bundled(Path(home), sorted(ESSENTIAL_SKILLS))
+    return home
+
+
+def _bundled_root(skills_sync=None, get_bundled_skills_dir=None) -> Path:
+    """Find the directory that actually holds the bundled skill tree.
+
+    Core's helpers are preferred but never required: the plugin also runs from a
+    plain interpreter (tests), so the search falls back to the checkout on disk.
+    ``get_bundled_skills_dir()`` is tried last on purpose, since it resolves to
+    the user's own tree where stale ``.archive/`` copies shadow real skills.
+    """
+    candidates: list[str] = [os.getenv("HERMES_BUNDLED_SKILLS", "").strip()]
+    home: Path | None = None
+    try:
+        import hermes_constants as constants
+
+        home = Path(constants.get_hermes_home())
+        candidates += [
+            str(Path(constants.__file__).parent / "skills"),
+            str(home / "hermes-agent" / "skills"),
+            str(constants.get_bundled_skills_dir()),
+        ]
+    except Exception:  # not running inside Hermes: find the checkout ourselves
+        pass
+    if skills_sync is not None:
+        candidates.append(str(Path(skills_sync.__file__).parent.parent / "skills"))
+    if home is None:
+        home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+    candidates += [
+        str(home / "hermes-agent" / "skills"),
+        str(Path.home() / "hermes-agent" / "skills"),
+    ]
+    candidates += [str(Path(entry or ".") / "skills") for entry in sys.path]
+
+    for raw in candidates:
+        if not raw:
+            continue
+        path = Path(raw)
+        if any(path.glob("**/SKILL.md")):
+            return path
+    return Path(candidates[-1] or "skills")
+
+
+def copy_bundled(home: Path, names: Sequence[str]) -> list[str]:
+    """Copy named skills from Hermes' bundled tree into ``home/skills``.
+
+    Direct copy, not the sync manifest: a lean profile carries the opt-out marker,
+    so core's sync will not touch these files on later updates.
+    """
+    try:
+        from tools import skills_sync
+    except Exception:
+        skills_sync = None
+
+    bundled = _bundled_root(skills_sync)
+    dest_root = Path(home) / "skills"
+    copied: list[str] = []
+    for name in names:
+        matches = [
+            p for p in bundled.glob(f"*/{name}")
+            if ".archive" not in p.relative_to(bundled).parts and (p / "SKILL.md").is_file()
+        ]
+        src = min(matches, key=lambda p: len(p.relative_to(bundled).parts), default=None)
+        if src is None and (bundled / name / "SKILL.md").is_file():
+            src = bundled / name
+        if src is None:
+            continue
+        dest = dest_root / src.relative_to(bundled)
+        if (dest / "SKILL.md").is_file():
+            copied.append(name)
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, dest)
+        copied.append(name)
+    return copied
 
 
 def remove_profile(name: str) -> Path:
