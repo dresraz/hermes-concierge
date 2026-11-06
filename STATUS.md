@@ -5,7 +5,7 @@ Date: 2026-11-06
 
 ## Release
 
-- `plugin.yaml` version `0.1.5`, tag `v0.1.5`, commit `6359f82f3c87e2a2168202951bcecd7736fa6ee9`.
+- `plugin.yaml` version `0.1.5`, tag `v0.1.5`, commit `40f5c701e37f04e65a4b895401bfb91341a1b7ca`.
 - `docs/catalog-entry.yaml` pins that sha and `version: "0.1.5"`; the entry passes Hermes core's own
   `scripts/validate_plugin_catalog.py` (exit 0).
 - 154 tests, 0 model calls, 0 network calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
