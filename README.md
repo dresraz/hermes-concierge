@@ -266,13 +266,21 @@ number there would be a guess.
 - `undo` is a record diff, not a guess: it reverses exactly what the record says was written, then checks the disk. A partial undo keeps the record so you can run it again.
 - No background processes, no self-updater, no telemetry, no network calls of its own.
 
+## Limits
+
+- `hermes plugins validate` passes with one warning: Concierge imports core modules that are not
+  public API, because Hermes has no public seam yet for "install this catalog entry" or "create a
+  profile". They are the same calls the CLI makes. If one moves in a core release, Concierge breaks,
+  not your install: nothing is bound at import time and nothing is patched.
+- Built and tested on Linux with Hermes 0.23.0 and Python 3.14. macOS should behave the same, Windows
+  is untested.
+
 ## Development
 
 ```
-cd /home/andres/concierge
-PYTHONPATH=/home/andres python -m unittest discover -s tests
-PYTHONPATH=/home/andres python tests/eval_match.py
-hermes plugins validate /home/andres/concierge
+python -m unittest discover -s tests
+python tests/eval_match.py
+hermes plugins validate . --install-deps
 ```
 
 Tests are `unittest`, stdlib only, deterministic, and make no LLM calls. They never touch a real profile, a real SOUL file, or a real plugins directory: every seam is injected.

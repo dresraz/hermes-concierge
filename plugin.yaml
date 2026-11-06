@@ -1,6 +1,7 @@
 name: concierge
-version: 0.1.1
+version: 0.1.2
 description: "One sentence in, one bot or skill installed. Concierge matches the ask against Hermes's live catalog, installs through the real install path behind a single yes, prints a receipt read back off the disk, and undoes it on request."
 author: "@dresraz"
+requires_hermes: ">=0.22.7"
 provides_hooks:
   - pre_gateway_dispatch
