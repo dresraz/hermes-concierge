@@ -84,6 +84,15 @@ def _default_uninstall() -> Callable[[str], Any]:
     return seams.remove_plugin
 
 
+def _default_installed() -> Callable[[str], Any]:
+    """Core's install record, asked whether a plugin is still there."""
+    if not __package__:
+        seams = importlib.import_module("seams")
+    else:
+        seams = importlib.import_module(".seams", __package__)
+    return seams.plugin_installed
+
+
 def _default_restore() -> Callable[[Any], Any]:
     """Core call that puts the SOUL file back as it was."""
     from .effects import restore_soul
@@ -136,6 +145,7 @@ def undo(
     uninstall: Optional[Callable[[str], Any]] = None,
     remove_skill: Optional[Callable[[str], Any]] = None,
     restore: Optional[Callable[[Any], Any]] = None,
+    installed: Optional[Callable[[str], Any]] = None,
 ) -> list:
     """Reverse one install, in reverse order, and report one plain line per action.
 
@@ -173,12 +183,21 @@ def undo(
 
     name = getattr(record, "name", "") or ""
     if name:
+        ask = installed
+        if ask is None and uninstall is None:
+            ask = _default_installed()
+        present = True if ask is None else bool(ask(name))
+        if not present:
+            # Core refused this removal before because there was nothing left to
+            # remove. Saying "restored" here would be a lie, so say what is true.
+            lines.append("already gone: plugin {}".format(name))
+        else:
 
-        def _do_uninstall() -> None:
-            step = uninstall if uninstall is not None else _default_uninstall()
-            step(name)
+            def _do_uninstall() -> None:
+                step = uninstall if uninstall is not None else _default_uninstall()
+                step(name)
 
-        _run(lines, "plugin {}".format(name), _do_uninstall)
+            _run(lines, "plugin {}".format(name), _do_uninstall)
 
     soul_path = getattr(record, "soul_path", "") or ""
     if soul_path:

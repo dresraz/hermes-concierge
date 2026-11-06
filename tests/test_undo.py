@@ -30,6 +30,35 @@ class MemoryBackend:
         self.data[key] = value
 
 
+class AlreadyGone(unittest.TestCase):
+    def test_plugin_that_is_not_there_is_reported_not_restored(self):
+        """A receipt for something already absent must not fail or lie.
+
+        Core refuses to remove a plugin it does not know, and an undo that dies
+        there keeps the receipt forever. "already gone" is the honest line.
+        """
+        record = state.Installed(name="cognee", sha="b13274096018")
+        called = []
+        lines = undo.undo(
+            record,
+            installed=lambda name: False,
+            uninstall=lambda name: called.append(name),
+        )
+        self.assertEqual(lines, ["already gone: plugin cognee"])
+        self.assertEqual(called, [])
+
+    def test_plugin_that_is_there_is_removed(self):
+        record = state.Installed(name="cognee", sha="b13274096018")
+        called = []
+        lines = undo.undo(
+            record,
+            installed=lambda name: True,
+            uninstall=lambda name: called.append(name),
+        )
+        self.assertEqual(lines, ["restored: plugin cognee"])
+        self.assertEqual(called, ["cognee"])
+
+
 class Recorder:
     """Records every injected call, in order, and can fail on demand."""
 

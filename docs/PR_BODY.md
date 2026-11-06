@@ -1,0 +1,52 @@
+## What this does
+
+Concierge makes adding something to Hermes a one-sentence job.
+
+You say what you want. Concierge matches it against the live plugin catalog (1,063 entries today),
+shows one card with the name, tier, what it adds, what it will cost on every request and the exact
+pinned commit, and installs it only after you say yes. Then it reads the result back off the disk
+and prints a receipt. `/concierge undo` removes exactly what it added. When nothing in the catalog
+fits, it installs nothing and says so.
+
+It also creates bots: `/concierge hire a researcher for papers` makes a `researcher-bot` profile
+with a role, nine catalog skills and a `SOUL.md`, then tells you how to train it further.
+
+## Surfaces used
+
+- one slash command, `/concierge`, shipped as a plugin skill (`skills/concierge/SKILL.md`)
+- one `pre_gateway_dispatch` hook: turns a short reply word in the messaging gateway into the same
+  confirmation the CLI takes, and consumes it so the model never sees it
+- no tools registered, so nothing is added to the model's tool list or to the request
+- installs and removals call the same core paths the CLI uses (`install_catalog_entry`,
+  `cmd_remove`, `do_install`, `create_job`), so Hermes's own scan, consent screen and commit pinning
+  still apply. There is no separate installer and no self-updater.
+
+## Disclosures (rule 13)
+
+- **Network.** It fetches the plugin catalog index from GitHub and, for the dependency line on the
+  card, one plugin manifest at its pinned commit. Nothing else goes out.
+- **Reads outside its own data.** It reads the active `HERMES_HOME`: the catalog, the profiles
+  directory, and the plugin and skill directories. That is what lets the receipt be read back off
+  the disk instead of being a claim.
+- **Writes.** A new profile per hire, skills into it, a `SOUL.md`, and Hermes's own install records.
+  Listing, resetting and deleting profiles are limited to profiles Concierge created; the default
+  profile can be reset to stock but never deleted.
+- **Credentials.** None. No API keys, no `.env`, no `auth.json`, no OAuth.
+- **Telemetry.** None.
+- **Long-running work.** None. No background processes, no watchers.
+- **Load time.** Nothing runs at import. The hook registers and returns.
+
+## Known warnings, disclosed rather than hidden
+
+`hermes plugins validate` passes with one warning: nine imports of core modules that have no
+public seam (for example "install this catalog entry" and "create a profile"). They are the same
+calls the CLI makes, nothing is rebound at runtime, and `no core override` passes. If Hermes adds
+public seams for those two operations, Concierge switches to them the same day. The warning is
+also in the README under `## Limits`.
+
+## Evidence
+
+- `hermes plugins validate . --install-deps` at the pinned commit: passed, one warning
+- 146 tests, no network, no model calls
+- matcher measured against the live catalog: top pick 24/32, in the top three 31/32, eight of
+  eight nonsense asks install nothing

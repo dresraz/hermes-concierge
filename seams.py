@@ -321,6 +321,20 @@ def install_metadata(name: str) -> dict:
     return (_read_install_metadata() or {}).get(name) or {}
 
 
+def plugin_installed(name: str) -> bool:
+    """True while core still has an install record for this plugin.
+
+    Undo uses this so a record pointing at something already gone reports
+    "already gone" instead of failing a removal core will refuse.
+    """
+    if install_metadata(name):
+        return True
+    # A directory install has no metadata record: the folder is the record.
+    from hermes_constants import get_hermes_home
+
+    return (get_hermes_home() / "plugins" / name).is_dir()
+
+
 def declared_deps(target) -> list[str]:
     """Python packages the installed plugin declared and core installed."""
     from pm.plugin_declarations import read_python_declaration
