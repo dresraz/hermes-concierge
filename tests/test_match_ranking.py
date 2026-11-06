@@ -142,6 +142,49 @@ class NoFit(unittest.TestCase):
             self.assertEqual(match.rank("teach my goldfish to file taxes", catalog), [])
             self.assertIsNone(match.best("teach my goldfish to file taxes", catalog))
 
+    def test_long_sentence_catching_two_words_is_not_enough(self):
+        """A single name word plus one common word is a coincidence.
+
+        The live eval caught "convert my sandwich into a spreadsheet tax form
+        for fish" landing on a voice plugin through "form" and "fish". Six
+        tokens need three earned words; a short ask still earns two.
+        """
+        catalog = [
+            entry(
+                "fish-voices",
+                title="Fish Voices",
+                description="Voices for fish narration, exported in audio form.",
+                category="audio",
+            ),
+            entry(
+                "hermes-themes-pack",
+                title="Hermes Themes Pack",
+                description="Themes and skins for the CLI.",
+                category="general",
+            ),
+            entry(
+                "hermes-memory-locus",
+                title="Locus memory",
+                description="A memory provider that keeps notes across sessions.",
+                category="memory",
+            ),
+            entry(
+                "telegram-stickers",
+                title="Telegram Stickers",
+                description="Send telegram sticker packs and reactions.",
+                category="chat",
+            ),
+        ]
+        with mock.patch.dict(os.environ, base_env(), clear=True):
+            self.assertEqual(
+                match.rank(
+                    "convert my sandwich into a spreadsheet tax form for fish",
+                    catalog,
+                ),
+                [],
+            )
+            self.assertTrue(match.rank("fish in audio form", catalog))
+
 
 if __name__ == "__main__":
     unittest.main()

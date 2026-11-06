@@ -321,8 +321,13 @@ def _earned(candidate: Candidate, weights: dict, query_tokens: int = 0) -> bool:
         for word in candidate.matched
         if weights.get(_fold(word), 1.0) >= EARN_WORTH
     ]
-    if len(substantive) >= 2:
+    if len(substantive) >= 3:
         return True
+    if len(substantive) == 2:
+        # Two words in a long sentence is usually a coincidence: "convert my
+        # sandwich into a spreadsheet tax form for fish" caught "form" and
+        # "fish". A short ask still earns its place on two words.
+        return query_tokens < 6
     if not substantive:
         return False
     if query_tokens > 3:

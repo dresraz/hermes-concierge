@@ -65,7 +65,7 @@ platforms, onboarding, capabilities, known_issues
 ```
 
 `description` is often a long paragraph. `category` is a short word (`tools`,
-`memory`, ...). `tier` is `community` or `official`. Live count today: 977 entries.
+`memory`, ...). `tier` is `community` or `official`. Live count today: 1,063 entries.
 Never hardcode that number anywhere; read it at runtime.
 
 ## Agent A: `match.py`

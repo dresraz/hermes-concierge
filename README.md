@@ -3,7 +3,7 @@
 Install a bot or a skill set like an app: **one sentence, one card, one yes, a receipt, and an undo.**
 
 Concierge is a Hermes Agent plugin. It answers one question, *"can I add that?"*, without making
-you learn the catalog, read a manifest, or guess which of the ~977 entries does the thing.
+you learn the catalog, read a manifest, or guess which of the a thousand-odd entries does the thing.
 
 ```
 /concierge remember what I told you across sessions
@@ -74,7 +74,7 @@ Everything is a word after `/concierge`. There is no `/hire` and no `/train` to 
 ## The point: a working bot in one sentence, trainable later
 
 Hermes gives you a lot of power and asks you to assemble it. That is the slow part. You read the
-catalog, guess which of the ~977 entries matters, install six into a profile, write the
+catalog, guess which of the a thousand-odd entries matters, install six into a profile, write the
 instructions that make the profile behave, then find out it was the wrong six.
 
 Concierge removes that stretch. You say the job and it picks the skills that finish the job,

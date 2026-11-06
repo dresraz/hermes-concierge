@@ -40,6 +40,11 @@ def _caps(entry) -> dict:
     return match.capabilities(entry)
 
 
+def _count(n: int, label: str) -> str:
+    """One tool, two tools: a card that reads like English."""
+    return f"{n} {label}" if n != 1 else f"1 {label.rstrip('s')}"
+
+
 def _adds(entry) -> str:
     """What the plugin registers, in the catalog's own words."""
     caps = _caps(entry)
@@ -52,7 +57,7 @@ def _adds(entry) -> str:
         value = caps.get(key) or []
         if value:
             count = len(value) if isinstance(value, (list, tuple)) else 1
-            parts.append(f"{count} {label}")
+            parts.append(_count(count, label))
     requires = caps.get("requires_env") or []
     if requires:
         parts.append(f"needs {', '.join(str(r) for r in requires)}")
@@ -68,7 +73,7 @@ def cost_line(entry) -> str:
     count = len(tools) if isinstance(tools, (list, tuple)) else 1
     # The catalog declares tool names, not schemas, so the only thing that can
     # be said without inventing a number is that they ride along on each call.
-    return f"{count} tools, sent on every request like every other tool"
+    return f"{_count(count, 'tools')}, sent on every request like every other tool"
 
 
 def _pin(entry) -> str:

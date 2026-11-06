@@ -1,16 +1,26 @@
-# Catalog entry draft for plugin-catalog/concierge.yaml in NousResearch/hermes-agent.
-# Two fields are empty on purpose: they cannot be filled before the repo exists.
-#   1. create the public repo, 2. push, 3. `git rev-parse HEAD` -> sha
 name: concierge
-repo: "https://github.com/dresraz/hermes-concierge"
-sha: "a4c890da63f467e79e5b505cea81632b90aa9447"
-description: "Install a bot or a skill set like an app: one card, one yes, a receipt, an undo. Say what you want in a sentence and Concierge matches it against the live catalog, installs it through Hermes's own installer and scan gate, then reads the result back off the disk; /concierge undo removes exactly what it added. Disclosure — registers one /concierge command and one pre_gateway_dispatch hook (Telegram reply words). It creates, lists, resets and deletes Hermes profiles under the active HERMES_HOME for the bots it hires, and it refuses to delete the default profile. Installs and removals call the same core commands the CLI uses (hermes plugins install/remove, skill install/uninstall), so every install still passes Hermes's own scan and consent gate. It reads catalog metadata and, for the pre-install dependency line, the plugin's own manifest at its pinned commit over the network. Nothing runs at load time, no credentials, no telemetry, no self-updater."
+repo: https://github.com/dresraz/hermes-concierge
+sha: 8ce01c79ff7a0d0614c7855f53fd2ae42d71bc89
+description: >-
+  Install a bot or a skill set like an app: one card, one yes, a receipt, one undo. Say what you
+  want in a sentence and Concierge matches it against the live catalog, installs it through
+  Hermes's own installer and scan gate, then reads the result back off the disk; /concierge undo
+  removes exactly what it added, and /concierge hire turns a sentence into a working profile with
+  a role, a set of catalog skills and a SOUL.md. Disclosure: registers one /concierge command and
+  one pre_gateway_dispatch hook (reply words in the messaging gateway). Network calls: it fetches
+  the plugin catalog index from GitHub and, for the dependency line on the card, one plugin
+  manifest at its pinned commit. It reads the active HERMES_HOME (catalog, profiles, plugin and
+  skill directories) and writes there: a new profile per hire, skills, a SOUL.md, and the install
+  records. Listing, resetting and deleting profiles are limited to profiles Concierge made, and
+  the default profile can be reset but never deleted. Installs and removals call the same core
+  commands the CLI uses, so Hermes's own scan, consent and pinning still apply. No credentials,
+  no telemetry, no self-updater, nothing runs at load time.
 maintainer: dresraz
 tier: community
 category: general
 requires_hermes: ">=0.22.7"
-docs_url: "https://github.com/dresraz/hermes-concierge#readme"
-version: "0.1.1"
+docs_url: https://github.com/dresraz/hermes-concierge#readme
+version: "0.1.2"
 platforms: []
 capabilities:
   provides_tools: []
