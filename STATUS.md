@@ -5,7 +5,7 @@ Date: 2026-11-06
 
 ## Release
 
-- `plugin.yaml` version `0.1.6`, tag `v0.1.6`, commit `PENDING_SHA`.
+- `plugin.yaml` version `0.1.6`, tag `v0.1.6`, commit `c2b83e3faccb75992791cbb538bd2b4238b9fb98`.
 - `docs/catalog-entry.yaml` pins that sha and `version: "0.1.6"`; the entry passes Hermes core's own
   `scripts/validate_plugin_catalog.py` (exit 0).
 - 170 tests, 0 model calls, 0 network calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.

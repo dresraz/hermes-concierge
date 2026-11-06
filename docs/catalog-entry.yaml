@@ -1,7 +1,7 @@
 name: concierge
 title: Concierge
 repo: https://github.com/dresraz/hermes-concierge
-sha: 59cab6430baf248d0b03dc70bd1c7ff2dfca0adb
+sha: c2b83e3faccb75992791cbb538bd2b4238b9fb98
 description: >-
   Install a bot or a skill set like an app: one card, one yes, a receipt, one undo. Say what you
   want in a sentence and Concierge matches it against the live catalog, installs it through
