@@ -20,6 +20,7 @@ visible, and undo covers regret.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
@@ -71,6 +72,31 @@ def _clean(raw: Any) -> str:
 def _forget(message: str, session_key: str = "") -> str:
     _PENDING.pop(session_key or "", None)
     return message
+
+
+# A sentence that names a bot to make is a hire, whatever verb it starts with:
+# "install a research bot", "I want a research bot", "make me a coder". The role
+# cue is the tell, and a destination ("into <bot>") always wins over it.
+BOT_WORDS = frozenset({"bot", "bots", "agent", "agents"})
+MAKE_VERBS = ("hire", "make ", "make me", "create", "build", "spawn", "set up",
+              "stand up", "give me")
+
+
+def _wants_a_bot(text: str) -> bool:
+    """True when the sentence asks for a bot, not for a plugin or a skill."""
+    from . import market, presets
+
+    low = " ".join((text or "").lower().split())
+    if not low or " into " in low:
+        return False
+    if market.split_target(text)[1]:
+        return False
+    if presets.detect(text) is None:
+        return False
+    words = set(re.findall(r"[a-z']+", low))
+    if words & BOT_WORDS:
+        return True
+    return any(low.startswith(verb) for verb in MAKE_VERBS)
 
 
 def handle_concierge(
@@ -146,6 +172,10 @@ def handle_concierge(
         card.forget(session_key)
         market_mod.forget(session_key)
         _forget("", session_key)
+        # "install a research bot" is a hire: the sentence names the thing to
+        # make, not a package to fetch. A destination still wins.
+        if _wants_a_bot(rest):
+            return handle_hire(rest, store=store, hire=hire, known=known)
         return handle_install(rest, store=store, session_key=session_key)
 
     # Bare yes/no/more belong to a card this conversation was shown.
@@ -153,6 +183,10 @@ def handle_concierge(
 
     if market_mod.is_waiting(session_key):
         return market_mod.handle(text, session_key=session_key, store=store)
+    if _wants_a_bot(text):
+        card.forget(session_key)
+        _forget("", session_key)
+        return handle_hire(text, store=store, hire=hire, known=known)
     return card.handle(text, session_key=session_key)
 
 
@@ -237,6 +271,10 @@ def handle_hire(
         preset_lines = _apply_preset(text, plan.name, path)
     except Exception:
         preset_lines = []
+    try:
+        extra_lines = _suggest_extras(text, path)
+    except Exception:
+        extra_lines = []
 
     lines, ok = bots.receipt(
         plan, path, known=(taken + [plan.name] if known is not None else None)
@@ -259,6 +297,7 @@ def handle_hire(
         + ["  " + line for line in lines]
         + plugin_lines
         + preset_lines
+        + extra_lines
         + [
             "",
             "  next     /concierge train {}: <habit>".format(plan.name),
@@ -287,6 +326,27 @@ def _apply_preset(text: str, name: str, profile_path: Any) -> list[str]:
     except Exception as exc:
         return ["  skills   preset skipped: {}: {}".format(type(exc).__name__, exc)]
     return report.lines() if report.wanted else []
+
+
+def _suggest_extras(text: str, profile_path: Any) -> list[str]:
+    """Two more skills that fit the sentence, offered with the command to take one.
+
+    The preset seed is a floor. This reads the skill trees on disk, weighs each
+    candidate, and names what else would help this role, never installing it.
+    """
+    from . import discover, presets
+
+    role = presets.detect(text)
+    if role is None:
+        return []
+    skills_dir = Path(str(profile_path)) / "skills"
+    installed = set()
+    if skills_dir.is_dir():
+        installed = {item.parent.name for item in skills_dir.glob("**/SKILL.md")}
+    picks = discover.suggest(
+        text, role.name, blurb=role.blurb, skip=installed, limit=2
+    )
+    return discover.lines(picks, Path(str(profile_path)).name)
 
 
 def handle_train(

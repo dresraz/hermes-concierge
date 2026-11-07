@@ -25,6 +25,8 @@ STOPWORDS = frozenset(
     in into is it its just like me my need of on or our please so some tell
     than that the their them then there these they this to too use using want
     was way we what when where which who will with would you your
+    add build create give install installed installing make makes making new
+    something anything thing things bot bots agent agents
     """.split()
 )
 
