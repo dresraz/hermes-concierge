@@ -17,7 +17,7 @@ hermes
 | 4 | 26-32 | type `/concierge yes`, receipt appears | "One yes, and it installs through Hermes's own installer and scan gate." |
 | 5 | 32-40 | the receipt | "The receipt is read back off the disk, not remembered." |
 | 6 | 40-48 | type `/concierge undo`, receipt | "And undo removes exactly what it added." |
-| 7 | 48-64 | type `/concierge hire a researcher for papers`, receipt | "Same sentence works for a whole bot: a role, its catalog skills, and a soul you can train later." |
+| 7 | 48-64 | type `/concierge create a researcher for papers`, receipt | "Same sentence works for a whole bot: a role, its catalog skills, and a soul you can improve later." |
 | 8 | 64-72 | type `/concierge a bot that writes my taxes` | "And when nothing fits, it installs nothing and says so." |
 | 9 | 72-82 | type `/concierge bots` | "It also keeps track of the bots it made." |
 | 10 | 82-88 | back to prompt | "One sentence, one card, one receipt, one undo. Concierge is in the catalog." |
@@ -53,7 +53,7 @@ Hired inbox-bot
   skills   assistant 7/7 installed: email-inbox-triage, google-workspace, microsoft-office,
            pdf, document-to-action-items, weekly-review-planning +1 more
 
-  next     /concierge train inbox-bot: <habit>
+  next     /concierge improve inbox-bot: <habit>
   undo     /concierge undo
 ```
 

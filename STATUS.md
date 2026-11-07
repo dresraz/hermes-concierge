@@ -18,12 +18,12 @@ Date: 2026-11-06
 
 - Plugin loads and validates (`hermes plugins validate`: pass; one advisory about private core
   imports, explained in `docs/NOTES.md` #7).
-- One command only: `/concierge`. `/hire` and `/train` are sentences inside it, not registry
+- One command only: `/concierge`. `/concierge create` and `/concierge improve` are sentences inside it, not registry
   commands (verified by probing `get_plugin_commands()`: the registry key is `concierge` alone).
 - Prose pass: no em dashes in the plugin's own writing (one quoted core message stays verbatim),
   no banned phrases, long paragraphs split. `scripts/soul_lint.py` still bans em dashes in souls.
 - `/concierge help` lists every verb, and the three words a card accepts (yes / no / more).
-  Card plus one yes installs. Hire, train, bots, remove, reset, undo all run end to end in a
+  Card plus one yes installs. Create, improve, bots, remove, reset, undo all run end to end in a
   throwaway home.
 - The card describes exactly one install. The runner-up is named (`also  jet-browser`) but has no
   number: `/concierge more` describes it, `/concierge <its name>` installs it. A bare `2` states
@@ -35,7 +35,7 @@ Date: 2026-11-06
   packages before confirm (9 of 40 sampled catalog entries declare any; one pulls from git and says
   so). The receipt re-reads the installed tree and lists what landed. No second question.
 - Receipts are read off disk after the write, never predicted. Undo verified by re-reading.
-- No receipt offers an undo it did not record: card, hire and train all report a failed record
+- No receipt offers an undo it did not record: card, create and improve all report a failed record
   write and drop the undo line instead of promising a reversal with nothing behind it (#13).
 - Matcher, two independent measures against the live 1,063-entry catalog, zero network, zero model:
   hand-written asks (`tests/eval_match.py`) top1 24/32, top3 31/32, 8 of 8 nonsense return nothing;
@@ -49,7 +49,7 @@ Date: 2026-11-06
 - Undo of a plugin runs core's real removal (`cmd_remove`), not a guessed name;
   `tests/test_undo_defaults.py` proves it in a throwaway home with nothing injected, through the
   real command too (`docs/NOTES.md` #11).
-- Ten roles hire with the smallest skill set that finishes the job, 7-9 picks each (77 total,
+- Ten roles create with the smallest skill set that finishes the job, 7-9 picks each (77 total,
   down from 129): optional skills installed through core's own `hermes -p <profile> skills install`
   plus bundled-tree skills copied in after the install pool. Every identifier exists in the Hermes
   tree and the bundled names are written on the receipt; a test fails on any invented name or a role

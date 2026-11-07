@@ -3,8 +3,8 @@
   /concierge <sentence>          install a plugin or skill into this profile
   /concierge <sentence> into <bot>
                                  install it into that bot instead
-  /concierge hire <sentence>     make a new bot
-  /concierge train <bot>: <what> teach a bot one standing habit
+  /concierge create <sentence>     make a new bot
+  /concierge improve <bot>: <what> teach a bot one standing habit
   /concierge bots                list the bots Concierge made
   /concierge fire <n>            delete bot number n
   /concierge reset <n>           take back what Concierge changed in bot n
@@ -56,8 +56,8 @@ HELP = (
     "  Example: /concierge install stripe payments into intern\n"
     "  Example: /concierge create a researcher for papers\n"
     "  Example: /concierge improve researcher-bot: it needs to read scanned PDFs\n"
-    "  Example: /concierge hire keeps my inbox at zero\n"
-    "  Name it: /concierge hire inbox-zero: keeps my inbox at zero\n"
+    "  Example: /concierge create keeps my inbox at zero\n"
+    "  Name it: /concierge create inbox-zero: keeps my inbox at zero\n"
 )
 
 USAGE = HELP
@@ -156,12 +156,12 @@ def handle_concierge(
         except lifecycle.Refused as exc:
             return "  {}\n".format(exc)
 
-    if head in ("create", "hire"):
+    if head == "create":
         card.forget(session_key)
         _forget("", session_key)
         return handle_hire(rest, store=store, hire=hire, known=known)
 
-    if head in ("improve", "train"):
+    if head == "improve":
         card.forget(session_key)
         _forget("", session_key)
         return handle_improve(rest, store=store, known=known)
@@ -239,13 +239,13 @@ def handle_hire(
 
     text = _clean(raw)
     if not text:
-        return "Usage: /concierge hire <sentence>   e.g. /concierge hire keeps my inbox at zero\n"
+        return "Usage: /concierge create <sentence>   e.g. /concierge create keeps my inbox at zero\n"
 
     plan = bots.spec(text)
     if plan.name == lifecycle.DEFAULT:
         return (
             "  {} is the profile you are talking to, not a bot. Name this one:\n"
-            "  /concierge hire {}-2: {}\n".format(plan.name, plan.name, text)
+            "  /concierge create {}-2: {}\n".format(plan.name, plan.name, text)
         )
 
     taken = list(known) if known is not None else bots.names()
@@ -253,7 +253,7 @@ def handle_hire(
         return (
             "  {} already exists.\n\n"
             "  Name it yourself and try again, for example:\n"
-            "  /concierge hire {}-2: {}\n".format(plan.name, plan.name, text)
+            "  /concierge create {}-2: {}\n".format(plan.name, plan.name, text)
         )
 
     try:

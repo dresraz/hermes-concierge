@@ -4,7 +4,7 @@ A role is the short sentence a person already says, plus the skills and the soul
 that make the resulting bot able to do the job. Ten of them, nothing else to learn.
 
 ```text
-/concierge hire a researcher for papers
+/concierge create a researcher for papers
 ```
 
 ```text
@@ -16,7 +16,7 @@ Hired researcher-bot
     profile  listed by hermes profile list
   skills   researcher 8/8 installed: parallel-cli, qmd, llm-wiki, rss-feeds, arxiv, grounded-citations, blocked-page-recovery, pdf
 
-  next     /concierge train researcher-bot: <habit>
+  next     /concierge improve researcher-bot: <habit>
   undo     /concierge undo
 ```
 

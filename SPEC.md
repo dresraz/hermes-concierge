@@ -2,7 +2,7 @@
 
 > Archived build brief. This file is what was handed to the first round of coding
 > agents, kept for provenance. It is not a description of the finished plugin: the
-> surface is now four commands (`/concierge`, `/hire`, `/train`, `/concierge undo`),
+> surface is now four commands (`/concierge`, `/concierge create`, `/concierge improve`, `/concierge undo`),
 > `cost.py` was never built, and everything below describes the first draft only.
 > The current truth is `README.md`.
 

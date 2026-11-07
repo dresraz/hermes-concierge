@@ -55,7 +55,7 @@ return nothing at all.
 
 ## One command
 
-Everything is a word after `/concierge`. There is no `/hire` and no `/train` to remember.
+Everything is a word after `/concierge`. There is no `/concierge create` and no `/concierge improve` to remember.
 
 ```
   CONCIERGE
@@ -64,8 +64,8 @@ Everything is a word after `/concierge`. There is no `/hire` and no `/train` to 
   /concierge <sentence>          install a plugin or skill, this profile
   /concierge <sentence> into <bot>
                                  install it into that bot instead
-  /concierge hire <sentence>     make a new bot
-  /concierge train <bot>: <what> teach a bot one standing habit
+  /concierge create <sentence>     make a new bot
+  /concierge improve <bot>: <what> teach a bot one standing habit
   /concierge bots                list the bots Concierge made
   /concierge fire <n>            delete bot number n
   /concierge reset <n>           take back what Concierge changed in bot n
@@ -87,8 +87,8 @@ It copies your plugin switches too, so the bot starts from your setup and not th
 A researcher arrives on its first sentence able to read papers, cite sources, save notes and get
 past a blocked page, without you knowing those four skills exist.
 
-Then it stays cheap to change. `train` adds one habit in one sentence, written as a normal skill,
-so nothing gets rebuilt. Trying a bot costs a sentence and an undo, so people experiment instead
+Then it stays cheap to change. `improve` adds what a bot is missing in one sentence: a skill from
+the marketplace, or one rule in its soul. Nothing gets rebuilt. Trying a bot costs a sentence and an undo, so people experiment instead
 of deliberating. Opinionated starting sets, one-sentence changes, a receipt that tells the truth:
 that is the speed argument.
 
@@ -136,10 +136,10 @@ One caution: Concierge does not recommend **memory plugins**. They hook the agen
 they can depend on your setup, a hosted service or a paid plan, and a bad one changes every
 conversation you have. Install those by hand, one at a time, after reading what they need.
 
-## Hire: a sentence becomes a bot
+## Create: a sentence becomes a bot
 
 ```
-/concierge hire bp-test-zero: keeps my inbox at zero and drafts replies
+/concierge create bp-test-zero: keeps my inbox at zero and drafts replies
 ```
 
 ```
@@ -151,16 +151,16 @@ Hired bp-test-zero
     profile  listed by hermes profile list
   plugins  your setup, 46 switches, 5 not available here
 
-  next     /concierge train bp-test-zero: <habit>
+  next     /concierge improve bp-test-zero: <habit>
   undo     /concierge undo
 ```
 
-The word before the colon is the name. Without a colon the name is the last meaningful word, so `/concierge hire keeps my inbox at zero` hires `inbox-bot`.
+The word before the colon is the name. Without a colon the name is the last meaningful word, so `/concierge create keeps my inbox at zero` creates `inbox-bot`.
 
 Ten roles also bring their skills, so the bot arrives able to work:
 
 ```text
-/concierge hire a researcher for papers
+/concierge create a researcher for papers
 
 Hired researcher-bot
 
@@ -171,7 +171,7 @@ Hired researcher-bot
   plugins  your setup, 46 switches, 5 not available here
   skills   researcher 8/8 installed: parallel-cli, qmd, llm-wiki, rss-feeds, arxiv, grounded-citations, blocked-page-recovery, pdf
 
-  next     /concierge train researcher-bot: <habit>
+  next     /concierge improve researcher-bot: <habit>
   undo     /concierge undo
 ```
 
@@ -206,19 +206,18 @@ When you have no switches of your own it says `plugins  stock defaults` and writ
 
 **A role can carry skills, not plugins.** A skill is a folder copied into the bot's own `skills/`, so a role brings it. A plugin install writes into a home, and the bot is a different home, so when a job wants one the card names it and you install it in your own profile.
 
-Training is a sentence too:
+Improving is a sentence too:
 
 ```
-/concierge train bp-test-zero: always answer in one line
+/concierge improve bp-test-zero: always answer in one line
 ```
 
 ```
-Trained bp-test-zero
+Improved bp-test-zero
 
-    skill    /home/andres/.hermes/profiles/bp-test-zero/skills/always-answer-in-one-line/SKILL.md
-    front    name and description parse
-    listed   always-answer-in-one-line is in bp-test-zero's skills
-    next     start a session as bp-test-zero and it is in the prompt index
+    rule     always answer in one line
+
+    undo     /concierge undo
 
   undo     /concierge undo
 ```
@@ -261,7 +260,7 @@ A bot that has never been used fires on one word. A bot with sessions, memory or
     To do it anyway: /concierge fire 2 inbox-bot
 ```
 
-`undo` never deletes a used bot. On a stock hire it kills it. On a bot that has been lived in it
+`undo` never deletes a used bot. On a bot nothing has happened in, it kills it. On a bot that has been lived in it
 says `kept: ... has history ...` and points at `fire`.
 
 **`default` is never deleted.** `fire default` is refused and points at `reset default`, which
@@ -286,7 +285,7 @@ plugin or a bot that does not exist.
   the same card, yes, receipt and undo. `split_target` reads `into <bot>` off the sentence.
 - `lifecycle.py` lists, fires and resets. It is the only place that decides what may be deleted.
 - `bots.py` turns a sentence into a profile name, a title, a duty list and a `SOUL.md`.
-- `training.py` turns a sentence into one `SKILL.md` in that bot's skills directory.
+- `improve.py` turns a sentence into one skill from the marketplace, or one rule in the bot's soul.
 - `presets.py` holds the ten roles: cue detection, the seven-to-nine skills each one lands, and the
   install-verify loop that believes the disk over the exit code.
 - `plugins_inherit.py` copies your `plugins:` switches into a new bot and drops the names that only
@@ -332,8 +331,8 @@ number there would be a guess.
 
 ## Limits
 
-- The sentence search installs plugins and skills. It does not make bots: `hire` does that, and
-  `train` writes one habit into a bot you already have.
+- The sentence search installs plugins and skills. It does not make bots: `create` does that, and
+  `improve` adds a skill or a rule to a bot you already have, including bots Concierge did not make.
 - `hermes plugins validate` passes with one warning: Concierge imports core modules that are not
   public API, because Hermes has no public seam yet for "install this catalog entry" or "create a
   profile". They are the same calls the CLI makes. If one moves in a core release, Concierge breaks,
