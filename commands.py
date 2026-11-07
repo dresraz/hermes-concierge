@@ -102,6 +102,12 @@ def _wants_a_bot(text: str) -> bool:
     return any(low.startswith(verb) for verb in MAKE_VERBS)
 
 
+def _improve_shape(text: str) -> bool:
+    """"<bot>: <what>" is an improve, whatever word came before it."""
+    head, sep, rest = (text or "").partition(":")
+    return bool(sep and rest.strip() and re.fullmatch(r"[a-z0-9][a-z0-9 ._-]*", head.strip().lower()))
+
+
 def handle_concierge(
     raw: Any,
     *,
@@ -186,6 +192,17 @@ def handle_concierge(
 
     if market_mod.is_waiting(session_key):
         return market_mod.handle(text, session_key=session_key, store=store)
+    # Old words are gone, but a stale habit should get a pointer, not a mystery.
+    first, _, after = text.partition(" ")
+    if first.lower() == "hire":
+        return "  hire is gone. Same thing: /concierge create {}\n".format(after.strip() or "<sentence>")
+    if first.lower() == "train":
+        return "  train is gone. Same thing: /concierge improve {}\n".format(after.strip() or "<bot>: <what>")
+
+    if _improve_shape(text):
+        card.forget(session_key)
+        _forget("", session_key)
+        return handle_improve(text, store=store, known=known)
     if _wants_a_bot(text):
         card.forget(session_key)
         _forget("", session_key)
@@ -303,7 +320,7 @@ def handle_hire(
         + extra_lines
         + [
             "",
-            "  next     /concierge train {}: <habit>".format(plan.name),
+            "  next     /concierge improve {}: <habit>".format(plan.name),
             undo_line,
             "",
         ]
@@ -394,59 +411,6 @@ def _bot_names() -> list:
     if root is not None and (root / "profiles").is_dir():
         names = sorted(p.name for p in (root / "profiles").iterdir() if p.is_dir() and not p.name.startswith("."))
     return ["default"] + names
-
-
-def handle_train(
-    raw: Any,
-    *,
-    store: Any = None,
-    train: Optional[Callable[..., Any]] = None,
-    known: Optional[Sequence[str]] = None,
-) -> str:
-    """One sentence in, one skill written into an existing bot. No confirmation."""
-    from . import state, training
-
-    text = _clean(raw)
-    if not text:
-        return training.DEFAULT_HINT + "\n"
-
-    bot, instruction = training.guess_bot(text)
-    if not instruction:
-        return training.DEFAULT_HINT + "\n"
-
-    taken = list(known) if known is not None else training.bots()
-    if bot not in taken:
-        options = ", ".join(taken[:8]) or "none yet"
-        return "  No bot called {}.\n  Bots you have: {}\n  Make one with /concierge hire <sentence>.\n".format(
-            bot, options
-        )
-
-    try:
-        result = (train or training.train)(bot, instruction)
-    except training.UnknownBot as exc:
-        return "  No bot called {}. Nothing was written.\n".format(exc.name)
-    except Exception as exc:
-        return "Not trained: {}: {}\n".format(type(exc).__name__, exc)
-
-    lines, ok = training.receipt(result)
-    saved = _remember(
-        state.Installed(
-            name=result.slug,
-            kind="skill",
-            title=instruction[:120],
-            profile=result.bot,
-            skills=[str(result.path.parent)],
-            enabled=True,
-        ),
-        store,
-    )
-    head = "Trained {}".format(result.bot) if ok else "Trained {}, but check this".format(result.bot)
-    undo_line = "  undo     /concierge undo" if saved else "  no undo  the record could not be saved"
-    return "\n".join(
-        [head, ""]
-        + ["  " + line for line in lines]
-        + ["", undo_line, ""]
-    )
 
 
 def handle_undo(*, store: Any = None, undo: Optional[Callable[..., Any]] = None, seams: Any = None) -> str:
@@ -634,8 +598,8 @@ def register(ctx: Any) -> None:
     ctx.register_command(
         "concierge",
         handler=handle_concierge,
-        description="Bots, plugins and skills in one sentence: install, hire, train, list, fire, reset, undo.",
-        args_hint="<sentence> | hire | train | bots | fire | reset | undo | help",
+        description="Bots, plugins and skills in one sentence: install, create, improve, list, fire, reset, undo.",
+        args_hint="<sentence> | create | improve | bots | fire | reset | undo | help",
     )
     # On a messaging surface the catalog card's "yes" is a bare word. The CLI has no such seam, so
     # there the card says /concierge yes and this hook simply never fires.
@@ -650,7 +614,6 @@ __all__ = [
     "UNDO_WORDS",
     "handle_concierge",
     "handle_hire",
-    "handle_train",
     "handle_undo",
     "register",
 ]

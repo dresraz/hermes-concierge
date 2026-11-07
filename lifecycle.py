@@ -96,7 +96,7 @@ def card(store: Any = None) -> str:
     if not items:
         lines.append("  No bots yet.")
         lines.append("")
-        lines.append("  Make one: /concierge hire keeps my inbox at zero")
+        lines.append("  Make one: /concierge create keeps my inbox at zero")
     else:
         lines.append("  BOTS  {}".format(len(items)))
         lines.append("")

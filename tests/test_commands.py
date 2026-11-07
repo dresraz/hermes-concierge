@@ -74,7 +74,7 @@ class Help(unittest.TestCase):
     def test_bare_command_is_the_menu(self):
         text = commands.handle_concierge("")
         self.assertIn("CONCIERGE", text)
-        for verb in ("hire", "train", "bots", "fire", "reset", "undo", "help"):
+        for verb in ("create", "improve", "bots", "fire", "reset", "undo", "help"):
             self.assertIn(verb, text)
 
     def test_help_word_is_the_same_text(self):
@@ -94,7 +94,7 @@ class Hire(unittest.TestCase):
         home = pathlib.Path(tempfile.mkdtemp())
         (home / "SOUL.md").write_text("I chase invoices.\n", encoding="utf-8")
         text = commands.handle_concierge(
-            "hire chases late invoices",
+            "create chases late invoices",
             store=self.made,
             known=[],
             hire=lambda sentence: (harness.load("bots").spec(sentence), home),
@@ -108,7 +108,7 @@ class Hire(unittest.TestCase):
         home = pathlib.Path(tempfile.mkdtemp())
         (home / "SOUL.md").write_text("x\n", encoding="utf-8")
         text = commands.handle_concierge(
-            "hire chases late invoices",
+            "create chases late invoices",
             store=state.Store(backend=Broken()),
             known=[],
             hire=lambda sentence: (harness.load("bots").spec(sentence), home),
@@ -126,16 +126,16 @@ class Hire(unittest.TestCase):
             seen["sentence"] = sentence
             return harness.load("bots").spec(sentence), home
 
-        commands.handle_concierge("hire keeps my inbox at zero", store=self.made, known=[], hire=hire)
+        commands.handle_concierge("create keeps my inbox at zero", store=self.made, known=[], hire=hire)
         self.assertEqual(seen["sentence"], "keeps my inbox at zero")
 
     def test_a_taken_name_stops_and_offers_a_name(self):
-        text = commands.handle_concierge("hire keeps my inbox at zero", store=self.made, known=["inbox-bot"])
+        text = commands.handle_concierge("create keeps my inbox at zero", store=self.made, known=["inbox-bot"])
         self.assertIn("inbox-bot already exists", text)
-        self.assertIn("/concierge hire inbox-bot-2:", text)
+        self.assertIn("/concierge create inbox-bot-2:", text)
 
     def test_default_is_never_a_bot_name(self):
-        text = commands.handle_concierge("hire default: keep my inbox at zero", store=self.made, known=[])
+        text = commands.handle_concierge("create default: keep my inbox at zero", store=self.made, known=[])
         self.assertIn("not a bot", text)
         self.assertEqual(self.made.all(), [])
 
@@ -186,6 +186,20 @@ class Improve(unittest.TestCase):
             "improve inbox-bot: quantum flux capacitor", store=store()
         )
         self.assertIn("Nothing in the marketplace fits that", text)
+
+
+class OldWords(unittest.TestCase):
+    """hire and train are gone, and a stale habit gets a pointer, not a bot."""
+
+    def test_hire_points_at_create(self):
+        text = commands.handle_concierge("hire a researcher for papers", store=store())
+        self.assertIn("hire is gone", text)
+        self.assertIn("/concierge create", text)
+
+    def test_train_points_at_improve(self):
+        text = commands.handle_concierge("train inbox-bot: always cite", store=store())
+        self.assertIn("train is gone", text)
+        self.assertIn("/concierge improve", text)
 
 
 class Bots(unittest.TestCase):

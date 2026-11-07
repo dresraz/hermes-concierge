@@ -172,7 +172,7 @@ def _plural(count: int) -> str:
     return f"{count} bot" + ("" if count == 1 else "s")
 
 
-DEFAULT_HINT = "usage: /concierge train <bot>: <what it should always do>"
+DEFAULT_HINT = "usage: /concierge improve <bot>: <what it should always do>"
 
 
 def guess_bot(text: str) -> tuple[str, str]:
