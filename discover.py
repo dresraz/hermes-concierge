@@ -12,7 +12,9 @@ says yes with the same command that installs anything else.
 
 from __future__ import annotations
 
+import os
 import re
+import sys
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
@@ -23,10 +25,11 @@ MAX_FILES = 25
 
 # A skill that needs one of these is not a "nice extra": it is a dependency the
 # operator has to agree to on its own card.
+# Only tells that mean a service actually runs: a mention of an API key or
+# OAuth inside a skill is guidance, not weight.
 HEAVY_MARKERS = (
-    "systemd", "docker run", "compose up", "kubernetes", "tailscale",
-    "playwright", "selenium", "comfyui server", "supervisord",
-    "oauth", "api key", "api_key", "credentials.json", "--daemon",
+    "systemd", "docker run", "supervisord", "kubernetes", "tailscale",
+    "playwright", "selenium", "jupyter lab", "comfyui server", "--daemon",
 )
 
 WORD = re.compile(r"[a-z0-9]{3,}")
@@ -41,19 +44,54 @@ STOP = frozenset(
 )
 
 
+def _fold(word: str) -> str:
+    """One plural rule for both sides: pdfs and pdf are the same word."""
+    if len(word) > 3 and word.endswith("es") and not word.endswith("ses"):
+        return word[:-2]
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
 def _words(text: str) -> set[str]:
-    return {w for w in WORD.findall((text or "").lower()) if w not in STOP}
+    return {_fold(w) for w in WORD.findall((text or "").lower()) if w not in STOP}
 
 
 def _roots() -> list[Path]:
-    """The two trees Hermes ships: optional first, then the bundled one."""
+    """The two trees Hermes ships: optional first, then the bundled one.
+
+    Every candidate is checked for a SKILL.md before it is trusted: an editable
+    install reports a finder path as the package directory, and a bot's own
+    HERMES_HOME has no checkout under it, so a path that merely exists is not
+    proof that a marketplace is there.
+    """
+    candidates: list[Path] = []
     try:
         from . import seams
 
-        bundled = seams._bundled_root()
+        bundled = Path(str(seams._bundled_root()))
+        candidates += [bundled.parent / "optional-skills", bundled]
     except Exception:
-        bundled = Path.home() / ".hermes" / "hermes-agent" / "skills"
-    return [bundled.parent / "optional-skills", bundled]
+        pass
+    try:
+        from hermes_constants import get_hermes_home
+
+        home = Path(str(get_hermes_home()))
+    except Exception:
+        home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+    for base in (home, Path.home() / ".hermes"):
+        candidates += [base / "hermes-agent" / "skills", base / "hermes-agent" / "optional-skills"]
+    for entry in sys.path:
+        if entry:
+            candidates.append(Path(entry) / "skills")
+
+    seen: list[Path] = []
+    for path in candidates:
+        if path in seen:
+            continue
+        if any(path.glob("**/SKILL.md")) if path.is_dir() else False:
+            seen.append(path)
+    return seen
 
 
 def _skill_file(folder: Path) -> Optional[Path]:
@@ -103,6 +141,7 @@ def catalogue(roots: Optional[Sequence[Path]] = None) -> list[dict]:
     for root in roots or _roots():
         if not root.is_dir():
             continue
+        source = "optional" if root.name == "optional-skills" else "bundled"
         for skill_file in root.glob("**/SKILL.md"):
             folder = skill_file.parent
             name = folder.name
@@ -122,6 +161,7 @@ def catalogue(roots: Optional[Sequence[Path]] = None) -> list[dict]:
             seen.add(name)
             out.append({
                 "name": name,
+                "source": source,
                 "category": folder.parent.name,
                 "path": folder,
                 "description": desc or front_name,

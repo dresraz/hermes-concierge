@@ -140,50 +140,52 @@ class Hire(unittest.TestCase):
         self.assertEqual(self.made.all(), [])
 
 
-class Train(unittest.TestCase):
+class Improve(unittest.TestCase):
+    """improve works on any bot: a rule lands in SOUL, a skill in the tree."""
+
     def setUp(self):
-        self.home = pathlib.Path(tempfile.mkdtemp())
-        skill = self.home / "skills" / "always-label-receipts"
-        skill.mkdir(parents=True)
-        (skill / "SKILL.md").write_text(
-            "---\nname: always-label-receipts\ndescription: Label receipts before filing.\n---\nLabel them.\n",
-            encoding="utf-8",
-        )
-        self.result = type(
-            "Trained",
-            (),
-            {"bot": "inbox-bot", "slug": "always-label-receipts", "path": skill / "SKILL.md", "dir": skill},
-        )()
+        import os
+        from unittest import mock
 
-    def test_one_sentence_trains_with_no_question(self):
-        made = store(bot("inbox-bot"))
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.bot = self.tmp / "profiles" / "inbox-bot"
+        self.bot.mkdir(parents=True)
+        (self.bot / "config.yaml").write_text("model: {}\n", encoding="utf-8")
+        patcher = mock.patch.dict(os.environ, {"HERMES_HOME": str(self.tmp)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_rule_lands_in_soul_with_one_undo_line(self):
+        made = store()
         text = commands.handle_concierge(
-            "train inbox-bot: always label receipts",
-            store=made,
-            known=["inbox-bot"],
-            train=lambda name, instruction: self.result,
+            "improve inbox-bot: always label receipts", store=made
         )
-        self.assertIn("Trained inbox-bot", text)
+        self.assertIn("Improved inbox-bot", text)
+        self.assertIn("always label receipts", text)
         self.assertIn("/concierge undo", text)
-        self.assertEqual(made.find("always-label-receipts").kind, "skill")
-        self.assertEqual(made.find("always-label-receipts").profile, "inbox-bot")
-
-    def test_train_does_not_promise_undo_when_the_record_cannot_be_saved(self):
-        text = commands.handle_concierge(
-            "train inbox-bot: always label receipts",
-            store=state.Store(backend=Broken()),
-            known=["inbox-bot"],
-            train=lambda name, instruction: self.result,
-        )
-        self.assertIn("Trained inbox-bot", text)
-        self.assertNotIn("/concierge undo", text)
-        self.assertIn("no undo", text)
+        soul = (self.bot / "SOUL.md").read_text(encoding="utf-8")
+        self.assertIn("- always label receipts", soul)
+        self.assertIn("Learned rules", soul)
 
     def test_an_unknown_bot_lists_the_real_ones(self):
-        made = store(bot("inbox-bot"))
-        text = commands.handle_concierge("train invoices-bot: chase faster", store=made, known=["inbox-bot"])
+        text = commands.handle_concierge(
+            "improve invoices-bot: chase faster", store=store()
+        )
         self.assertIn("No bot called invoices-bot", text)
         self.assertIn("inbox-bot", text)
+
+    def test_a_hand_made_bot_can_be_improved(self):
+        text = commands.handle_concierge(
+            "improve inbox-bot: never send without asking", store=store()
+        )
+        self.assertIn("Improved inbox-bot", text)
+        self.assertTrue((self.bot / "SOUL.md").is_file())
+
+    def test_nothing_in_the_marketplace_says_so(self):
+        text = commands.handle_concierge(
+            "improve inbox-bot: quantum flux capacitor", store=store()
+        )
+        self.assertIn("Nothing in the marketplace fits that", text)
 
 
 class Bots(unittest.TestCase):

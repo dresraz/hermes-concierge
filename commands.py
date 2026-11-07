@@ -35,8 +35,8 @@ HELP = (
     "  Bots, plugins and skills, one sentence at a time.\n"
     "\n"
     "  /concierge <sentence>          install a plugin or skill, this profile\n"
-    "  /concierge hire <sentence>     make a new bot\n"
-    "  /concierge train <bot>: <what> teach a bot one standing habit\n"
+    "  /concierge create <sentence>   make a new bot\n"
+    "  /concierge improve <bot>: <what>  add what that bot is missing\n"
     "  /concierge bots                list the bots Concierge made\n"
     "  /concierge fire <n>            delete bot number n\n"
     "  /concierge reset <n>           take back what Concierge changed in bot n\n"
@@ -48,11 +48,14 @@ HELP = (
     "  On a card: yes installs it, no drops it, more describes the runner-up.\n"
     "  Bots and training act straight away and show a receipt.\n"
     "\n"
-    "  Roles hire with their skills: researcher, writer, coder, assistant,\n"
+    "  improve works on any bot on this machine, not only ones Concierge made.\n"
+    "\n"
+    "  Roles create with their skills: researcher, writer, coder, assistant,\n"
     "  marketer, watcher, designer, analyst, tutor, planner.\n"
     "\n"
     "  Example: /concierge install stripe payments into intern\n"
-    "  Example: /concierge hire a researcher for papers\n"
+    "  Example: /concierge create a researcher for papers\n"
+    "  Example: /concierge improve researcher-bot: it needs to read scanned PDFs\n"
     "  Example: /concierge hire keeps my inbox at zero\n"
     "  Name it: /concierge hire inbox-zero: keeps my inbox at zero\n"
 )
@@ -153,15 +156,15 @@ def handle_concierge(
         except lifecycle.Refused as exc:
             return "  {}\n".format(exc)
 
-    if head == "hire":
+    if head in ("create", "hire"):
         card.forget(session_key)
         _forget("", session_key)
         return handle_hire(rest, store=store, hire=hire, known=known)
 
-    if head == "train":
+    if head in ("improve", "train"):
         card.forget(session_key)
         _forget("", session_key)
-        return handle_train(rest, store=store, train=train, known=known)
+        return handle_improve(rest, store=store, known=known)
 
     # "install <what> into <bot>" is the same sentence as a plain request, with
     # the destination said out loud. Both shelves are searched: plugins first,
@@ -347,6 +350,50 @@ def _suggest_extras(text: str, profile_path: Any) -> list[str]:
         text, role.name, blurb=role.blurb, skip=installed, limit=2
     )
     return discover.lines(picks, Path(str(profile_path)).name)
+
+
+def handle_improve(
+    raw: Any,
+    *,
+    store: Any = None,
+    known: Optional[Sequence[str]] = None,
+) -> str:
+    """Make an existing bot better: a skill from the marketplace, or one rule.
+
+    Works on any profile, not only the ones Concierge made. The marketplace is
+    not a walled garden; delete and reset stay limited, because removing a
+    stranger's bot is destructive.
+    """
+    from . import improve, training
+
+    text = _clean(raw)
+    if not text:
+        return (
+            "Improve which bot? Say it plainly:\n"
+            "  /concierge improve researcher-bot: it needs to read scanned PDFs\n"
+        )
+    bot, sentence = training.guess_bot(text)
+    if not sentence:
+        return (
+            "  Improve {} how? Name the job: /concierge improve {}: it needs to read PDFs\n"
+            .format(bot, bot)
+        )
+    plan = improve.plan(bot, sentence)
+    if plan is None:
+        names = ", ".join(_bot_names()) or "none"
+        return "  No bot called {}. Bots here: {}\n".format(bot, names)
+    return improve.receipt(plan, improve.apply(plan, store=store))
+
+
+def _bot_names() -> list:
+    """Every profile on this machine, read off the disk."""
+    from . import improve
+
+    names = []
+    root = improve.resolve("default")
+    if root is not None and (root / "profiles").is_dir():
+        names = sorted(p.name for p in (root / "profiles").iterdir() if p.is_dir() and not p.name.startswith("."))
+    return ["default"] + names
 
 
 def handle_train(
