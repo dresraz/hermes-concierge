@@ -3,8 +3,9 @@ title: Concierge
 repo: https://github.com/dresraz/hermes-concierge
 sha: 2f81fb29639bbad543c5d10469ef6f20df95d44e
 description: >-
-  One sentence in: make a bot, improve a bot, or install a plugin or skill. /concierge create turns a
-  sentence into a working profile with a role, five to eight catalog skills and a SOUL.md. /concierge
+  A marketplace concierge: one sentence upgrades your default profile or any bot you already have, or
+  adds a new one, and installs a plugin or skill the same way. /concierge create turns a sentence into
+  a working profile with a role, five to eight catalog skills and a SOUL.md, plus your own model login. /concierge
   improve adds what a bot is missing, a skill from the marketplace or one rule written into that bot's
   soul, and it works on any bot on the machine, not only ones Concierge made. A bare /concierge opens a
   numbered shelf of bots, skills and the plugin catalog; the number acts on the row. Installs go through

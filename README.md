@@ -7,8 +7,9 @@
 
 **The front door to the Hermes marketplace.**
 
-One sentence creates a bot, improves one, or installs a plugin or a skill. No catalog to learn, no
-manifest to read, no restart. One card, one yes, a receipt read off the disk, and one undo.
+A marketplace concierge. One sentence upgrades your default profile or any bot you already have, or
+adds a new one. No catalog to learn, no manifest to read, no restart. One card, one yes, a receipt
+read off the disk, and one undo.
 
 ![The shelf, then an improve, in the terminal](docs/demo.png)
 
