@@ -5,16 +5,24 @@ Date: 2026-11-06
 
 ## Release
 
-- `plugin.yaml` version `0.2.2`, commit `b7447523f8a9acca862166c11278e8c074e321b1`.
-- `docs/catalog-entry.yaml` pins the release sha and `version: "0.2.2"`; the entry passes Hermes core's own
+- `plugin.yaml` version `0.2.3`, commit `b7447523f8a9acca862166c11278e8c074e321b1`.
+- `docs/catalog-entry.yaml` pins the release sha and `version: "0.2.3"`; the entry passes Hermes core's own
   `scripts/validate_plugin_catalog.py` (exit 0).
-- 170 tests, 0 model calls, 0 network calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
-- Live catalog at match time: 1,063 entries.
+- 189 tests, 0 model calls, 0 network calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
+- Live catalog at match time: 1,064 entries. Matcher: 32/32 top-3, 25/32 first, 8/8 nonsense refused.
 - The sentence search installs from both shelves: the plugin catalog and the skill registries, into
   this profile or into `into <bot>`. Proven live for plugin -> bot, skill -> bot, skill -> this
   profile, each with a card, a receipt and a working undo (`docs/NOTES.md` #22).
 
 ## Done
+
+- One front door: a bare sentence routes itself to create, improve or install from the bots that
+  exist. `create` makes a bot, `improve` adds a skill or a rule to any bot on the machine, and a
+  bare `/concierge` opens a numbered shelf of bots, skills and plugins.
+- Bots are lean: five to eight skills, 169 KB average, no daemon, no MCP server, no memory
+  provider, no GPU server in any default.
+- Undo is true: records keyed by name and kind, rules restore the exact bytes they replaced,
+  skill deletes confined to a profile.
 
 - Plugin loads and validates (`hermes plugins validate`: pass; one advisory about private core
   imports, explained in `docs/NOTES.md` #7).

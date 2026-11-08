@@ -61,19 +61,41 @@ Everything is a word after `/concierge`: `create`, `improve`, `browse`, `bots`, 
   CONCIERGE
   Bots, plugins and skills, one sentence at a time.
 
+  /concierge                     the shelf: what can be added
+  /concierge browse <word>       look through the shelf
   /concierge <sentence>          install a plugin or skill, this profile
-  /concierge <sentence> into <bot>
-                                 install it into that bot instead
-  /concierge create <sentence>     make a new bot
-  /concierge improve <bot>: <what> teach a bot one standing habit
+  /concierge create <sentence>   make a new bot
+  /concierge improve <bot>: <what>  add what that bot is missing
   /concierge bots                list the bots Concierge made
   /concierge fire <n>            delete bot number n
   /concierge reset <n>           take back what Concierge changed in bot n
   /concierge undo                take back the last thing Concierge did
   /concierge help                this list
+
+  Add "into <bot>" to install into a bot instead of this profile.
+  improve works on any bot on this machine, not only ones Concierge made.
 ```
 
 `/concierge` with nothing after it opens the shelf. `/concierge help` prints the command list.
+
+## Look first, if you do not know what to ask for
+
+A sentence is fast when you know the word. When you do not, the shelf is a window on everything
+that exists, read at the moment you look:
+
+```
+  /concierge browse notes
+  LOOKING FOR  notes
+
+  1  bot     assistant       6 skills  own inbox, calendar, files and notes
+  2  bot     tutor           5 skills  cards, diagrams, explainers, search over your own notes
+  3  skill   obsidian        3 KB      Read, search, create and edit notes in the Obsidian vault
+  4  plugin  sticky-notes              Floating notes on your desktop
+```
+
+A number acts on that row: a skill installs here, a plugin opens its card, a bot gets made. The
+list is generated per request and never stored, so what you install leaves the ready side, and a
+listing expires after ten minutes rather than acting on yesterday's numbers.
 
 ## The point: a working bot in one sentence, better every week
 
@@ -187,6 +209,33 @@ sentence. The full table is `docs/PRESETS.md`.
 
 The bot is created through core's own `create_profile`, so it shows up in `hermes profile list` like any other profile, with its own memory, skills and cron.
 
+## Improve: the other half
+
+`create` makes a bot. `improve` makes one better, and it works on any bot on the machine, not
+just the ones Concierge made:
+
+```
+  /concierge improve researcher-bot: it needs to read scanned PDFs
+  Improved researcher-bot
+
+    skill    pdf
+
+    undo     /concierge undo
+```
+
+A capability installs a real skill from what the marketplace already holds. A rule goes into the
+bot's soul, where every turn reads it:
+
+```
+  /concierge improve my researcher: always show the source first
+  Improved researcher-bot
+
+    rule     always show the source first
+```
+
+Rules are deduped, capped, written atomically and backed up one per rule, so undo restores the
+exact bytes the rule replaced instead of guessing. Three things per improve at most.
+
 ## What the bot is made of
 
 | part | comes from |
@@ -286,7 +335,14 @@ plugin or a bot that does not exist.
 - `lifecycle.py` lists, fires and resets. It is the only place that decides what may be deleted.
 - `bots.py` turns a sentence into a profile name, a title, a duty list and a `SOUL.md`.
 - `improve.py` turns a sentence into one skill from the marketplace, or one rule in the bot's soul.
-- `presets.py` holds the ten roles: cue detection, the seven-to-nine skills each one lands, and the
+- `shelf.py` is the window: the bots, the skills on disk and the catalog, numbered, expiring,
+  and acted on by number.
+- `discover.py` indexes the two skill trees Hermes ships, weighs each candidate (size, files,
+  helper scripts, service tells) and refuses to call anything a free extra when it pipes a
+  download into a shell.
+- `commands.py` also routes: a bare sentence decides create, improve or install from the bots that
+  exist, so a role you already have is improved rather than duplicated.
+- `presets.py` holds the ten roles: cue detection, the five-to-eight skills each one lands, and the
   install-verify loop that believes the disk over the exit code.
 - `plugins_inherit.py` copies your `plugins:` switches into a new bot and drops the names that only
   exist in your own home.
@@ -301,11 +357,11 @@ plugin or a bot that does not exist.
 
 | | result |
 |---|---|
-| correct entry in the top 3 | **31/32** |
-| correct entry ranked first | 24/32 |
+| correct entry in the top 3 | **32/32** |
+| correct entry ranked first | 25/32 |
 | nonsense installs nothing | 8/8 |
 
-No LLM call is involved, so those numbers are the same on every run. They are also my own set, written while tuning the matcher, so read them as an upper bound. On a second set I did not tune on, 16 everyday asks: it refused 9, and of the 7 it carded, 2 were defensible (a weather plugin for a weather question, a light plugin for a light question) and 5 were near misses. On 8 asks that do have a fitting plugin, it carded all 8 but named the best one first only 3 times. The card says what it would add before anything happens, so a near miss costs one no.
+No LLM call is involved, so those numbers are the same on every run. They are also my own set, written while tuning the matcher, so read them as an upper bound. On a second, smaller set I did not tune on (12 everyday asks): 7 put the fitting entry first and 9 put it in the top three. The vocabulary pass and the keyword-dump penalty moved that from 2 and 5. The card says what it would add before anything happens, so a near miss costs one no.
 
 ## Cost
 
@@ -331,8 +387,11 @@ number there would be a guess.
 
 ## Limits
 
-- The sentence search installs plugins and skills. It does not make bots: `create` does that, and
-  `improve` adds a skill or a rule to a bot you already have, including bots Concierge did not make.
+- The matcher is lexical, not semantic. A paraphrase that shares no word with a description can
+  still land on a near miss; the card is the guard, and a no costs nothing.
+- The guardrails are defaults, not enforcement. A bot profile has a terminal, so a bot can install
+  for itself no matter what Concierge allows. Undo reverses what Concierge wrote; it does not
+  contain a program that already ran.
 - `hermes plugins validate` passes with one warning: Concierge imports core modules that are not
   public API, because Hermes has no public seam yet for "install this catalog entry" or "create a
   profile". They are the same calls the CLI makes. If one moves in a core release, Concierge breaks,
@@ -348,7 +407,7 @@ python tests/eval_match.py
 hermes plugins validate . --install-deps
 ```
 
-Tests are `unittest`, stdlib only, deterministic, and make no LLM calls. They never touch a real profile, a real SOUL file, or a real plugins directory: every seam is injected.
+189 tests, `unittest`, stdlib only, deterministic, no LLM calls. They never touch a real profile, a real SOUL file, or a real plugins directory: every seam is injected.
 
 ## License
 
