@@ -86,44 +86,52 @@ def top_level_calls(tree):
 
 
 class SoulText(unittest.TestCase):
-    def test_first_line_states_the_role(self):
-        text = effects.soul_text("Concierge", ["install skills"], ["never spend money"])
-        self.assertTrue(text.startswith("You are Concierge."), text.splitlines()[0])
-        self.assertIn("Concierge", text.splitlines()[0])
+    """The fallback soul: a job sentence, second person, no names, no markup."""
+
+    BOUNDS = ["ask before sending anything to a real person", "never spend money without asking"]
+
+    def test_a_job_sentence_becomes_you_help(self):
+        text = effects.soul_text("Advertises and sells my house in Lima", self.BOUNDS)
+        self.assertEqual(text.splitlines()[0], "You help advertise and sell my house in Lima.")
+
+    def test_a_noun_phrase_stays_a_role(self):
+        text = effects.soul_text("A tutor for biology", self.BOUNDS)
+        self.assertEqual(text.splitlines()[0], "You are a tutor for biology.")
+
+    def test_third_person_verbs_are_normalised(self):
+        cases = {
+            "Keeps my inbox at zero": "You help keep my inbox at zero.",
+            "Watches three competitors": "You help watch three competitors.",
+            "Goes through the receipts": "You help go through the receipts.",
+            "Carries the launch": "You help carry the launch.",
+        }
+        for sentence, expected in cases.items():
+            self.assertEqual(effects.soul_text(sentence, self.BOUNDS).splitlines()[0], expected)
+
+    def test_no_comment_no_duplicate_heading_no_glued_heading(self):
+        text = effects.soul_text("Sells my house in Lima", self.BOUNDS)
+        self.assertNotIn("<!--", text)
+        self.assertNotIn("added by concierge", text.lower())
+        self.assertIn("\n\nLimits\n", text)
+        self.assertNotIn("Your duties are", text)
 
     def test_is_deterministic(self):
-        args = ("Concierge", ["install skills", "arm cron"], ["never touch real data"])
+        args = ("Keeps my inbox at zero", self.BOUNDS)
         self.assertEqual(effects.soul_text(*args), effects.soul_text(*args))
 
     def test_uses_no_dashes_as_punctuation(self):
-        text = effects.soul_text(
-            "Concierge",
-            ["answer questions \u2014 always"],
-            ["never run destructive commands"],
-        )
+        text = effects.soul_text("Sells my house \u2014 in Lima", self.BOUNDS)
         for dash in ("\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2212"):
             self.assertNotIn(dash, text)
-        self.assertNotIn(" - ", text)
-
-    def test_is_plain_prose_without_markup(self):
-        text = effects.soul_text(
-            "Concierge",
-            ["install skills"],
-            ["never spend money without asking"],
-        )
-        for line in text.splitlines():
-            self.assertFalse(line.startswith(("-", "*", "#", ">")))
-        self.assertNotIn("**", text)
 
     def test_stays_under_the_character_limit(self):
-        duties = ["duty number %d is a fairly long description of work" % i for i in range(200)]
-        text = effects.soul_text("Concierge", duties, ["never spend money"])
+        text = effects.soul_text("Sells my house in Lima " + "and much more " * 200, self.BOUNDS)
         self.assertLess(len(text), 1200)
 
-    def test_short_text_stays_short(self):
-        text = effects.soul_text("Concierge", ["install skills"], ["never spend money"])
-        self.assertIn("install skills", text)
-        self.assertIn("never spend money", text)
+    def test_boundaries_land_as_limits(self):
+        text = effects.soul_text("Sells my house in Lima", self.BOUNDS)
+        self.assertIn("- Ask before sending anything to a real person.", text)
+        self.assertIn("- Never spend money without asking.", text)
 
 
 class WriteSoul(unittest.TestCase):

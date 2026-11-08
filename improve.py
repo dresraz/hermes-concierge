@@ -33,8 +33,7 @@ MAX_ITEMS = 3
 # A sentence in this shape is behaviour, not a capability.
 RULE_WORDS = ("always", "never", "every time", "each time", "from now on", "don't", "do not")
 
-RULE_HEAD = "\n## Learned rules\n\n"
-RULE_NOTE = "<!-- added by concierge; /concierge undo removes the last one -->\n"
+RULE_HEAD = "\n\n## Learned rules\n\n"
 
 
 @dataclass
@@ -176,7 +175,7 @@ def add_rule(plan_: Plan, *, home: Optional[Path] = None) -> Optional[dict]:
             backup = "{}.{}.concierge-backup".format(soul, uuid.uuid4().hex[:12])
             shutil.copy2(soul, backup)
         tmp = soul.with_name(soul.name + ".tmp")
-        tmp.write_text(text + block + RULE_NOTE + bullet, encoding="utf-8")
+        tmp.write_text(text + block + bullet, encoding="utf-8")
         os.replace(tmp, soul)
     except OSError:
         return None

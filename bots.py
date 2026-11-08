@@ -54,7 +54,7 @@ class Spec:
     boundaries: list[str] = field(default_factory=lambda: list(BOUNDARIES))
 
     def soul(self) -> str:
-        return effects.soul_text(self.title, self.duties, self.boundaries)
+        return effects.soul_text(self.title, self.boundaries)
 
 
 class Collision(Exception):

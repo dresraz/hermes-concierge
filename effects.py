@@ -50,14 +50,6 @@ def _sentence(item: str) -> str:
     return text.rstrip(". ")
 
 
-def _paragraph(items: Sequence[str]) -> str:
-    """Join items into one prose paragraph of clauses."""
-    clauses = [clause for clause in (_sentence(i) for i in items) if clause]
-    if not clauses:
-        return ""
-    return ", ".join(clauses) + "."
-
-
 def _cap(text: str, limit: int = MAX_SOUL_CHARS) -> str:
     """Keep the text under the character limit, cutting on a sentence end."""
     if len(text) < limit:
@@ -72,23 +64,68 @@ def _cap(text: str, limit: int = MAX_SOUL_CHARS) -> str:
     return window
 
 
-def soul_text(title: str, duties: Sequence[str], boundaries: Sequence[str]) -> str:
-    """Build the plain prose soul document.
+def _base_verb(word: str) -> str:
+    """Third person to base form: advertises -> advertise, sells -> sell.
 
-    The first line names the role. The text is deterministic, uses no dashes
-    as punctuation, and stays under the character limit.
+    Only verbs can carry a trailing s here, so the check is the shape of the
+    word, not a dictionary. Irregulars are the four that show up in a job
+    sentence.
     """
-    role = _clean_prose(title) or "a concierge"
-    parts = ["You are {}.".format(role)]
+    low = word.lower()
+    irregular = {"is": "be", "has": "have", "does": "do", "goes": "go"}
+    if low in irregular:
+        return irregular[low]
+    if low.endswith("ies") and len(low) > 4:
+        return low[:-3] + "y"
+    if low.endswith(("ches", "shes", "sses", "xes", "zes", "oes")):
+        return low[:-2]
+    if low.endswith("s") and not low.endswith(("ss", "us", "is")):
+        return low[:-1]
+    return low
 
-    duty_paragraph = _paragraph(duties)
-    if duty_paragraph:
-        parts.append("Your duties are: " + duty_paragraph)
 
-    boundary_paragraph = _paragraph(boundaries)
-    if boundary_paragraph:
-        parts.append("Your boundaries are: " + boundary_paragraph)
+def _is_noun_phrase(phrase: str) -> bool:
+    """``a tutor for biology`` is a role; ``sells my house`` is a job."""
+    first = phrase.split()[0].lower().strip(",.") if phrase.split() else ""
+    return first in ("a", "an", "the")
 
+
+def soul_text(title: str, boundaries: Sequence[str]) -> str:
+    """Build the soul a bot without a preset role reads on every turn.
+
+    The owner's sentence is a job, not the bot's name, so it never lands after
+    "You are". A job sentence becomes "You help <base verb> ..." and a noun
+    phrase becomes "You are <phrase>". Nothing here is a guess about names,
+    and no clause is split at "and", which is how a duty line used to end up
+    holding a bare verb.
+    """
+    phrase = _clean_prose(title).rstrip(" .!?,")
+    if not phrase:
+        phrase = "with the work in front of you"
+    if _is_noun_phrase(phrase):
+        words = [phrase.split()[0].lower()] + phrase.split()[1:]
+        head = "You are {}.".format(" ".join(words))
+    else:
+        words = phrase.split()
+        words[0] = _base_verb(words[0])
+        for index in range(1, len(words)):
+            if words[index - 1].lower() in ("and", "or", "then"):
+                token = words[index]
+                if token.isalpha() and token.endswith("s") and not token.endswith(("ss", "us", "is")):
+                    words[index] = _base_verb(token)
+        head = "You help {}.".format(" ".join(words))
+
+    limits = [_sentence(item) for item in boundaries if _sentence(item)]
+    parts = [
+        head,
+        "How you work\n"
+        "- Answer first: the first line of every reply is the answer, then the detail.\n"
+        "- Ask one short question when the request is ambiguous instead of guessing.\n"
+        "- Read the real thing before you answer: the file, the page, the number.",
+    ]
+    if limits:
+        caps = [item[:1].upper() + item[1:] + "." for item in limits]
+        parts.append("Limits\n" + "\n".join("- " + item for item in caps))
     return _cap("\n\n".join(parts))
 
 
