@@ -1,7 +1,7 @@
 name: concierge
 title: Concierge
 repo: https://github.com/dresraz/hermes-concierge
-sha: b7447523f8a9acca862166c11278e8c074e321b1
+sha: e963d7a2dcc1e4a6a7d90a8cc1035564d8aa4b73
 description: >-
   One sentence in: make a bot, improve a bot, or install a plugin or skill. /concierge create turns a
   sentence into a working profile with a role, five to eight catalog skills and a SOUL.md. /concierge
