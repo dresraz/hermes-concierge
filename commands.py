@@ -104,6 +104,10 @@ def _wants_a_bot(text: str) -> bool:
     return any(low.startswith(verb) for verb in MAKE_VERBS)
 
 
+def low_verb(text: str) -> str:
+    return (text or "").strip().split(" ", 1)[0].lower()
+
+
 def _route(text: str) -> tuple:
     """One sentence, one decision, using the bots that actually exist.
 
@@ -117,7 +121,10 @@ def _route(text: str) -> tuple:
 
     # "into <bot>" is a destination, even when that profile is not registered
     # with core: a folder that looks like a bot is a bot here.
-    if re.search(r"\binto\s+[a-z0-9_-]+\s*$", text.lower()):
+    aimed_into = re.search(r"\binto\s+([a-z0-9_-]+)\s*$", text.lower())
+    if aimed_into and (
+        aimed_into.group(1) in _bot_names() or low_verb(text) in ("install", "add", "get")
+    ):
         return "install", "", text
     query, target = market.split_target(text)
     if target:
@@ -135,7 +142,7 @@ def _route(text: str) -> tuple:
         # A common-word bot name must be aimed at, not merely present.
         aimed = (
             "-" in name
-            or low.startswith(name)
+            or ("-" in name and low.startswith(name))
             or re.search(r"\b(?:my|the|for|into|to)\s+" + re.escape(name) + r"\b", low)
         )
         if aimed:
@@ -554,7 +561,7 @@ def handle_undo(*, store: Any = None, undo: Optional[Callable[..., Any]] = None,
         head = "Not fully undone"
         tail = "  the receipt is kept, so /concierge undo tries again\n"
     else:
-        store.drop(record.name)
+        store.drop(record.name, record.kind)
         head = "Undone"
         tail = ""
     return "\n".join(
@@ -577,6 +584,9 @@ def _undo_record(
     kind = getattr(record, "kind", "") or "plugin"
     if kind == "bot":
         return _undo_bot(record, seams if seams is not None else _seams(), guard=guard)
+    if kind == "rule":
+        # A rule lives in the bot's own soul, wherever that bot is.
+        return _undo_rule(record, effects)
     profile = getattr(record, "profile", "") or ""
     # Checked before the kind, because a skill in another bot has to leave that
     # bot's home, and undo.py only ever looks at this profile.
@@ -587,6 +597,20 @@ def _undo_record(
     from . import undo as undo_mod
 
     return list((undo or undo_mod.undo)(record))
+
+
+def _undo_rule(record: Any, effects: Any) -> list:
+    """Put the soul back the way it was before this rule was written."""
+    path = getattr(record, "soul_path", "") or ""
+    if not path:
+        return ["no soul recorded, nothing to restore"]
+    snapshot = effects.Snapshot(
+        path=path,
+        backup=getattr(record, "soul_backup", "") or "",
+        existed=bool(getattr(record, "soul_existed", False)),
+    )
+    effects.restore_soul(snapshot)
+    return ["restored: rule in " + (getattr(record, "profile", "") or "this profile")]
 
 
 def _current_profile() -> str:

@@ -193,6 +193,7 @@ def pick(number: int, *, session_key: str = "", store: Any = None) -> Optional[s
     if row["kind"] == "plugin":
         from . import card
 
+        forget(session_key)
         return card.handle(row["name"], session_key=session_key)
     from . import improve
 

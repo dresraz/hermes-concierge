@@ -142,10 +142,11 @@ def remove_skill_dir(path: str) -> bool:
     """
     target = os.path.abspath(path)
     home = os.path.abspath(os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes"))
-    if not (target + os.sep).startswith(os.path.join(home, "profiles") + os.sep):
+    roots = (os.path.join(home, "profiles"), os.path.join(home, "skills"))
+    if not any((target + os.sep).startswith(root + os.sep) for root in roots):
         raise ValueError("refusing to delete {}: not inside a profile".format(target))
     if not os.path.exists(target):
-        return False
+        return True  # already undone is undone, not an error
     if not os.path.isdir(target) or os.path.islink(target):
         raise ValueError("refusing to delete {}: not a directory".format(target))
     if not os.path.isfile(os.path.join(target, "SKILL.md")):

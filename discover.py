@@ -30,8 +30,10 @@ MAX_FILES = 25
 HEAVY_MARKERS = (
     "systemd", "docker run", "supervisord", "kubernetes", "tailscale",
     "playwright", "selenium", "jupyter lab", "comfyui server", "--daemon",
-    "| sh", "| bash", "| sudo", "os.system(", "eval(",
 )
+
+# A download piped into a shell runs code at install time: never a free extra.
+SHELL_PIPE = re.compile(r"curl[^\n]{0,120}\|\s*(?:sudo\s+)?(?:sh|bash)\b")
 
 WORD = re.compile(r"[a-z0-9]{3,}")
 STOP = frozenset(
@@ -153,7 +155,7 @@ def catalogue(roots: Optional[Sequence[Path]] = None) -> list[dict]:
             except OSError:
                 continue
             head = text.lower()
-            if any(marker in head for marker in HEAVY_MARKERS):
+            if any(marker in head for marker in HEAVY_MARKERS) or SHELL_PIPE.search(text):
                 continue
             front_name, desc = _head(text)
             seen.add(name)

@@ -149,7 +149,7 @@ def add_rule(plan_: Plan, *, home: Optional[Path] = None) -> Optional[dict]:
     """
     import os
     import shutil
-    import time
+    import uuid
 
     home = Path(str(home or plan_.home))
     soul = home / "SOUL.md"
@@ -168,7 +168,7 @@ def add_rule(plan_: Plan, *, home: Optional[Path] = None) -> Optional[dict]:
         if existed:
             # One backup per rule: a single shared file made every earlier
             # receipt restore the same bytes, which is a lie about the state.
-            backup = "{}.{}.concierge-backup".format(soul, int(time.time() * 1000))
+            backup = "{}.{}.concierge-backup".format(soul, uuid.uuid4().hex[:12])
             shutil.copy2(soul, backup)
         tmp = soul.with_name(soul.name + ".tmp")
         tmp.write_text(text + block + RULE_NOTE + bullet, encoding="utf-8")

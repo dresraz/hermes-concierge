@@ -44,7 +44,7 @@ class Store:
     def latest(self):
         return self.records[-1] if self.records else None
 
-    def drop(self, name):
+    def drop(self, name, kind=None):
         self.records = [r for r in self.records if getattr(r, "name", "") != name]
         return True
 
