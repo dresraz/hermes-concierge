@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness  # noqa: E402
@@ -40,6 +41,33 @@ class Share(unittest.TestCase):
         empty = pathlib.Path(tempfile.mkdtemp())
         with mock.patch.object(seams, "_credential_source", lambda _p=None: empty):
             self.assertEqual(seams.share_credentials(self.dst, empty), [])
+
+    def test_a_rotated_key_reaches_an_existing_bot(self):
+        with mock.patch.object(seams, "_known_provider_keys", lambda: {"OPENCODE_GO_API_KEY"}):
+            seams.share_credentials(self.dst, self.src)
+            (self.src / ".env").write_text("OPENCODE_GO_API_KEY=sk-new\n", encoding="utf-8")
+            notes = seams.share_credentials(self.dst, self.src)
+        self.assertIn("OPENCODE_GO_API_KEY=sk-new", (self.dst / ".env").read_text())
+        self.assertEqual(notes[0], ".env")
+
+    def test_a_value_that_cannot_fit_one_line_is_refused(self):
+        # .env is line-oriented, so a value with a real newline can only arrive
+        # from somewhere else. It must never be written as a second key line.
+        self.assertIsNone(seams._env_value("line one\nINJECTED=1"))
+        self.assertIsNone(seams._env_value("carriage\rreturn"))
+        self.assertEqual(seams._env_value("plain"), "plain")
+        self.assertEqual(seams._env_value("has space"), '"has space"')
+
+    def test_a_read_only_env_is_reported_not_called_a_success(self):
+        env = self.dst / ".env"
+        env.write_text("OPENCODE_GO_API_KEY=old\n", encoding="utf-8")
+        env.chmod(0o400)
+        try:
+            with mock.patch.object(seams, "_known_provider_keys", lambda: {"OPENCODE_GO_API_KEY"}):
+                notes = seams.share_credentials(self.dst, self.src)
+        finally:
+            env.chmod(0o600)
+        self.assertTrue(any("not written" in note or "not copied" in note for note in notes))
 
     def test_the_owner_home_is_found_even_when_the_turn_is_scoped_elsewhere(self):
         from unittest import mock

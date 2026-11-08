@@ -226,19 +226,21 @@ def create_profile(
 
 
 def share_credentials(target_home: Path, source_home: Optional[Path] = None) -> list:
-    """Give a new bot the same model login this profile uses.
+    """Give a bot the owner's login, and keep it current.
 
-    A bot with no credentials is a bot that does not answer, which is the
-    friction this removes: ``.env`` and ``auth.json`` are copied from the
-    profile that made it. Messaging channel keys are stripped from the copy, so
-    two profiles never fight over one bot token.
+    Copies ``.env`` and ``auth.json`` from the home that actually holds a
+    credential, then merges the provider keys out of that source so a rotated
+    key reaches bots that already exist instead of leaving them to fail auth.
+    Channel keys are stripped, values that cannot live on one line are refused,
+    and a failure is reported instead of being called a success.
     """
     import shutil
     from pathlib import Path as _Path
 
     source = _credential_source(source_home)
     target = _Path(str(target_home))
-    copied = []
+    notes: list = []
+
     for name in (".env", "auth.json"):
         origin = source / name
         if not origin.is_file():
@@ -246,13 +248,17 @@ def share_credentials(target_home: Path, source_home: Optional[Path] = None) -> 
         try:
             shutil.copy2(origin, target / name)
             (target / name).chmod(0o600)
-            copied.append(name)
-        except OSError:
-            continue
+            notes.append(name)
+        except OSError as exc:
+            notes.append("{} not copied ({})".format(name, exc.strerror or type(exc).__name__))
+
+    updated, problem = _merge_provider_keys(target / ".env", source / ".env")
+    if updated:
+        notes.append("{} provider key(s)".format(updated))
+    if problem:
+        notes.append(problem)
+
     env = target / ".env"
-    carried = _carry_provider_keys(env)
-    if carried:
-        copied.append("{} provider key(s)".format(carried))
     if env.is_file():
         try:
             from hermes_cli.profile_channels import strip_channel_env_file
@@ -260,7 +266,72 @@ def share_credentials(target_home: Path, source_home: Optional[Path] = None) -> 
             strip_channel_env_file(env)
         except Exception:  # no channel inventory: the copy stays, minus nothing
             pass
-    return copied
+    return notes
+
+
+def _env_value(value: str) -> Optional[str]:
+    """A value that survives one line of a .env, or None if it cannot."""
+    value = str(value)
+    if "\n" in value or "\r" in value or "\x00" in value:
+        return None
+    if any(ch in value for ch in ' "#\''):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return '"{}"'.format(escaped)
+    return value
+
+
+def _merge_provider_keys(env_path: Path, source_env: Path) -> tuple:
+    """Add missing provider keys and refresh stale ones. Never leaves a lie."""
+    import os
+
+    if not source_env.is_file():
+        return 0, ""
+    known = _known_provider_keys()
+    wanted: dict = {}
+    try:
+        for line in source_env.read_text(encoding="utf-8", errors="replace").splitlines():
+            key, sep, value = line.partition("=")
+            key = key.strip()
+            if sep and key in known and value.strip():
+                cleaned = _env_value(value.strip())
+                if cleaned is not None:
+                    wanted[key] = cleaned
+    except OSError:
+        return 0, ""
+    if not wanted:
+        return 0, ""
+
+    lines: list = []
+    present: dict = {}
+    if env_path.is_file():
+        try:
+            lines = env_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError as exc:
+            return 0, ".env unreadable ({})".format(exc.strerror or "error")
+        for index, line in enumerate(lines):
+            key, sep, value = line.partition("=")
+            if sep and key.strip():
+                present[key.strip()] = index
+
+    changed = 0
+    for key, value in sorted(wanted.items()):
+        if key in present:
+            index = present[key]
+            if lines[index].partition("=")[2].strip() != value:
+                lines[index] = "{}={}".format(key, value)
+                changed += 1
+        else:
+            lines.append("{}={}".format(key, value))
+            changed += 1
+
+    if not changed:
+        return 0, ""
+    try:
+        env_path.write_text("\n".join(lines).rstrip("\n") + "\n", encoding="utf-8")
+        os.chmod(env_path, 0o600)
+    except OSError as exc:
+        return 0, ".env not written ({})".format(exc.strerror or type(exc).__name__)
+    return changed, ""
 
 
 def _credential_source(preferred: Any = None) -> Path:
@@ -325,43 +396,6 @@ def _known_provider_keys() -> set:
     except Exception:
         pass
     return {name for name in names if name.isupper()}
-
-
-def _carry_provider_keys(env_path: Path) -> int:
-    """Put the provider keys this process holds into the bot's own .env.
-
-    A profile reads keys only from its own ``.env``. A key exported into the
-    gateway's environment (a systemd unit, a shell) is therefore invisible to a
-    fresh bot even though the owner's own session works, which is the failure
-    this fixes. Only names Hermes already treats as credentials are carried.
-    """
-    import os
-
-    known = _known_provider_keys()
-    if not known:
-        return 0
-    existing = set()
-    text = ""
-    if env_path.is_file():
-        text = env_path.read_text(encoding="utf-8", errors="replace")
-        for line in text.splitlines():
-            key, sep, _ = line.partition("=")
-            if sep and key.strip():
-                existing.add(key.strip())
-    missing = []
-    for name in sorted(known):
-        if name in existing or name.startswith(("TELEGRAM_", "DISCORD_", "SLACK_", "WHATSAPP_")):
-            continue
-        value = os.environ.get(name)
-        if value:
-            missing.append("{}={}".format(name, value))
-    if not missing:
-        return 0
-    if text and not text.endswith("\n"):
-        text += "\n"
-    env_path.write_text(text + "\n".join(missing) + "\n", encoding="utf-8")
-    env_path.chmod(0o600)
-    return len(missing)
 
 
 def _bundled_root(skills_sync=None, get_bundled_skills_dir=None) -> Path:

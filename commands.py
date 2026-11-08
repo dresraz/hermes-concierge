@@ -474,8 +474,8 @@ def _repair_keys(store: Any) -> None:
             continue
         home = seams.profile_home(record.profile or record.name)
         try:
-            if (Path(str(home)) / ".env").is_file():
-                continue
+            # Not only missing: a rotated key has to reach bots that already
+            # exist, or one of them fails auth while everything looks fine.
             seams.share_credentials(home, _HOME)
         except Exception:
             continue
