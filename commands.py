@@ -494,13 +494,26 @@ def handle_concierge(
         _forget("", session_key)
         return handle_improve(text, store=store, known=known)
 
-    intent, bot, sentence = _route(text)
+    intent_name, bot, sentence = _classify(text, store=store)
     card.forget(session_key)
     _forget("", session_key)
-    if intent == "create":
-        return handle_hire(sentence, store=store, hire=hire, known=known)
-    if intent == "improve":
+    if intent_name == "create":
+        return handle_hire(sentence or text, store=store, hire=hire, known=known)
+    if intent_name == "improve":
+        if not bot:
+            return handle_improve(sentence or text, store=store, known=known)
         return handle_improve(_strip_name(sentence, bot), store=store, known=known, bot=bot)
+    if intent_name == "bots":
+        _repair_keys(store)
+        return lifecycle.card(store)
+    if intent_name == "browse":
+        from . import shelf
+
+        return shelf.overview()
+    if intent_name == "help":
+        return HELP
+    if intent_name == "undo":
+        return handle_undo(store=store, undo=undo, seams=seams)
 
     # No bot named: a plugin or a skill. A skill this machine already ships wins
     # when the sentence names it, because it costs nothing and adds no tools;
@@ -788,6 +801,35 @@ def handle_improve(
         names = ", ".join(_bot_names()) or "none"
         return "  No bot called {}. Bots here: {}\n".format(bot, names)
     return improve.receipt(plan, improve.apply(plan, store=store))
+
+
+def _classify(text: str, store: Any = None) -> tuple:
+    """What this sentence means: model first, rules when there is no model."""
+    from . import intent as intent_mod, presets
+
+    llm = None
+    if _CTX is not None:
+        try:
+            llm = _CTX.llm
+        except Exception:
+            llm = None
+    try:
+        names = _bot_names()
+    except Exception:
+        names = ["default"]
+    # Each bot carries its job, so "the house bot" resolves to lima-house-seller.
+    jobs = {}
+    for record in getattr(store, "all", lambda: [])() if store is not None else []:
+        if getattr(record, "kind", "") == "bot":
+            jobs[record.profile or record.name] = getattr(record, "title", "")
+    names = ["{} ({})".format(name, jobs[name]) if jobs.get(name) else name for name in names]
+    return intent_mod.classify(
+        text,
+        llm=llm,
+        bots=names,
+        roles=presets.names(),
+        fallback=_route,
+    )
 
 
 def _bot_names() -> list:

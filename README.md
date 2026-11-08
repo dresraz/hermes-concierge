@@ -13,6 +13,13 @@ read off the disk, and one undo.
 
 ![The shelf, then an improve, in the terminal](docs/demo.png)
 
+A model decides what you meant. One short structured call reads your sentence and
+answers with an intent from a closed world: create a bot, improve one, install a
+thing, list, browse, undo. No keyword guessing, so "I want to make a general
+assistant bot" is a bot, not a language pack. The rules in the plugin are the
+fallback for when no model is available, and every answer is checked against the
+bots and roles that actually exist before it is used.
+
 Two moves over one marketplace: **create** a bot, or **improve** one. Both pull from what is
 already installable, and both end with a receipt you can check and an undo that restores it.
 
