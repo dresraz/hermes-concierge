@@ -18,7 +18,11 @@ from . import discover, match, seams
 LIMIT = 8
 
 # The last listing per conversation, so "3" means item 3 of what was just shown.
+# A number is only meaningful while the list is still on screen, so entries
+# expire, and the map cannot grow with every chat the gateway has ever served.
 _LAST: dict = {}
+LAST_TTL = 600
+MAX_SESSIONS = 32
 
 
 def _here() -> str:
@@ -145,8 +149,12 @@ def overview() -> str:
 
 def browse(query: str = "", session_key: str = "") -> str:
     """A numbered window. The number is the pick."""
+    import time
+
     rows = items(query)
-    _LAST[session_key or ""] = rows
+    if len(_LAST) >= MAX_SESSIONS:
+        _LAST.clear()
+    _LAST[session_key or ""] = (time.time(), rows)
     head = "  LOOKING FOR  {}".format(query) if query else "  READY TO ADD"
     if not rows:
         return (
@@ -167,7 +175,20 @@ def browse(query: str = "", session_key: str = "") -> str:
 
 
 def pending(session_key: str = "") -> bool:
-    return bool(_LAST.get(session_key or ""))
+    return bool(_rows(session_key))
+
+
+def _rows(session_key: str = "") -> list:
+    import time
+
+    entry = _LAST.get(session_key or "")
+    if not entry:
+        return []
+    stamp, rows = entry
+    if time.time() - stamp > LAST_TTL:
+        _LAST.pop(session_key or "", None)
+        return []
+    return rows
 
 
 def forget(session_key: str = "") -> None:
@@ -176,7 +197,7 @@ def forget(session_key: str = "") -> None:
 
 def pick(number: int, *, session_key: str = "", store: Any = None) -> Optional[str]:
     """Act on one row. A skill installs here; a plugin opens its card."""
-    rows = _LAST.get(session_key or "") or []
+    rows = _rows(session_key)
     if number < 1 or number > len(rows):
         return None
     row = rows[number - 1]

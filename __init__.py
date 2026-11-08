@@ -8,7 +8,7 @@ lives in a sibling module so one concern owns one file:
   card.py      the one card, and the receipt that reads the disk back
   lifecycle.py the bots Concierge made: list, fire, reset
   bots.py      hire: a sentence into a new bot
-  training.py  train: a sentence into a standing behaviour on an existing bot
+  improve.py   improve: a skill from the marketplace, or one standing rule
   seams.py     the only place that calls into core
   effects.py   the writes core never performs (SOUL, skills, cron)
   undo.py      reversal of those writes

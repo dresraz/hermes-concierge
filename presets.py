@@ -16,14 +16,12 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
 MAX_SKILLS_SHOWN = 6
 INSTALL_TIMEOUT = 90  # one skill, not a whole role, has to finish in this
-WORKERS = 1  # one at a time: the installer writes into a shared tree
 
 
 @dataclass(frozen=True)
