@@ -247,6 +247,7 @@ def handle_concierge(
     if head == "bots":
         card.forget(session_key)
         _forget("", session_key)
+        _repair_keys(store)
         return lifecycle.card(store)
 
     if head in ("fire", "reset"):
@@ -464,11 +465,27 @@ def handle_hire(
     )
 
 
+def _repair_keys(store: Any) -> None:
+    """A bot Concierge made should never be missing the owner's login."""
+    from . import seams
+
+    for record in getattr(store, "all", lambda: [])():
+        if getattr(record, "kind", "") != "bot":
+            continue
+        home = seams.profile_home(record.profile or record.name)
+        try:
+            if (Path(str(home)) / ".env").is_file():
+                continue
+            seams.share_credentials(home, _HOME)
+        except Exception:
+            continue
+
+
 def _share_keys(name: str, profile_path: Any) -> list[str]:
     """A bot needs the same model login, or it cannot answer at all."""
     from . import seams
 
-    copied = seams.share_credentials(profile_path)
+    copied = seams.share_credentials(profile_path, _HOME)
     if not copied:
         return ["  keys     none to copy, this profile has no credentials yet"]
     return ["  keys     your login, {}".format(", ".join(copied))]
@@ -761,6 +778,10 @@ def _seams() -> Any:
 # platform, where a stranger in a group chat could otherwise install code.
 _LOCAL_SURFACES = frozenset({"", "cli", "tui", "desktop", "acp", "webui"})
 _CTX: Any = None
+# The home that published this plugin. Captured at register: inside a routed
+# gateway turn get_hermes_home() is the bot's own home, so reading "the owner's
+# login" at call time would read the empty profile we are about to fill.
+_HOME: Any = None
 _READ_ONLY = frozenset({"", "help", "?", "h", "commands", "-h", "--help", "bots", "browse", "shelf"})
 
 
@@ -799,11 +820,15 @@ def _gateway_refusal(raw: Any) -> Optional[str]:
 
 def register(ctx: Any) -> None:
     """Wire one slash command, plus the one bare word a shown catalog card accepts."""
-    global _CTX
+    global _CTX, _HOME
 
     from . import reply
 
     _CTX = ctx
+    try:
+        _HOME = Path(str(ctx.home_path)) if getattr(ctx, "home_path", None) else None
+    except Exception:
+        _HOME = None
 
     ctx.register_command(
         "concierge",

@@ -25,7 +25,7 @@ tier: community
 category: general
 requires_hermes: ">=0.22.7"
 docs_url: https://github.com/dresraz/hermes-concierge#readme
-version: "0.3.2"
+version: "0.3.3"
 platforms: []
 capabilities:
   provides_tools: []
