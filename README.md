@@ -1,6 +1,16 @@
 # Concierge
 
+[![version](https://img.shields.io/badge/version-0.2.3-E8C15A)](plugin.yaml)
+[![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-189%20passing-3fb950)](tests)
+[![hermes](https://img.shields.io/badge/hermes-%3E%3D0.22.7-4B5563)](plugin.yaml)
+
 Install a bot, a plugin or a skill like an app: **one sentence, one card, one yes, a receipt, and an undo.**
+
+![The shelf, then an improve, in the terminal](docs/demo.png)
+
+Two moves over one marketplace: **create** a bot, or **improve** one. Both pull from what is
+already installable, and both end with a receipt you can check and an undo that restores it.
 
 Concierge is a Hermes Agent plugin. It answers one question, *"can I add that?"*, without making
 you learn the catalog, read a manifest, or guess which of the a thousand-odd entries does the thing.
