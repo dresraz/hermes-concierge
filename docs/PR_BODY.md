@@ -29,6 +29,14 @@ and a copy of your own plugin switches, so the bot starts from your setup instea
 defaults. The receipt counts what came along and what stayed behind, then tells you how to improve it
 further.
 
+## Who can trigger it
+
+A messaging surface can look, not change. On anything except the local session the changing verbs
+(install, create, improve, fire, reset, undo, a shelf pick, a card's yes) are refused unless the
+owner sets `plugins.entries.concierge.allow_gateway: true`. The bare yes on a card is answered on
+`post_gateway_admission`, which runs after the gateway authenticated the sender and receives the
+conversation's session key.
+
 ## Surfaces used
 
 - one slash command, `/concierge`, registered with `ctx.register_command`. No `SKILL.md`, so

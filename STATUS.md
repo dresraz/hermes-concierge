@@ -5,16 +5,23 @@ Date: 2026-11-06
 
 ## Release
 
-- `plugin.yaml` version `0.2.3`, commit `2f81fb29639bbad543c5d10469ef6f20df95d44e`.
-- `docs/catalog-entry.yaml` pins the release sha and `version: "0.2.3"`; the entry passes Hermes core's own
+- `plugin.yaml` version `0.3.0`.
+- `docs/catalog-entry.yaml` pins the release sha and `version: "0.3.0"`; the entry passes Hermes core's own
   `scripts/validate_plugin_catalog.py` (exit 0).
-- 189 tests, 0 model calls, 0 network calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
+- 190 tests, 0 model calls, 0 network calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
 - Live catalog at match time: 1,064 entries. Matcher: 32/32 top-3, 25/32 first, 8/8 nonsense refused.
 - The sentence search installs from both shelves: the plugin catalog and the skill registries, into
   this profile or into `into <bot>`. Proven live for plugin -> bot, skill -> bot, skill -> this
   profile, each with a card, a receipt and a working undo (`docs/NOTES.md` #22).
 
 ## Done
+
+- A messaging surface is read-only: the changing verbs are refused unless
+  `plugins.entries.concierge.allow_gateway` is true, and the card's bare yes runs on
+  `post_gateway_admission`, after the gateway authenticated the sender.
+- No `import yaml` anywhere: `hermes_yaml` only, so plugin inheritance runs on a stock install.
+- Private core calls for enable, install metadata and skill search are replaced with the CLI.
+- The unused cron writer and its undo path are gone.
 
 - One front door: a bare sentence routes itself to create, improve or install from the bots that
   exist. `create` makes a bot, `improve` adds a skill or a rule to any bot on the machine, and a
