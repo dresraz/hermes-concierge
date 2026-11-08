@@ -3,12 +3,22 @@
 Concierge makes adding something to Hermes a one-sentence job.
 
 You say what you want. Concierge matches it against both marketplace shelves: the plugin catalog
-(1,063 entries today) and the skill registries. A plugin gets one card with the name, tier, what it
+(1,064 entries today) and the skill registries. A plugin gets one card with the name, tier, what it
 adds, what it costs on every request and the pinned commit, and installs only after you say yes.
 Add `into <bot>` and the same sentence installs into that bot's profile instead of your own, skills
 included. Then it reads the result back off the disk and prints a receipt. `/concierge undo` removes
 exactly what it added, from the home it went into. When nothing fits, it installs nothing and says
 so.
+
+It also improves a bot. `/concierge improve researcher-bot: it needs to read scanned PDFs` installs
+that skill from the marketplace into that bot. `/concierge improve my researcher: always show the
+source first` writes the rule into the bot's `SOUL.md`, where every turn reads it. Improves work on
+any profile on the machine, not only the ones Concierge made. Rules are deduped, capped and written
+atomically, one backup per rule, so undo restores the exact bytes a rule replaced instead of
+guessing.
+
+A bare `/concierge` opens a shelf: the bots, the skills already on disk and the plugin catalog,
+numbered, generated per request, expiring after ten minutes. A number acts on that row.
 
 One deliberate omission: it does not recommend memory plugins. They hook the agent's own memory and
 can need a hosted service or a paid plan, so they are left to a manual install.
