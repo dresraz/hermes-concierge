@@ -1,11 +1,14 @@
 # Concierge
 
-[![version](https://img.shields.io/badge/version-0.2.3-E8C15A)](plugin.yaml)
+[![version](https://img.shields.io/github/v/tag/dresraz/hermes-concierge?color=E8C15A)](https://github.com/dresraz/hermes-concierge/tags)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
-[![tests](https://img.shields.io/badge/tests-189%20passing-3fb950)](tests)
+[![tests](https://img.shields.io/badge/tests-196%20passing-3fb950)](tests)
 [![hermes](https://img.shields.io/badge/hermes-%3E%3D0.22.7-4B5563)](plugin.yaml)
 
-Install a bot, a plugin or a skill like an app: **one sentence, one card, one yes, a receipt, and an undo.**
+**The front door to the Hermes marketplace.**
+
+One sentence creates a bot, improves one, or installs a plugin or a skill. No catalog to learn, no
+manifest to read, no restart. One card, one yes, a receipt read off the disk, and one undo.
 
 ![The shelf, then an improve, in the terminal](docs/demo.png)
 
