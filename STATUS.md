@@ -5,7 +5,7 @@ Date: 2026-11-06
 
 ## Release
 
-- `plugin.yaml` version `0.2.2`.
+- `plugin.yaml` version `0.2.2`, commit `dd83471bafcbbb5a42375c542ce1b7182be08919`.
 - `docs/catalog-entry.yaml` pins the release sha and `version: "0.2.2"`; the entry passes Hermes core's own
   `scripts/validate_plugin_catalog.py` (exit 0).
 - 170 tests, 0 model calls, 0 network calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
