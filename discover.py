@@ -56,8 +56,24 @@ def _fold(word: str) -> str:
     return word
 
 
+# Words that describe the marketplace rather than a job. A sentence asking for
+# help with a house shares "skills" and "plugins" with half the catalogue; that
+# is not evidence of anything, so these never carry weight.
+FILLER = frozenset(
+    """
+    skill skills plugin plugins tool tools agent agents bot bots
+    hermes marketplace catalog install setup use using help looking look find
+    get add need want could would should please job work properly thing things
+    """.split()
+)
+
+
 def _words(text: str) -> set[str]:
-    return {_fold(w) for w in WORD.findall((text or "").lower()) if w not in STOP}
+    return {
+        _fold(w)
+        for w in WORD.findall((text or "").lower())
+        if w not in STOP and w not in FILLER
+    }
 
 
 def _roots() -> list[Path]:
@@ -81,7 +97,9 @@ def _roots() -> list[Path]:
 
         home = Path(str(get_hermes_home()))
     except Exception:
-        home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+        from hermes_constants import get_hermes_home
+
+        home = Path(str(get_hermes_home()))
     for base in (home, Path.home() / ".hermes"):
         candidates += [base / "hermes-agent" / "skills", base / "hermes-agent" / "optional-skills"]
 
@@ -198,7 +216,7 @@ def suggest(
             frequency[word] = frequency.get(word, 0) + 1
     # Rare enough to discriminate: at most a fifth of the catalogue, and never
     # a word so common that it is effectively filler.
-    ceiling = max(3, len(items) // 5)
+    ceiling = max(3, min(40, len(items) // 50))
 
     scored: list[tuple[float, float, dict]] = []
     for item in items:

@@ -404,47 +404,42 @@ if __name__ == "__main__":
 
 
 class SelfOnly(unittest.TestCase):
-    """A bot gets its own Concierge, scoped to itself."""
+    """A bot gets its own Concierge, scoped to itself.
+
+    The scoped home, not the env var, is what core hands a served profile: one
+    process serves many profiles, so ``os.environ`` only holds the launch one.
+    """
 
     def setUp(self):
-        import os
-        from unittest import mock
+        from hermes_constants import reset_hermes_home_override, set_hermes_home_override
 
         self.tmp = pathlib.Path(tempfile.mkdtemp())
-        (self.tmp / "profiles" / "helper-two").mkdir(parents=True)
-        (self.tmp / "profiles" / "helper-two" / "config.yaml").write_text("model: {}\n", encoding="utf-8")
-        patcher = mock.patch.dict(os.environ, {"HERMES_HOME": str(self.tmp)})
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def _as_bot(self, name="helper-two"):
-        from unittest import mock
-
-        return mock.patch.object(commands, "_self_name", lambda: name)
+        self.bot = self.tmp / "profiles" / "helper-two"
+        self.bot.mkdir(parents=True)
+        (self.bot / "config.yaml").write_text("model: {}\n", encoding="utf-8")
+        token = set_hermes_home_override(str(self.bot))
+        self.addCleanup(reset_hermes_home_override, token)
 
     def test_a_bot_cannot_make_bots(self):
-        with self._as_bot():
-            text = commands.handle_concierge("create a researcher", store=store())
+        text = commands.handle_concierge("create a researcher", store=store())
         self.assertIn("cannot make other bots", text)
 
     def test_a_bot_cannot_improve_another_bot(self):
-        with self._as_bot():
-            text = commands.handle_concierge("improve coder-bot: always cite", store=store())
+        text = commands.handle_concierge("improve coder-bot: always cite", store=store())
         self.assertIn("only improve itself", text)
 
     def test_a_bot_can_improve_itself(self):
-        with self._as_bot():
-            text = commands.handle_concierge("improve me: always answer in one line", store=store())
+        text = commands.handle_concierge("improve me: always answer in one line", store=store())
         self.assertIn("Improved helper-two", text)
-        self.assertTrue((self.tmp / "profiles" / "helper-two" / "SOUL.md").is_file())
+        self.assertTrue((self.bot / "SOUL.md").is_file())
 
     def test_a_plain_sentence_inside_a_bot_is_a_self_improve(self):
-        with self._as_bot():
-            intent, bot, _ = commands._route("it needs to read scanned pdfs")
+        intent, bot, _ = commands._route("it needs to read scanned pdfs")
         self.assertEqual((intent, bot), ("improve", "helper-two"))
 
     def test_the_owner_profile_keeps_full_power(self):
-        from unittest import mock
+        from hermes_constants import reset_hermes_home_override, set_hermes_home_override
 
-        with mock.patch.object(commands, "_self_name", lambda: "default"):
-            self.assertFalse(commands._is_bot_profile())
+        token = set_hermes_home_override(str(self.tmp))
+        self.addCleanup(reset_hermes_home_override, token)
+        self.assertFalse(commands._is_bot_profile())

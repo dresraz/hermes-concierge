@@ -125,29 +125,14 @@ def _is_bot_profile() -> bool:
     A bot is a profile directory under ``profiles/``. A scratch HERMES_HOME
     reports itself as "custom", which is not a bot and must keep full power.
     """
-    raw = os.environ.get("HERMES_HOME")
     try:
-        if raw:
-            home = Path(raw)
-        else:
-            from hermes_constants import get_hermes_home
+        from hermes_constants import get_hermes_home
 
-            home = Path(str(get_hermes_home()))
+        home = Path(str(get_hermes_home()))
     except Exception:
         return False
     # A bot's home is <root>/profiles/<name>; the owner's home is the root.
-    if home.parent.name == "profiles" and home.name not in ("", "profiles"):
-        return True
-    name = _self_name()
-    if name and name != "default":
-        try:
-            from . import improve
-
-            found = improve.resolve(name)
-            return bool(found) and found.parent.name == "profiles"
-        except Exception:
-            return False
-    return False
+    return home.parent.name == "profiles" and home.name not in ("", "profiles")
 
 
 def _route(text: str) -> tuple:

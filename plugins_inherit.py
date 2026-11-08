@@ -45,7 +45,9 @@ def home(root: Optional[Any] = None) -> Path:
     """The home the switches come from."""
     if root is not None:
         return Path(str(root))
-    env = os.environ.get("HERMES_HOME", "")
+    from hermes_constants import get_hermes_home
+
+    env = str(get_hermes_home()) if get_hermes_home() else ""
     if env:
         return Path(env)
     try:

@@ -137,10 +137,17 @@ def profile_home(name: str) -> Path:
 
 
 def current_profile() -> str:
-    """The profile this conversation is running in, as core names it."""
-    from hermes_cli.profiles import current_profile_name
+    """The profile serving this conversation.
 
-    return current_profile_name() or "default"
+    Read from the *scoped* home, never the environment: one process serves many
+    profiles and ``os.environ`` only holds the launch profile.
+    """
+    from hermes_constants import get_hermes_home
+
+    home = Path(str(get_hermes_home()))
+    if home.parent.name == "profiles":
+        return home.name
+    return "default"
 
 
 def profile_exists(name: str) -> bool:
@@ -458,7 +465,9 @@ def _bundled_root(skills_sync=None, get_bundled_skills_dir=None) -> Path:
     if skills_sync is not None:
         candidates.append(str(Path(skills_sync.__file__).parent.parent / "skills"))
     if home is None:
-        home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+        from hermes_constants import get_hermes_home
+
+        home = Path(str(get_hermes_home()))
     candidates += [
         str(home / "hermes-agent" / "skills"),
         str(Path.home() / "hermes-agent" / "skills"),
