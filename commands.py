@@ -104,6 +104,9 @@ _BOTS_PHRASES = (
     r"^(?:what|how many) bots (?:do i have|have i got|are there)\b",
     r"^bots\b",
 )
+_FIRE_PHRASES = (
+    r"^(?:delete|remove|fire|reset|get rid of|kill|drop)\b",
+)
 _BROWSE_PHRASES = (
     r"^(?:what|which) (?:can|should) i (?:install|add|get)\b",
     r"^(?:show|list)(?: me)? what (?:i can|can i) (?:install|add|get)\b",
@@ -119,6 +122,9 @@ def _natural_verb(low: str) -> str:
     for pattern in _BROWSE_PHRASES:
         if re.match(pattern, low):
             return "browse"
+    for pattern in _FIRE_PHRASES:
+        if re.match(pattern, low):
+            return "fire"
     return ""
 
 
@@ -196,12 +202,49 @@ def _is_bot_profile() -> bool:
     return home.parent.name == "profiles" and home.name not in ("", "profiles")
 
 
-def _route(text: str) -> tuple:
-    """One sentence, one decision, using the bots that actually exist.
+POLITE = (
+    "please ", "can you ", "could you ", "would you ", "will you ",
+    "i want to ", "i'd like to ", "i would like to ", "i need to ",
+    "i need ", "i want ", "i'd like ", "help me ", "let's ", "lets ",
+)
+CREATE_ANY = ("hire", "make", "create", "build", "spawn", "set up", "stand up",
+              "give me", "get me", "spin up", "start")
+NEED_ANY = ("need", "want", "looking for", "could use")
+SECOND_ANY = ("another", "second one", "one more", "twin", "number 2", "a new")
 
-    A bot you already have wins over a new one: naming a role that exists
-    improves that bot instead of making a twin. A role with no bot creates one.
-    Everything else is an install. This is the whole front door.
+
+def _strip_polite(low: str) -> str:
+    """Drop the words people put in front of a request."""
+    out = low
+    changed = True
+    while changed:
+        changed = False
+        for phrase in POLITE:
+            if out.startswith(phrase):
+                out = out[len(phrase):].lstrip()
+                changed = True
+    return out
+
+
+def _has_phrase(low: str, phrases: Sequence[str]) -> bool:
+    return any(re.search(r"\b" + re.escape(p) + r"\b", low) for p in phrases)
+
+
+def _asks_create(low: str) -> bool:
+    """The sentence asks for a bot in make or need words, anywhere in it."""
+    if _has_phrase(low, CREATE_ANY) or _has_phrase(low, NEED_ANY):
+        return True
+    # "help me keep my inbox at zero" is a job; "help me with excel" is a tool.
+    return bool(re.search(r"\bhelp me (?!with\b)\w+", low))
+
+
+def _route(text: str) -> tuple:
+    """One sentence, one decision.
+
+    The order matters and it is the whole product: a destination beats
+    everything, a bot you already have beats a new one, asking for a bot beats
+    the marketplace, and the marketplace is the last resort rather than the
+    answer to every sentence.
     """
     from . import presets
 
@@ -210,13 +253,6 @@ def _route(text: str) -> tuple:
 
     from . import market
 
-    # "into <bot>" is a destination, even when that profile is not registered
-    # with core: a folder that looks like a bot is a bot here.
-    aimed_into = re.search(r"\binto\s+([a-z0-9_-]+)\s*$", text.lower())
-    if aimed_into and (
-        aimed_into.group(1) in _bot_names() or low_verb(text) in ("install", "add", "get")
-    ):
-        return "install", "", text
     query, target = market.split_target(text)
     if target:
         return "install", "", text
@@ -224,72 +260,72 @@ def _route(text: str) -> tuple:
     if not low:
         return "install", "", text
     words = set(re.findall(r"[a-z0-9'-]+", low))
+    stripped = _strip_polite(low)
     names = [name for name in _bot_names() if name != "default"]
-    # A word, not a substring: a bot called "art" must not swallow "start a chart".
-    names = [n for n in names if n != "default"]
+
+    # A bot you already have, aimed at by name. A hyphenated name is a name;
+    # a plain word also has to be pointed at ("my intern", "for intern").
     for name in sorted(names, key=len, reverse=True):
         if name not in words:
             continue
-        # A common-word bot name must be aimed at, not merely present.
-        aimed = (
-            "-" in name
-            or ("-" in name and low.startswith(name))
-            or re.search(r"\b(?:my|the|for|into|to)\s+" + re.escape(name) + r"\b", low)
-        )
-        if aimed:
+        if "-" in name or re.search(
+            r"\b(?:my|the|for|to|into)\s+" + re.escape(name) + r"\b", stripped
+        ):
             return "improve", name, query
-    # "make my researcher cite sources" is aimed at the researcher you have.
-    mine_word = re.search(r"\bmy\s+([a-z0-9][a-z0-9-]*)", low)
-    if mine_word:
-        wanted = mine_word.group(1)
+
+    second = _has_phrase(stripped, SECOND_ANY)
+    role = presets.detect(query)
+    if role is None:
+        trimmed = re.sub(r"^(?:one more|another|a second|second|new)\s+", "", stripped)
+        if trimmed != stripped:
+            role = presets.detect(trimmed)
+            if role is None:
+                for candidate in presets.names():
+                    if candidate in trimmed.split():
+                        role = presets.get(candidate)
+                        break
+
+    # "my researcher" is the one you have, unless the sentence asks for another.
+    # "my coder" and "the coder" both point at the one you have.
+    mine = re.search(r"\b(?:my|the|our)\s+([a-z0-9][a-z0-9-]*)", stripped)
+    if mine and not second:
+        wanted = mine.group(1)
         if wanted in names or presets.get(wanted) is not None:
             for name in names:
                 if name == wanted or name.startswith(wanted + "-"):
                     return "improve", name, query
             return "improve", wanted, query
 
-    role = presets.detect(query)
-    if role is None:
-        # "another assistant" names the role after the qualifier, not before it.
-        trimmed = re.sub(r"^(?:one more|another|a second|second|new)\s+", "", low)
-        if trimmed != low:
-            role = presets.detect(trimmed)
-            if role is None:
-                for name in presets.names():
-                    if name in trimmed.split():
-                        role = presets.get(name)
-                        break
-    if role is None:
-        # "make me a bot that does X" with no known role is still a bot, not a
-        # marketplace search: the sentence asked for a profile, not a plugin.
-        if bool(words & BOT_WORDS) and any(
-            verb.strip() in words for verb in MAKE_VERBS
-        ):
-            return "create", "", query
-        return "install", "", text
-    # "my researcher" is the one you have, however the sentence starts.
-    mine = bool(re.search(r"\bmy\s+(?:[a-z0-9-]+\s+){0,4}(" + "|".join(
-        [re.escape(name) for name in names] + [re.escape(role.name)]
-    ) + r")\b", low))
-    asking = any(phrase in low for phrase in ASK_WORDS)
-    creating = not mine and (
-        bool(words & BOT_WORDS)
-        or any(low.startswith(verb.strip()) for verb in MAKE_VERBS)
-        # A role named inside a request, with no capability word anywhere, is a
-        # bot being asked for: "I need something that keeps my inbox at zero".
-        or (asking and not (words & CAPABILITY_WORDS))
-    )
-    # 2. a role that already has a bot is improved, unless the sentence asks for
-    #    a new one in as many words: a second researcher has to be possible
-    for name in names:
-        if name == role.name or name.startswith(role.name + "-"):
-            if creating:
-                return "create", "", query
-            return "improve", name, query
-    # 3. a role with no bot is created when the sentence asks for one
-    if creating or role.name in words:
+    bot_word = bool(words & BOT_WORDS)
+    # Read the ask from the whole sentence: "I need something that ..." keeps its
+    # verb before the politeness words are stripped.
+    asking = _asks_create(low) or _asks_create(stripped)
+    capability = bool(words & CAPABILITY_WORDS)
+    # A bot was asked for: by the word, by a role, or by "something that does X".
+    # The marketplace is never the answer to that, even when the sentence also
+    # says "skills" or "plugins".
+    if second and (bot_word or role is not None or asking):
         return "create", "", query
+    if bot_word and asking:
+        return "create", "", query
+    if role is not None and asking and not capability:
+        return "create", "", query
+    if role is not None and role.name in words and not capability:
+        return "create", "", query
+    if role is not None and not capability and not _has_phrase(stripped, ("install", "add", "get")):
+        if re.match(r"^(?:a|an|the)\s+" + re.escape(role.name), stripped) or _is_role_bare(stripped, role):
+            return "create", "", query
+    if role is not None:
+        for name in names:
+            if name == role.name or name.startswith(role.name + "-"):
+                return "improve", name, query
     return "install", "", text
+
+
+def _is_role_bare(low: str, role: Any) -> bool:
+    """"a researcher, please" and "researcher for papers" are bot asks."""
+    head = re.sub(r"[,!.?]+$", "", low).strip()
+    return head == role.name or head.startswith(role.name + " ")
 
 
 def _strip_name(text: str, name: str) -> str:
@@ -301,7 +337,14 @@ def _strip_name(text: str, name: str) -> str:
 def _improve_shape(text: str) -> bool:
     """"<bot>: <what>" is an improve, whatever word came before it."""
     head, sep, rest = (text or "").partition(":")
-    return bool(sep and rest.strip() and re.fullmatch(r"[a-z0-9][a-z0-9 ._-]*", head.strip().lower()))
+    if not sep or not rest.strip():
+        return False
+    if "://" in head:
+        return False
+    words = set(re.findall(r"[a-z0-9_-]+", head.lower()))
+    if words & BOT_WORDS:
+        return False
+    return bool(re.fullmatch(r"[a-z0-9][a-z0-9 ._-]*", head.strip().lower()))
 
 
 def handle_concierge(
@@ -342,13 +385,21 @@ def handle_concierge(
         _forget("", session_key)
         _repair_keys(store)
         return lifecycle.card(store)
+    first_word = low.split(" ", 1)[0]
+    if natural == "fire" and first_word not in ("fire", "reset"):
+        card.forget(session_key)
+        _forget("", session_key)
+        return (
+            "  Deleting a bot needs its number, so nothing is removed by a guess.\n"
+            "  /concierge bots, then /concierge fire <number>\n"
+        )
     if natural == "browse":
         from . import shelf
 
         card.forget(session_key)
         _forget("", session_key)
         return shelf.overview()
-    if low in UNDO_WORDS:
+    if low in UNDO_WORDS or re.match(r"^undo\b", low) or re.match(r"^roll ?back\b", low):
         card.forget(session_key)
         _forget("", session_key)
         return handle_undo(store=store, undo=undo, seams=seams)
@@ -462,7 +513,13 @@ def handle_concierge(
         here = "default"
     early = improve.plan(here, text)
     low = text.lower()
-    if early is not None and any(item.name in low or item.name.replace("-", " ") in low for item in early.items):
+    def _named(item: Any) -> bool:
+        for form in (item.name, item.name.replace("-", " ")):
+            if re.search(r"(?<![\w-])" + re.escape(form) + r"(?![\w-])", low):
+                return True
+        return False
+
+    if early is not None and any(_named(item) for item in early.items):
         return improve.receipt(early, improve.apply(early, store=store))
 
     if _asks_for_bot(text):
@@ -503,7 +560,7 @@ def handle_install(
         target = here
     if not target:
         aimed = re.search(r"\binto\s+([a-z0-9_-]+)\s*$", text, re.I)
-        if aimed:
+        if aimed and seams.profile_exists(aimed.group(1)):
             target = aimed.group(1)
             query = text[: aimed.start()].strip()
 

@@ -14,6 +14,7 @@ needs. Nothing here invents a skill: every name is read off the Hermes tree.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -99,9 +100,9 @@ _BY_NAME = {role.name: role for role in ROLES}
 CUES: dict[str, tuple[str, ...]] = {
     "researcher": ("research", "researcher", "sources", "papers", "arxiv",
                    "literature", "cite", "citations", "deep dive"),
-    "writer": ("write", "writer", "writing", "blog", "article", "copy",
-               "newsletter", "script", "draft", "thread"),
-    "coder": ("code", "coder", "coding", "dev", "developer", "programmer",
+    "writer": ("write", "writer", "writing", "blog", "article", "newsletter",
+               "copywriting", "draft", "thread"),
+    "coder": ("code", "coder", "coding", "developer", "programmer",
               "debug", "refactor", "repo", "pull request", "tests"),
     # "assistant" is the generic word, not a role: leave it out so
     # "hire a research assistant" lands on researcher.
@@ -112,17 +113,19 @@ CUES: dict[str, tuple[str, ...]] = {
                   "general assistant", "personal assistant", "virtual assistant",
                   "assistant bot", "my assistant", "an assistant",
                   "office assistant", "executive assistant"),
-    "marketer": ("marketing", "marketer", "seo", "social", "campaign", "ads",
-                 "audience", "growth", "instagram", "twitter", "reddit"),
-    "watcher": ("watch", "watcher", "monitor", "alert", "ping me", "track",
-                "notify", "keep an eye", "when it changes", "changes"),
+    "marketer": ("marketing", "marketer", "seo", "campaign", "audience", "growth",
+                 "instagram", "twitter", "reddit"),
+    # Bare "watch", "track" and "changes" are everyday words; only a phrase that
+    # means monitoring counts, or every fitness app becomes a watcher.
+    "watcher": ("watcher", "monitor", "alert", "ping me", "pings me", "notify",
+                "keep an eye", "keeps an eye", "when it changes", "keep track"),
     "designer": ("design", "designer", "mockup", "mockups", "ui", "ux",
-                 "brand", "theme", "images", "illustration", "logo"),
-    "analyst": ("analyse", "analyze", "analyst", "analysis", "data",
-                "spreadsheet", "excel", "metrics", "numbers", "chart", "dashboard"),
+                 "brand", "illustration", "logo"),
+    "analyst": ("analyse", "analyze", "analyst", "analysis", "spreadsheet",
+                "excel", "metrics", "chart", "dashboard"),
     "tutor": ("tutor", "teach", "teacher", "explain", "study", "learn",
               "flashcards", "quiz", "practice", "homework"),
-    "planner": ("plan", "planner", "planning", "roadmap", "project", "sprint",
+    "planner": ("planner", "planning", "plan my", "roadmap", "project", "sprint",
                 "priorities", "decision", "schedule my", "keep me on"),
 }
 
@@ -150,7 +153,10 @@ def _forms(cue: str) -> tuple[str, ...]:
 
 def detect(sentence: str) -> Role | None:
     """Best role for a sentence, or None. Longest cue wins, then roster order."""
-    text = " " + " ".join((sentence or "").lower().split()) + " "
+    # Punctuation is glued to words often enough to hide a role: "researcher," and
+    # "writer:" both have to read as the word.
+    cleaned = re.sub(r"[^a-z0-9\s'-]+", " ", (sentence or "").lower())
+    text = " " + " ".join(cleaned.split()) + " "
     best: tuple[int, int] | None = None
     winner: Role | None = None
     for index, (role_name, cue) in enumerate(_CUES):
