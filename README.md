@@ -115,7 +115,9 @@ instructions that make the profile behave, then find out it was the wrong six.
 
 Concierge removes that stretch. You say the job and it picks the skills that finish the job,
 writes the soul that makes the bot act like that job, then reads the disk before it calls it done.
-It copies your plugin switches too, so the bot starts from your setup and not the app's defaults.
+It copies your plugin switches and your model login too, so the bot starts from your setup and
+answers on its first message. The login copy has every messaging channel stripped, so two profiles
+never fight over one bot token.
 A researcher arrives on its first sentence able to read papers, cite sources, save notes and get
 past a blocked page, without you knowing those four skills exist.
 

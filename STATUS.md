@@ -5,10 +5,10 @@ Date: 2026-11-06
 
 ## Release
 
-- `plugin.yaml` version `0.3.0`.
-- `docs/catalog-entry.yaml` pins the release sha and `version: "0.3.0"`; the entry passes Hermes core's own
+- `plugin.yaml` version `0.3.1`.
+- `docs/catalog-entry.yaml` pins the release sha and `version: "0.3.1"`; the entry passes Hermes core's own
   `scripts/validate_plugin_catalog.py` (exit 0).
-- 190 tests, 0 model calls, 0 network calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
+- 193 tests, 0 model calls, 0 network calls, 2 skipped (live-only). `python -m unittest discover -s tests`: OK.
 - Live catalog at match time: 1,064 entries. Matcher: 32/32 top-3, 25/32 first, 8/8 nonsense refused.
 - The sentence search installs from both shelves: the plugin catalog and the skill registries, into
   this profile or into `into <bot>`. Proven live for plugin -> bot, skill -> bot, skill -> this

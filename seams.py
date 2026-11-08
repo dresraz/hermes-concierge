@@ -225,6 +225,41 @@ def create_profile(
     return home
 
 
+def share_credentials(target_home: Path, source_home: Optional[Path] = None) -> list:
+    """Give a new bot the same model login this profile uses.
+
+    A bot with no credentials is a bot that does not answer, which is the
+    friction this removes: ``.env`` and ``auth.json`` are copied from the
+    profile that made it. Messaging channel keys are stripped from the copy, so
+    two profiles never fight over one bot token.
+    """
+    import shutil
+    from pathlib import Path as _Path
+
+    source = _Path(str(source_home)) if source_home is not None else home()
+    target = _Path(str(target_home))
+    copied = []
+    for name in (".env", "auth.json"):
+        origin = source / name
+        if not origin.is_file():
+            continue
+        try:
+            shutil.copy2(origin, target / name)
+            (target / name).chmod(0o600)
+            copied.append(name)
+        except OSError:
+            continue
+    env = target / ".env"
+    if env.is_file():
+        try:
+            from hermes_cli.profile_channels import strip_channel_env_file
+
+            strip_channel_env_file(env)
+        except Exception:  # no channel inventory: the copy stays, minus nothing
+            pass
+    return copied
+
+
 def _bundled_root(skills_sync=None, get_bundled_skills_dir=None) -> Path:
     """Find the directory that actually holds the bundled skill tree.
 

@@ -416,6 +416,10 @@ def handle_hire(
     # card reports the generic soul the hire flow wrote a moment earlier. A preset
     # failure never costs the bot: it exists, and the receipt says what is missing.
     try:
+        key_lines = _share_keys(plan.name, path)
+    except Exception as exc:
+        key_lines = ["  keys     not copied: {}".format(type(exc).__name__)]
+    try:
         plugin_lines = _inherit_plugins(path)
     except Exception as exc:
         plugin_lines = ["  plugins  stock defaults, copy failed: {}".format(type(exc).__name__)]
@@ -447,6 +451,7 @@ def handle_hire(
     return "\n".join(
         [head, ""]
         + ["  " + line for line in lines]
+        + key_lines
         + plugin_lines
         + preset_lines
         + extra_lines
@@ -457,6 +462,16 @@ def handle_hire(
             "",
         ]
     )
+
+
+def _share_keys(name: str, profile_path: Any) -> list[str]:
+    """A bot needs the same model login, or it cannot answer at all."""
+    from . import seams
+
+    copied = seams.share_credentials(profile_path)
+    if not copied:
+        return ["  keys     none to copy, this profile has no credentials yet"]
+    return ["  keys     your login, {}".format(", ".join(copied))]
 
 
 def _inherit_plugins(profile_path: Any) -> list[str]:
