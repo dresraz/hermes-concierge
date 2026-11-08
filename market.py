@@ -88,10 +88,34 @@ def search(query: str, *, limit: int = 2,
 
 
 def _hub_search(query: str, limit: int) -> list:
-    from hermes_cli.skills_hub import _sources
-    from tools.skills_hub_search import unified_search
+    """Registry hits through the public CLI, parsed into the shape the card wants."""
+    import json
+    import subprocess
+    from types import SimpleNamespace
 
-    return unified_search(query, _sources(), source_filter="all", limit=limit)
+    from . import seams
+
+    try:
+        done = subprocess.run(
+            [seams._hermes(), "skills", "search", query, "--json", "--limit", str(limit)],
+            capture_output=True, text=True, timeout=60,
+        )
+        rows = json.loads(done.stdout or "[]")
+    except Exception:
+        return []
+    if not isinstance(rows, list):
+        return []
+    return [
+        SimpleNamespace(
+            name=str(row.get("name") or row.get("identifier") or ""),
+            identifier=str(row.get("identifier") or row.get("name") or ""),
+            description=str(row.get("description") or ""),
+            source=str(row.get("source") or ""),
+            trust_level=str(row.get("trust_level") or ""),
+        )
+        for row in rows
+        if isinstance(row, dict)
+    ]
 
 
 def render(text: str, offers: list, target: str) -> str:

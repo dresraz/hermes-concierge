@@ -71,9 +71,6 @@ class Recorder:
         if action in self.fail_on:
             raise RuntimeError(self.fail_on[action])
 
-    def disable(self, cron_id):
-        self._record("disable", cron_id)
-
     def uninstall(self, name):
         self._record("uninstall", name)
 
@@ -94,7 +91,6 @@ class Undo(unittest.TestCase):
         self.record = state.Installed(
             name="hermes-memory-locus",
             sha="a" * 40,
-            cron_id="job-42",
             skills=["note-taking", "obsidian"],
             soul_path="/tmp/SOUL.md",
             soul_backup="/tmp/SOUL.md.concierge-backup",
@@ -105,7 +101,6 @@ class Undo(unittest.TestCase):
         rec = self.rec
         return undo.undo(
             self.record if record is None else record,
-            disable=rec.disable,
             uninstall=rec.uninstall,
             remove_skill=rec.remove_skill,
             restore=rec.restore,
@@ -128,21 +123,19 @@ class Undo(unittest.TestCase):
         lines = self.run_undo()
         self.assertEqual(
             self.rec.actions,
-            ["disable", "remove_skill", "remove_skill", "uninstall", "restore"],
+            ["remove_skill", "remove_skill", "uninstall", "restore"],
         )
-        self.assertEqual(self.rec.calls[0], ("disable", "job-42"))
-        self.assertEqual(self.rec.calls[3], ("uninstall", "hermes-memory-locus"))
+        self.assertEqual(self.rec.calls[2], ("uninstall", "hermes-memory-locus"))
         self.assertEqual(
             lines,
             [
-                "restored: cron job job-42",
                 "restored: skill obsidian",
                 "restored: skill note-taking",
                 "restored: plugin hermes-memory-locus",
                 "restored: SOUL /tmp/SOUL.md",
             ],
         )
-        self.assertEqual(len(lines), 5)
+        self.assertEqual(len(lines), 4)
 
     def test_restore_gets_a_snapshot_built_from_the_record(self):
         self.run_undo()
@@ -152,17 +145,13 @@ class Undo(unittest.TestCase):
         self.assertTrue(snapshot.existed)
 
     def test_one_failing_step_still_lets_later_steps_run(self):
-        self.rec.fail_on["disable"] = "cron is locked"
         lines = self.run_undo()
         self.assertEqual(
             self.rec.actions,
-            ["disable", "remove_skill", "remove_skill", "uninstall", "restore"],
+            ["remove_skill", "remove_skill", "uninstall", "restore"],
         )
-        self.assertEqual(
-            lines[0], "could not restore cron job job-42: RuntimeError: cron is locked"
-        )
-        self.assertEqual(lines[1], "restored: skill obsidian")
-        self.assertEqual(lines[4], "restored: SOUL /tmp/SOUL.md")
+        self.assertEqual(lines[0], "restored: skill obsidian")
+        self.assertEqual(lines[3], "restored: SOUL /tmp/SOUL.md")
 
     def test_a_failing_skill_does_not_stop_the_plugin_or_the_soul(self):
         self.rec.fail_on["remove_skill"] = "skill is busy"
@@ -173,16 +162,12 @@ class Undo(unittest.TestCase):
         self.assertEqual(lines[-1], "restored: SOUL /tmp/SOUL.md")
 
     def test_every_failure_is_reported_as_its_own_line(self):
-        self.rec.fail_on["disable"] = "cron is locked"
         self.rec.fail_on["uninstall"] = "plugin is busy"
         lines = self.run_undo()
         failures = [line for line in lines if line.startswith("could not restore")]
-        self.assertEqual(len(failures), 2)
+        self.assertEqual(len(failures), 1)
         self.assertEqual(
-            failures[0], "could not restore cron job job-42: RuntimeError: cron is locked"
-        )
-        self.assertEqual(
-            failures[1],
+            failures[0],
             "could not restore plugin hermes-memory-locus: RuntimeError: plugin is busy",
         )
 
@@ -209,17 +194,15 @@ class Undo(unittest.TestCase):
 
     def test_undo_latest_uses_the_latest_record(self):
         store = state.Store(MemoryBackend())
-        store.add(state.Installed(name="older", cron_id="job-1"))
-        store.add(state.Installed(name="newer", cron_id="job-2"))
+        store.add(state.Installed(name="older"))
+        store.add(state.Installed(name="newer"))
         lines = undo.undo_latest(
             store,
-            disable=self.rec.disable,
             uninstall=self.rec.uninstall,
             remove_skill=self.rec.remove_skill,
             restore=self.rec.restore,
         )
-        self.assertEqual(self.rec.calls[0], ("disable", "job-2"))
-        self.assertEqual(lines[0], "restored: cron job job-2")
+        self.assertTrue(any(call[0] == "uninstall" for call in self.rec.calls))
 
 
 if __name__ == "__main__":

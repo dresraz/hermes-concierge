@@ -389,6 +389,10 @@ number there would be a guess.
   the pinned plugin's declared packages are the safe default.
 - Installs only through `hermes_cli`'s catalog install, so the same platform check, scan, dependency consent and pinning that `hermes plugins install` gives you apply here.
 - A `caution` rating costs a second explicit yes, as text, so it reaches you in the CLI, the TUI and the gateway alike. A `dangerous` rating is never installed.
+- On a messaging surface it is read-only: a shared chat can list bots and search, but install,
+  create, improve, fire, reset and undo are refused unless the owner sets
+  `plugins.entries.concierge.allow_gateway: true`. The card's bare yes is answered on
+  `post_gateway_admission`, after the gateway has authenticated the sender.
 - The card never asks for, holds, or prints a secret. If an entry needs one, it shows the requirement label and nothing else.
 - `default` cannot be fired; it can only be reset to what Concierge changed.
 - Anything Concierge did not create cannot be fired through Concierge.

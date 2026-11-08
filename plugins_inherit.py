@@ -140,10 +140,10 @@ def inherit(profile_home: Any, root: Optional[Any] = None) -> Report:
 
 def _read(path: Path) -> dict:
     try:
-        import yaml
+        from hermes_yaml import safe_load
 
         with path.open("r", encoding="utf-8") as handle:
-            data = yaml.safe_load(handle)
+            data = safe_load(handle)
     except Exception:
         return {}
     return data if isinstance(data, dict) else {}
@@ -151,10 +151,10 @@ def _read(path: Path) -> dict:
 
 def _write(path: Path, data: dict) -> bool:
     try:
-        import yaml
+        from hermes_yaml import safe_dump
 
         path.parent.mkdir(parents=True, exist_ok=True)
-        text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+        text = safe_dump(data, sort_keys=False, allow_unicode=True)
         tmp = path.with_suffix(".yaml.tmp")
         tmp.write_text(text, encoding="utf-8")
         tmp.replace(path)

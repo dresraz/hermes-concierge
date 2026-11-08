@@ -202,6 +202,9 @@ def handle_concierge(
 
         store = state.Store()
 
+    refusal = _gateway_refusal(raw)
+    if refusal:
+        return refusal
     text = _clean(raw)
     low = text.lower()
     if not text:
@@ -738,9 +741,54 @@ def _seams() -> Any:
     return seams
 
 
+# The surface this plugin is running on, captured at register. `cli`, `tui`,
+# `desktop` and `acp` are the operator's own session; anything else is a messaging
+# platform, where a stranger in a group chat could otherwise install code.
+_LOCAL_SURFACES = frozenset({"", "cli", "tui", "desktop", "acp", "webui"})
+_CTX: Any = None
+_READ_ONLY = frozenset({"", "help", "?", "h", "commands", "-h", "--help", "bots", "browse", "shelf"})
+
+
+def _surface() -> str:
+    try:
+        return str(_CTX.session_surface() or "").lower() if _CTX is not None else ""
+    except Exception:
+        return ""
+
+
+def _allow_gateway() -> bool:
+    """The owner's opt-in: plugins.entries.concierge.allow_gateway."""
+    try:
+        from hermes_cli.config import load_config_readonly
+
+        cfg = load_config_readonly() or {}
+        entry = ((cfg.get("plugins") or {}).get("entries") or {}).get("concierge") or {}
+        return entry.get("allow_gateway") is True
+    except Exception:
+        return False
+
+
+def _gateway_refusal(raw: Any) -> Optional[str]:
+    """A shared chat may look, not change. Returns the refusal, or None."""
+    if _surface() in _LOCAL_SURFACES or _allow_gateway():
+        return None
+    text = _clean(raw)
+    low = text.lower()
+    if low in _READ_ONLY or low.split(" ", 1)[0] in _READ_ONLY:
+        return None
+    return (
+        "  Concierge changes this machine, so it does not run from a shared chat.\n"
+        "  Ask the owner, or set plugins.entries.concierge.allow_gateway: true.\n"
+    )
+
+
 def register(ctx: Any) -> None:
     """Wire one slash command, plus the one bare word a shown catalog card accepts."""
+    global _CTX
+
     from . import reply
+
+    _CTX = ctx
 
     ctx.register_command(
         "concierge",
@@ -750,7 +798,7 @@ def register(ctx: Any) -> None:
     )
     # On a messaging surface the catalog card's "yes" is a bare word. The CLI has no such seam, so
     # there the card says /concierge yes and this hook simply never fires.
-    ctx.register_hook(reply.HOOK, reply.on_gateway_dispatch)
+    ctx.register_hook(reply.HOOK, reply.on_admission)
 
 
 __all__ = [

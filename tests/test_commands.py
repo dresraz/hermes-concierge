@@ -211,6 +211,45 @@ class Router(unittest.TestCase):
             self.assertEqual(commands._route("stripe payments")[0], "install")
 
 
+class Gateway(unittest.TestCase):
+    """A shared chat may look, never change, unless the owner opts in."""
+
+    def setUp(self):
+        self.saved = commands._CTX
+        self.addCleanup(lambda: setattr(commands, "_CTX", self.saved))
+
+    class Ctx:
+        def __init__(self, surface):
+            self.surface = surface
+
+        def session_surface(self):
+            return self.surface
+
+    def test_a_gateway_refuses_a_changing_sentence(self):
+        commands._CTX = self.Ctx("telegram")
+        text = commands.handle_concierge("make me a researcher", store=store())
+        self.assertIn("does not run from a shared chat", text)
+
+    def test_a_gateway_may_still_look(self):
+        commands._CTX = self.Ctx("telegram")
+        self.assertIn("CONCIERGE", commands.handle_concierge("", store=store()))
+        self.assertTrue(commands.handle_concierge("browse notes", store=store()).startswith("  LOOKING FOR"))
+
+    def test_the_owner_can_open_the_gateway(self):
+        commands._CTX = self.Ctx("telegram")
+        saved = commands._allow_gateway
+        commands._allow_gateway = lambda: True
+        try:
+            text = commands.handle_concierge("help")
+        finally:
+            commands._allow_gateway = saved
+        self.assertNotIn("shared chat", text)
+
+    def test_the_local_session_is_never_gated(self):
+        commands._CTX = self.Ctx("cli")
+        self.assertNotIn("shared chat", commands.handle_concierge("help"))
+
+
 class OldWords(unittest.TestCase):
     """hire and train are gone, and a stale habit gets a pointer, not a bot."""
 

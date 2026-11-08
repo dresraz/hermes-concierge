@@ -10,7 +10,7 @@ description: >-
   numbered shelf of bots, skills and the plugin catalog; the number acts on the row. Installs go through
   Hermes's own installer and scan gate; every action prints a receipt read back off the disk, and
   /concierge undo restores exactly what it wrote, including the soul bytes a rule replaced.
-  Disclosure: registers one /concierge command and one pre_gateway_dispatch hook (reply words in the
+  Disclosure: registers one /concierge command and one post_gateway_admission hook (reply words in the
   messaging gateway). Network calls: it fetches the plugin catalog index from GitHub, the skill
   registries behind a skill search, and one plugin manifest at its pinned commit for the dependency
   line on the card. It reads the active HERMES_HOME (profiles, plugin and skill directories) and
@@ -25,11 +25,11 @@ tier: community
 category: general
 requires_hermes: ">=0.22.7"
 docs_url: https://github.com/dresraz/hermes-concierge#readme
-version: "0.2.3"
+version: "0.3.0"
 platforms: []
 capabilities:
   provides_tools: []
   provides_hooks:
-    - pre_gateway_dispatch
+    - post_gateway_admission
   provides_middleware: []
   requires_env: []

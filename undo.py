@@ -1,7 +1,7 @@
 """Undo is the other half of install: reverse every step, in reverse order, and say so.
 
 Every action that touches the machine is injected, so a test can run undo
-without a cron store, a skills directory or a real SOUL file. The defaults are
+without a skills directory or a real SOUL file. The defaults are
 lazy factories: they import core only when a step actually has work to do, so
 an empty field never triggers an import.
 """
@@ -24,40 +24,6 @@ class _Snapshot:
     path: str
     backup: str
     existed: bool
-
-
-def _first_callable(module_names: Sequence[str], attr_names: Sequence[str], what: str) -> Callable:
-    """Return the first callable core offers for `what`.
-
-    Core spells these helpers in more than one place, so try the known modules
-    and the known spellings before giving up.
-    """
-    for module_name in module_names:
-        try:
-            module = importlib.import_module(module_name)
-        except ImportError:
-            continue
-        for attr in attr_names:
-            candidate = getattr(module, attr, None)
-            if callable(candidate):
-                return candidate
-    raise AttributeError("no core {} found in {}".format(what, ", ".join(module_names)))
-
-
-def _default_disable() -> Callable[[str], Any]:
-    """Core call that takes a cron job id away."""
-    return _first_callable(
-        ("cron.jobs", "cron.scheduler", "hermes_cli.cron", "hermes_cli.cron_cli"),
-        (
-            "remove_job",
-            "delete_job",
-            "disable_job",
-            "remove_cron_job",
-            "delete_cron_job",
-            "disable_cron_job",
-        ),
-        "cron job removal",
-    )
 
 
 def _default_remove_skill() -> Callable[[str], Any]:
@@ -158,20 +124,11 @@ def undo(
 ) -> list:
     """Reverse one install, in reverse order, and report one plain line per action.
 
-    The order is the reverse of the install: cron job, then skills, then the
+    The order is the reverse of the install: skills, then the
     plugin itself, then the SOUL file. A field that is empty is skipped
     silently. A step that raises is reported and the remaining steps still run.
     """
     lines: list = []
-
-    cron_id = getattr(record, "cron_id", "") or ""
-    if cron_id:
-
-        def _do_disable() -> None:
-            step = disable if disable is not None else _default_disable()
-            step(cron_id)
-
-        _run(lines, "cron job {}".format(cron_id), _do_disable)
 
     skills = list(getattr(record, "skills", None) or [])
     extra_skills = list(getattr(record, "remove_skills", None) or [])

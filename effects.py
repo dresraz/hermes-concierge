@@ -1,7 +1,7 @@
 """Effects: the side effects Concierge performs, with every core call injected.
 
 This module is pure plumbing. It touches the filesystem, the skills hub and
-the cron store only through the arguments a caller hands it, so tests can run
+the filesystem only through the arguments a caller hands it, so tests can run
 against temporary directories and fake installers without importing core.
 
 The real runtime bindings live in lazy factory functions at the bottom of this
@@ -159,24 +159,3 @@ def remove_skill_dir(path: str) -> bool:
     shutil.rmtree(target)
     return not os.path.exists(target)
 
-
-def arm_cron(prompt: str, creator: Callable[..., str], schedule: str = "* * * * *") -> str:
-    """Create a scheduled job through the injected creator and return its id."""
-    return creator(prompt=prompt, schedule=schedule)
-
-
-def default_installer(name: str) -> Any:
-    """Real skills hub installer, imported lazily so this module stays pure."""
-    from hermes_cli.skills_hub import do_install
-
-    return do_install(name)
-
-
-def default_cron_creator(prompt: str, schedule: str, **kwargs: Any) -> str:
-    """Real cron job creator, imported lazily so this module stays pure."""
-    from cron.jobs import create_job
-
-    job = create_job(prompt=prompt, schedule=schedule, **kwargs)
-    if isinstance(job, dict):
-        return str(job.get("id", ""))
-    return str(job)

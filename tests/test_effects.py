@@ -218,30 +218,6 @@ class InstallSkills(unittest.TestCase):
         self.assertEqual(records, [{"name": "alpha", "result": None}])
 
 
-class ArmCron(unittest.TestCase):
-    def test_creator_receives_prompt_and_schedule_as_keywords(self):
-        seen = {}
-
-        def creator(prompt, schedule):
-            seen["prompt"] = prompt
-            seen["schedule"] = schedule
-            return "job-123"
-
-        job_id = effects.arm_cron("do the thing", creator)
-        self.assertEqual(job_id, "job-123")
-        self.assertEqual(seen, {"prompt": "do the thing", "schedule": "* * * * *"})
-
-    def test_custom_schedule_is_passed_through(self):
-        seen = {}
-
-        def creator(prompt, schedule):
-            seen["schedule"] = schedule
-            return "job-9"
-
-        self.assertEqual(effects.arm_cron("ping", creator, "0 9 * * *"), "job-9")
-        self.assertEqual(seen["schedule"], "0 9 * * *")
-
-
 class ImportPurity(unittest.TestCase):
     def test_module_level_imports_are_stdlib_only(self):
         tree = ast.parse(SOURCE.read_text())

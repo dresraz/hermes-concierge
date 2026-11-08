@@ -18,55 +18,42 @@ class BareAnswer(unittest.TestCase):
     def setUp(self):
         card._PENDING.clear()
 
-    def test_no_card_means_the_word_is_left_alone(self):
-        self.assertIsNone(reply.rewrite("yes", "chat-a"))
-
-    def test_the_chat_that_was_shown_the_card_may_answer_with_one_word(self):
-        card._PENDING["chat-a"] = {"entry": object(), "entries": []}
-        self.assertEqual(reply.rewrite("yes", "chat-a"), "/concierge yes")
-        self.assertEqual(reply.rewrite("  Yep ", "chat-a"), "/concierge yes")
-        self.assertEqual(reply.rewrite("nope", "chat-a"), "/concierge no")
-        self.assertEqual(reply.rewrite("more", "chat-a"), "/concierge more")
-
-    def test_another_chat_cannot_answer_it(self):
-        card._PENDING["chat-a"] = {"entry": object(), "entries": []}
-        self.assertIsNone(reply.rewrite("yes", "chat-b"))
+    def test_a_bare_word_is_recognised(self):
+        self.assertEqual(reply.answer_for("yes"), "yes")
+        self.assertEqual(reply.answer_for("  Yep "), "yes")
+        self.assertEqual(reply.answer_for("nope"), "no")
+        self.assertEqual(reply.answer_for("more"), "more")
 
     def test_a_sentence_is_left_to_the_agent(self):
-        card._PENDING["chat-a"] = {"entry": object(), "entries": []}
-        self.assertIsNone(reply.rewrite("yes but change the colors to blue", "chat-a"))
+        self.assertEqual(reply.answer_for("yes but change the colors to blue"), "")
 
 
-class GatewayDispatch(unittest.TestCase):
+class Admission(unittest.TestCase):
+    """post_gateway_admission: after auth, with the conversation's session key."""
+
     def setUp(self):
         card._PENDING.clear()
 
-    def _event(self, text):
-        return SimpleNamespace(text=text, source=SimpleNamespace(chat_id="42"))
+    def test_no_card_means_the_word_is_not_consumed(self):
+        self.assertIsNone(reply.on_admission(text="yes", session_key="chat-a"))
 
-    def _gateway(self, key="chat-a"):
-        return SimpleNamespace(_session_key_for_source=lambda source: key)
-
-    def test_a_bare_yes_becomes_the_command(self):
+    def test_the_chat_that_was_shown_the_card_gets_the_answer(self):
         card._PENDING["chat-a"] = {"entry": object(), "entries": []}
-        result = reply.on_gateway_dispatch(event=self._event("yes"), gateway=self._gateway())
-        self.assertEqual(result, {"action": "rewrite", "text": "/concierge yes"})
+        result = reply.on_admission(text="no", session_key="chat-a")
+        self.assertEqual(result["action"], "handled")
+        self.assertIn("Nothing installed", result["reply"])
 
-    def test_ordinary_messages_pass_through_untouched(self):
+    def test_another_chat_cannot_answer_it(self):
         card._PENDING["chat-a"] = {"entry": object(), "entries": []}
-        self.assertIsNone(
-            reply.on_gateway_dispatch(event=self._event("what is on the card again?"), gateway=self._gateway())
-        )
-        self.assertIsNone(reply.on_gateway_dispatch(event=self._event("yes"), gateway=self._gateway("chat-b")))
+        self.assertIsNone(reply.on_admission(text="yes", session_key="chat-b"))
 
-    def test_an_event_without_a_source_is_ignored(self):
-        self.assertIsNone(
-            reply.on_gateway_dispatch(event=SimpleNamespace(text="yes", source=None), gateway=self._gateway())
-        )
-
-    def test_a_gateway_without_the_key_helper_installs_nothing(self):
+    def test_a_sentence_is_not_consumed(self):
         card._PENDING["chat-a"] = {"entry": object(), "entries": []}
-        self.assertIsNone(reply.on_gateway_dispatch(event=self._event("yes"), gateway=object()))
+        self.assertIsNone(reply.on_admission(text="yes, and also make it blue", session_key="chat-a"))
+
+    def test_no_session_key_means_no_answer(self):
+        card._PENDING[""] = {"entry": object(), "entries": []}
+        self.assertIsNone(reply.on_admission(text="yes"))
 
 
 if __name__ == "__main__":

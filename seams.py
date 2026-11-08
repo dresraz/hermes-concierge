@@ -111,13 +111,11 @@ def _verdict_of(entry, target) -> tuple:
 
 
 def enable(installed_name: str) -> tuple:
-    """Turn the plugin on through core's admission transaction. Returns (enabled, notes)."""
-    from hermes_cli.plugins_cmd import _set_plugin_enabled
-
-    try:
-        _set_plugin_enabled(installed_name, enable=True)
-    except Exception as exc:  # installed but not enabled is a real outcome; name the cause
-        return False, [f"installed but not enabled: {type(exc).__name__}: {exc}"]
+    """Turn the plugin on with the CLI the operator would type. Returns (enabled, notes)."""
+    code, output = _run_core(["plugins", "enable", installed_name], timeout=120)
+    if code != 0:
+        tail = _last_lines(output, 2)
+        return False, ["installed but not enabled: {}".format(tail or "hermes exited " + str(code))]
     return True, []
 
 
@@ -328,10 +326,23 @@ def remove_plugin(name: str) -> None:
 
 
 def install_metadata(name: str) -> dict:
-    """The installer-owned record for an installed plugin (``.install-metadata.json``)."""
-    from hermes_cli.plugins_cmd import _read_install_metadata
+    """The installer-owned record for an installed plugin, read off its folder.
 
-    return (_read_install_metadata() or {}).get(name) or {}
+    The installer writes ``.install-metadata.json`` beside the plugin; that file
+    is the record, so reading it needs no private core call.
+    """
+    home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+    for folder in _plugin_dirs(home):
+        if folder.name != name:
+            continue
+        record = folder / ".install-metadata.json"
+        try:
+            import json
+
+            return json.loads(record.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return {}
+    return {}
 
 
 def plugin_installed(name: str) -> bool:
@@ -407,10 +418,10 @@ def _specs_in(name: str, text: str) -> list[str]:
             return specs
         poetry = ((data.get("tool") or {}).get("poetry") or {}).get("dependencies") or {}
         return [str(k) for k in poetry if str(k).lower() != "python"]
-    import yaml
+    from hermes_yaml import safe_load
 
     try:
-        data = yaml.safe_load(text) or {}
+        data = safe_load(text) or {}
     except Exception:
         return []
     for key in ("python_dependencies", "pip_dependencies", "install_requirements"):
@@ -495,9 +506,9 @@ def plugin_dir_in(home: Path, names: Sequence[str]) -> Optional[Path]:
         if folder.name in wanted:
             return folder
         try:
-            import yaml
+            from hermes_yaml import safe_load
 
-            data = yaml.safe_load((folder / "plugin.yaml").read_text(encoding="utf-8")) or {}
+            data = safe_load((folder / "plugin.yaml").read_text(encoding="utf-8")) or {}
         except Exception:
             continue
         if str(data.get("name") or "") in wanted:
@@ -508,9 +519,9 @@ def plugin_dir_in(home: Path, names: Sequence[str]) -> Optional[Path]:
 def enabled_in(home: Path, name: str) -> bool:
     """True while *home* switches the plugin on. Absent from both lists counts as on."""
     try:
-        import yaml
+        from hermes_yaml import safe_load
 
-        data = yaml.safe_load((Path(home) / "config.yaml").read_text(encoding="utf-8")) or {}
+        data = safe_load((Path(home) / "config.yaml").read_text(encoding="utf-8")) or {}
     except Exception:
         return True
     plugins = data.get("plugins") or {}
