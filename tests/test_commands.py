@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness  # noqa: E402
@@ -186,6 +187,23 @@ class Improve(unittest.TestCase):
             "improve inbox-bot: quantum flux capacitor", store=store()
         )
         self.assertIn("Nothing in the marketplace fits that", text)
+
+
+class Router(unittest.TestCase):
+    """One sentence, one decision, using the bots that exist."""
+
+    def test_a_new_role_creates(self):
+        with mock.patch.object(commands, "_bot_names", lambda: ["default"]):
+            self.assertEqual(commands._route("a researcher that reads papers")[0], "create")
+
+    def test_a_role_that_exists_is_improved_not_duplicated(self):
+        with mock.patch.object(commands, "_bot_names", lambda: ["default", "researcher-bot"]):
+            kind, bot, _ = commands._route("make my researcher better at citations")
+            self.assertEqual((kind, bot), ("improve", "researcher-bot"))
+
+    def test_no_role_is_an_install(self):
+        with mock.patch.object(commands, "_bot_names", lambda: ["default"]):
+            self.assertEqual(commands._route("stripe payments")[0], "install")
 
 
 class OldWords(unittest.TestCase):

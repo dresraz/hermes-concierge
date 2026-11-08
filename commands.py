@@ -102,6 +102,42 @@ def _wants_a_bot(text: str) -> bool:
     return any(low.startswith(verb) for verb in MAKE_VERBS)
 
 
+def _route(text: str) -> tuple:
+    """One sentence, one decision, using the bots that actually exist.
+
+    A bot you already have wins over a new one: naming a role that exists
+    improves that bot instead of making a twin. A role with no bot creates one.
+    Everything else is an install. This is the whole front door.
+    """
+    from . import presets
+
+    low = " ".join((text or "").lower().split())
+    names = [name for name in _bot_names() if name != "default"]
+    # 1. an existing bot is named outright, longest name first so a suffix
+    #    like "-bot" never steals the match from the full name
+    for name in sorted(names, key=len, reverse=True):
+        if name in low:
+            return "improve", name, text
+    role = presets.detect(text)
+    if role is None:
+        return "install", "", text
+    # 2. a role that already has a bot is improved, not duplicated
+    for name in names:
+        if name == role.name or name.startswith(role.name + "-"):
+            return "improve", name, text
+    # 3. a role with no bot is created when the sentence asks for one
+    words = set(re.findall(r"[a-z0-9'-]+", low))
+    if words & BOT_WORDS or any(low.startswith(verb) for verb in MAKE_VERBS) or role.name in words:
+        return "create", "", text
+    return "install", "", text
+
+
+def _strip_name(text: str, name: str) -> str:
+    """The ask without the bot's name in it."""
+    out = re.sub(r"\b" + re.escape(name) + r"\b", " ", text, count=1, flags=re.I)
+    return " ".join(out.split()).strip(" :,-") or text
+
+
 def _improve_shape(text: str) -> bool:
     """"<bot>: <what>" is an improve, whatever word came before it."""
     head, sep, rest = (text or "").partition(":")
@@ -203,11 +239,35 @@ def handle_concierge(
         card.forget(session_key)
         _forget("", session_key)
         return handle_improve(text, store=store, known=known)
-    if _wants_a_bot(text):
-        card.forget(session_key)
-        _forget("", session_key)
-        return handle_hire(text, store=store, hire=hire, known=known)
-    return card.handle(text, session_key=session_key)
+
+    intent, bot, sentence = _route(text)
+    card.forget(session_key)
+    _forget("", session_key)
+    if intent == "create":
+        return handle_hire(sentence, store=store, hire=hire, known=known)
+    if intent == "improve":
+        return handle_improve(_strip_name(sentence, bot), store=store, known=known, bot=bot)
+
+    # No bot named: a plugin or a skill. A skill this machine already ships wins
+    # when the sentence names it, because it costs nothing and adds no tools;
+    # otherwise the catalog answers first, and the skills on disk get a turn
+    # only when the catalog has nothing.
+    from . import improve, seams
+
+    here = seams.current_profile()
+    if improve.resolve(here) is None:
+        here = "default"
+    early = improve.plan(here, text)
+    low = text.lower()
+    if early is not None and any(item.name in low or item.name.replace("-", " ") in low for item in early.items):
+        return improve.receipt(early, improve.apply(early, store=store))
+
+    answer = card.handle(text, session_key=session_key)
+    if "best match  none" in answer:
+        plan = improve.plan(here, text)
+        if plan is not None and plan.items:
+            return improve.receipt(plan, improve.apply(plan, store=store))
+    return answer
 
 
 def handle_install(
@@ -374,6 +434,7 @@ def handle_improve(
     *,
     store: Any = None,
     known: Optional[Sequence[str]] = None,
+    bot: Optional[str] = None,
 ) -> str:
     """Make an existing bot better: a skill from the marketplace, or one rule.
 
@@ -389,7 +450,7 @@ def handle_improve(
             "Improve which bot? Say it plainly:\n"
             "  /concierge improve researcher-bot: it needs to read scanned PDFs\n"
         )
-    bot, sentence = training.guess_bot(text)
+    bot, sentence = (bot, text) if bot else training.guess_bot(text)
     if not sentence:
         return (
             "  Improve {} how? Name the job: /concierge improve {}: it needs to read PDFs\n"

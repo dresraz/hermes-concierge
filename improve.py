@@ -201,7 +201,7 @@ def apply(plan_: Plan, *, store: Any = None) -> list:
                 lines.append("  rule     could not write SOUL.md, nothing changed")
             continue
         if _install_one(plan_.bot, item, home=plan_.home):
-            lines.append("  skill    {} ({} KB)".format(item.name, item.kb))
+            lines.append("  skill    {}".format(item.name))
             added.append(str(plan_.home / "skills"))
             store.add(
                 state.Installed(
@@ -225,6 +225,11 @@ def receipt(plan_: Plan, lines: Sequence[str]) -> str:
             "  Nothing in the marketplace fits that yet.\n"
             "  Try naming the job: /concierge improve {}: it needs to read scanned PDFs\n".format(plan_.bot)
         )
-    head = "Improved {}".format(plan_.bot)
+    names = ", ".join(item.name for item in plan_.items)
+    head = (
+        "Added {}".format(names)
+        if plan_.bot in ("default", "custom", "main")
+        else "Improved {}".format(plan_.bot)
+    )
     tail = ["", "  undo     /concierge undo"]
     return "\n".join([head, ""] + list(lines) + tail)
