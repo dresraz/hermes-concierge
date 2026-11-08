@@ -180,7 +180,7 @@ def fire(
             "/concierge reset default"
         )
 
-    record = store.find(name)
+    record = store.find(name, kind="bot") or store.find(name)
     if record is None or (getattr(record, "kind", "") or "") != BOT:
         raise Refused(
             "Concierge did not create {}, so it will not delete it. It only removes bots it made.".format(name)
@@ -205,7 +205,7 @@ def fire(
         )
 
     for other in for_profile(store, name):
-        store.drop(other.name)
+        store.drop(other.name, other.kind)
     return "\n".join(["Fired: {}".format(name), ""] + ["  " + line for line in lines] + [""])
 
 
@@ -233,7 +233,7 @@ def reset(store: Any = None, token: Any = "", *, seams: Any = None) -> str:
         if problems:
             failed += 1
         else:
-            store.drop(record.name)
+            store.drop(record.name, record.kind)
         lines.extend(got)
 
     head = "Reset: {} ({} change{})".format(name, len(touched), "" if len(touched) == 1 else "s")

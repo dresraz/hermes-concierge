@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 MAX_SKILLS_SHOWN = 6
-INSTALL_TIMEOUT = 180
+INSTALL_TIMEOUT = 90  # one skill, not a whole role, has to finish in this
 WORKERS = 1  # one at a time: the installer writes into a shared tree
 
 
@@ -273,8 +273,17 @@ def install(
         return identifier, code == 0
 
     wanted = official(role)
-    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        outcomes = list(pool.map(one, wanted))
+    outcomes = []
+    misses = 0
+    for identifier in wanted:
+        identifier, ok = one(identifier)
+        outcomes.append((identifier, ok))
+        misses = 0 if ok else misses + 1
+        if misses >= 2:
+            # Two timeouts in a row is a broken seller, not a slow one: stop
+            # instead of holding the conversation for nine of them.
+            outcomes += [(left, False) for left in wanted[len(outcomes):]]
+            break
 
     # Bundled copies go in last: the installer archives any same-name skill it
     # finds, so a copy made first would end up retired under `.archive/`.

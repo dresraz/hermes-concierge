@@ -185,7 +185,7 @@ def pick(number: int, *, session_key: str = "", store: Any = None) -> Optional[s
 
         forget(session_key)
         return commands.handle_concierge(
-            "create " + row.get("sentence", "a " + row["name"]), session_key=session_key, store=store
+            row.get("sentence", "a " + row["name"]), session_key=session_key, store=store
         )
     if row.get("installed"):
         forget(session_key)

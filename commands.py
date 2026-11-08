@@ -115,6 +115,10 @@ def _route(text: str) -> tuple:
 
     from . import market
 
+    # "into <bot>" is a destination, even when that profile is not registered
+    # with core: a folder that looks like a bot is a bot here.
+    if re.search(r"\binto\s+[a-z0-9_-]+\s*$", text.lower()):
+        return "install", "", text
     query, target = market.split_target(text)
     if target:
         return "install", "", text
@@ -124,14 +128,23 @@ def _route(text: str) -> tuple:
     words = set(re.findall(r"[a-z0-9'-]+", low))
     names = [name for name in _bot_names() if name != "default"]
     # A word, not a substring: a bot called "art" must not swallow "start a chart".
+    names = [n for n in names if n != "default"]
     for name in sorted(names, key=len, reverse=True):
-        if name in words:
+        if name not in words:
+            continue
+        # A common-word bot name must be aimed at, not merely present.
+        aimed = (
+            "-" in name
+            or low.startswith(name)
+            or re.search(r"\b(?:my|the|for|into|to)\s+" + re.escape(name) + r"\b", low)
+        )
+        if aimed:
             return "improve", name, query
     role = presets.detect(query)
     if role is None:
         return "install", "", text
     # "my researcher" is the one you have, however the sentence starts.
-    mine = bool(re.search(r"\bmy\s+(?:[a-z0-9-]+\s+){0,2}(" + "|".join(
+    mine = bool(re.search(r"\bmy\s+(?:[a-z0-9-]+\s+){0,4}(" + "|".join(
         [re.escape(name) for name in names] + [re.escape(role.name)]
     ) + r")\b", low))
     creating = not mine and (
@@ -213,12 +226,13 @@ def handle_concierge(
         from . import shelf
 
         waiting = bool((card._slot(session_key) or {}).get("entries"))
-        if waiting and text != "1":
-            return "  One card at a time. /concierge yes takes it, /concierge no drops it.\n"
-        if not waiting and shelf.pending(session_key):
+        # A listing the user is looking at owns the number; a card owns yes/no.
+        if shelf.pending(session_key):
             picked = shelf.pick(int(text), session_key=session_key, store=store)
             if picked:
                 return picked
+        if waiting and text != "1":
+            return "  One card at a time. /concierge yes takes it, /concierge no drops it.\n"
 
     if head == "bots":
         card.forget(session_key)
@@ -333,6 +347,11 @@ def handle_install(
         )
 
     query, target = market.split_target(text)
+    if not target:
+        aimed = re.search(r"\binto\s+([a-z0-9_-]+)\s*$", text, re.I)
+        if aimed:
+            target = aimed.group(1)
+            query = text[: aimed.start()].strip()
 
     # The plugin shelf answers first because its card carries the scan verdict.
     if catalog is None:

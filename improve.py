@@ -147,7 +147,9 @@ def add_rule(plan_: Plan, *, home: Optional[Path] = None) -> Optional[dict]:
     outside the bot. Each is checked here, and the write goes through the same
     snapshot path every other soul write uses.
     """
-    from . import effects
+    import os
+    import shutil
+    import time
 
     home = Path(str(home or plan_.home))
     soul = home / "SOUL.md"
@@ -161,10 +163,19 @@ def add_rule(plan_: Plan, *, home: Optional[Path] = None) -> Optional[dict]:
         if len(text) + len(bullet) > MAX_RULE_TEXT * 4:
             return None
         block = RULE_HEAD if RULE_HEAD not in text else "\n"
-        snapshot = effects.write_soul(str(soul), text + block + RULE_NOTE + bullet)
+        backup = ""
+        existed = soul.is_file()
+        if existed:
+            # One backup per rule: a single shared file made every earlier
+            # receipt restore the same bytes, which is a lie about the state.
+            backup = "{}.{}.concierge-backup".format(soul, int(time.time() * 1000))
+            shutil.copy2(soul, backup)
+        tmp = soul.with_name(soul.name + ".tmp")
+        tmp.write_text(text + block + RULE_NOTE + bullet, encoding="utf-8")
+        os.replace(tmp, soul)
     except OSError:
         return None
-    return {"path": snapshot.path, "backup": snapshot.backup, "existed": snapshot.existed}
+    return {"path": str(soul), "backup": backup, "existed": existed}
 
 
 def _install_one(bot: str, item: Item, *, home: Path, runner=None) -> bool:

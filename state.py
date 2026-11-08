@@ -87,15 +87,24 @@ class Store:
         self.save(records)
         return added
 
-    def find(self, name: str) -> Optional[Installed]:
+    def find(self, name: str, kind: Optional[str] = None) -> Optional[Installed]:
+        """The newest record for a name, optionally of one kind.
+
+        A rule and the bot it belongs to share a name, so a caller that means the
+        bot must say so; otherwise a rule answers for it and /fire refuses a bot
+        Concierge made.
+        """
         for record in reversed(self.all()):
-            if record.name == name:
+            if record.name == name and (kind is None or record.kind == kind):
                 return record
         return None
 
-    def drop(self, name: str) -> bool:
+    def drop(self, name: str, kind: Optional[str] = None) -> bool:
         records = self.all()
-        kept = [r for r in records if r.name != name]
+        kept = [
+            r for r in records
+            if not (r.name == name and (kind is None or r.kind == kind))
+        ]
         if len(kept) == len(records):
             return False
         self.save(kept)

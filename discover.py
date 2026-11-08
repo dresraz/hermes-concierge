@@ -30,6 +30,7 @@ MAX_FILES = 25
 HEAVY_MARKERS = (
     "systemd", "docker run", "supervisord", "kubernetes", "tailscale",
     "playwright", "selenium", "jupyter lab", "comfyui server", "--daemon",
+    "| sh", "| bash", "| sudo", "os.system(", "eval(",
 )
 
 WORD = re.compile(r"[a-z0-9]{3,}")
