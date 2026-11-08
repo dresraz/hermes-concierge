@@ -225,6 +225,17 @@ sentence. The full table is `docs/PRESETS.md`.
 
 The bot is created through core's own `create_profile`, so it shows up in `hermes profile list` like any other profile, with its own memory, skills and cron.
 
+## Every bot gets its own Concierge
+
+A bot Concierge makes gets the command too, linked to the same plugin so one update
+reaches every bot. Inside that bot it can only work on itself: read the shelf, get
+the skill it needs, write a rule into its own soul. It cannot make bots, delete
+profiles, or touch another bot. The owner's profile keeps full power over all of them.
+
+```
+/concierge get the skills you need for this job
+```
+
 ## Improve: the other half
 
 `create` makes a bot. `improve` makes one better, and it works on any bot on the machine, not

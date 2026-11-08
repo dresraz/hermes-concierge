@@ -20,6 +20,7 @@ visible, and undo covers regret.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
@@ -108,6 +109,47 @@ def low_verb(text: str) -> str:
     return (text or "").strip().split(" ", 1)[0].lower()
 
 
+def _self_name() -> str:
+    """The profile running this command, or "" when it cannot be read."""
+    try:
+        from . import seams
+
+        return str(seams.current_profile() or "")
+    except Exception:
+        return ""
+
+
+def _is_bot_profile() -> bool:
+    """True when this command runs inside a bot, not the owner's profile.
+
+    A bot is a profile directory under ``profiles/``. A scratch HERMES_HOME
+    reports itself as "custom", which is not a bot and must keep full power.
+    """
+    raw = os.environ.get("HERMES_HOME")
+    try:
+        if raw:
+            home = Path(raw)
+        else:
+            from hermes_constants import get_hermes_home
+
+            home = Path(str(get_hermes_home()))
+    except Exception:
+        return False
+    # A bot's home is <root>/profiles/<name>; the owner's home is the root.
+    if home.parent.name == "profiles" and home.name not in ("", "profiles"):
+        return True
+    name = _self_name()
+    if name and name != "default":
+        try:
+            from . import improve
+
+            found = improve.resolve(name)
+            return bool(found) and found.parent.name == "profiles"
+        except Exception:
+            return False
+    return False
+
+
 def _route(text: str) -> tuple:
     """One sentence, one decision, using the bots that actually exist.
 
@@ -116,6 +158,9 @@ def _route(text: str) -> tuple:
     Everything else is an install. This is the whole front door.
     """
     from . import presets
+
+    if _is_bot_profile():
+        return "improve", _self_name(), text
 
     from . import market
 
@@ -251,6 +296,8 @@ def handle_concierge(
         return lifecycle.card(store)
 
     if head in ("fire", "reset"):
+        if _is_bot_profile():
+            return "  A bot cannot delete or reset profiles. Ask the owner.\n"
         # "fire the intern" is a sentence, not a bot: only a selector fires.
         parts = rest.split()
         selector = parts[0] if parts else ""
@@ -320,9 +367,9 @@ def handle_concierge(
     # when the sentence names it, because it costs nothing and adds no tools;
     # otherwise the catalog answers first, and the skills on disk get a turn
     # only when the catalog has nothing.
-    from . import improve, seams
+    from . import improve
 
-    here = seams.current_profile()
+    here = _self_name() or "default"
     if improve.resolve(here) is None:
         here = "default"
     early = improve.plan(here, text)
@@ -358,6 +405,11 @@ def handle_install(
         )
 
     query, target = market.split_target(text)
+    if _is_bot_profile():
+        here = _self_name()
+        if target and target != here:
+            return "  This bot can only install into itself, not {}.\n".format(target)
+        target = here
     if not target:
         aimed = re.search(r"\binto\s+([a-z0-9_-]+)\s*$", text, re.I)
         if aimed:
@@ -385,7 +437,10 @@ def handle_hire(
     known: Optional[Sequence[str]] = None,
 ) -> str:
     """One sentence in, one new bot out. No confirmation: the sentence was the request."""
-    from . import bots, lifecycle, state
+    from . import bots, lifecycle, seams, state
+
+    if _is_bot_profile():
+        return "  A bot cannot make other bots. Ask the owner, or improve yourself.\n"
 
     text = _clean(raw)
     if not text:
@@ -432,6 +487,16 @@ def handle_hire(
         extra_lines = _suggest_extras(text, path)
     except Exception:
         extra_lines = []
+    # Last, after every other writer has touched config.yaml: linking earlier
+    # let the credential copy rewrite the file and drop the switch.
+    try:
+        self_lines = (
+            ["  self     /concierge inside this bot, for itself only"]
+            if seams.link_self_plugin(path)
+            else ["  self     no /concierge in this bot (link failed)"]
+        )
+    except Exception:
+        self_lines = []
 
     lines, ok = bots.receipt(
         plan, path, known=(taken + [plan.name] if known is not None else None)
@@ -453,6 +518,7 @@ def handle_hire(
         [head, ""]
         + ["  " + line for line in lines]
         + key_lines
+        + self_lines
         + plugin_lines
         + preset_lines
         + extra_lines
@@ -472,7 +538,10 @@ def _repair_keys(store: Any) -> None:
     for record in getattr(store, "all", lambda: [])():
         if getattr(record, "kind", "") != "bot":
             continue
-        home = seams.profile_home(record.profile or record.name)
+        lookup = getattr(seams, "profile_home", None)
+        if lookup is None:
+            continue
+        home = lookup(record.profile or record.name)
         try:
             # Not only missing: a rotated key has to reach bots that already
             # exist, or one of them fails auth while everything looks fine.
@@ -555,6 +624,12 @@ def handle_improve(
             "  /concierge improve researcher-bot: it needs to read scanned PDFs\n"
         )
     bot, sentence = (bot, text) if bot else training.guess_bot(text)
+    if _is_bot_profile():
+        here = _self_name()
+        if (bot or "").lower() in ("me", "myself", "self", ""):
+            bot = here
+        if bot != here:
+            return "  This bot can only improve itself, not {}.\n".format(bot)
     if not sentence:
         return (
             "  Improve {} how? Name the job: /concierge improve {}: it needs to read PDFs\n"

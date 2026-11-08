@@ -225,6 +225,42 @@ def create_profile(
     return home
 
 
+def link_self_plugin(target_home: Any) -> bool:
+    """Give a bot its own Concierge, linked so updates flow.
+
+    The bot gets the command so it can ask for what it needs in its own chat.
+    A symlink, not a copy: one plugin to update, every bot sees it.
+    """
+    from pathlib import Path as _Path
+
+    target = _Path(str(target_home))
+    source = _Path(__file__).resolve().parent
+    link = target / "plugins" / "concierge"
+    try:
+        link.parent.mkdir(parents=True, exist_ok=True)
+        if not link.exists() and not link.is_symlink():
+            link.symlink_to(source, target_is_directory=True)
+    except OSError:
+        return False
+    try:
+        from hermes_yaml import safe_dump, safe_load
+
+        config = target / "config.yaml"
+        data = {}
+        if config.is_file():
+            data = safe_load(config.read_text(encoding="utf-8")) or {}
+        plugins = data.setdefault("plugins", {})
+        enabled = plugins.setdefault("enabled", [])
+        if isinstance(enabled, list) and "concierge" not in enabled:
+            enabled.append("concierge")
+        tmp = config.with_suffix(".yaml.tmp")
+        tmp.write_text(safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        tmp.replace(config)
+    except Exception:
+        return False
+    return True
+
+
 def share_credentials(target_home: Path, source_home: Optional[Path] = None) -> list:
     """Give a bot the owner's login, and keep it current.
 

@@ -26,7 +26,11 @@ MAX_SESSIONS = 32
 
 
 def _here() -> str:
-    name = seams.current_profile()
+    name = ""
+    try:
+        name = seams.current_profile()
+    except Exception:
+        name = ""
     from . import improve
 
     return name if improve.resolve(name) else "default"

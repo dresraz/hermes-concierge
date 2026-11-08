@@ -81,6 +81,9 @@ def resolve(bot: str) -> Optional[Path]:
         root = Path(str(get_hermes_home()))
     except Exception:
         root = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+    # Inside a bot the home is already the profile; its root is one level up.
+    if root.parent.name == "profiles":
+        root = root.parent.parent
     if name in ("default", "main"):
         return root
     home = root / "profiles" / name

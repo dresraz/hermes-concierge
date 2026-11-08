@@ -56,6 +56,9 @@ class FakeSeams:
         self.removed: list = []
         self.history: dict = {}
 
+    def current_profile(self) -> str:
+        return "default"
+
     def profile_home(self, name: str) -> pathlib.Path:
         return self.homes.get(name, pathlib.Path(tempfile.gettempdir()) / "gone" / name)
 
@@ -398,3 +401,50 @@ class BareYes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SelfOnly(unittest.TestCase):
+    """A bot gets its own Concierge, scoped to itself."""
+
+    def setUp(self):
+        import os
+        from unittest import mock
+
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        (self.tmp / "profiles" / "helper-two").mkdir(parents=True)
+        (self.tmp / "profiles" / "helper-two" / "config.yaml").write_text("model: {}\n", encoding="utf-8")
+        patcher = mock.patch.dict(os.environ, {"HERMES_HOME": str(self.tmp)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _as_bot(self, name="helper-two"):
+        from unittest import mock
+
+        return mock.patch.object(commands, "_self_name", lambda: name)
+
+    def test_a_bot_cannot_make_bots(self):
+        with self._as_bot():
+            text = commands.handle_concierge("create a researcher", store=store())
+        self.assertIn("cannot make other bots", text)
+
+    def test_a_bot_cannot_improve_another_bot(self):
+        with self._as_bot():
+            text = commands.handle_concierge("improve coder-bot: always cite", store=store())
+        self.assertIn("only improve itself", text)
+
+    def test_a_bot_can_improve_itself(self):
+        with self._as_bot():
+            text = commands.handle_concierge("improve me: always answer in one line", store=store())
+        self.assertIn("Improved helper-two", text)
+        self.assertTrue((self.tmp / "profiles" / "helper-two" / "SOUL.md").is_file())
+
+    def test_a_plain_sentence_inside_a_bot_is_a_self_improve(self):
+        with self._as_bot():
+            intent, bot, _ = commands._route("it needs to read scanned pdfs")
+        self.assertEqual((intent, bot), ("improve", "helper-two"))
+
+    def test_the_owner_profile_keeps_full_power(self):
+        from unittest import mock
+
+        with mock.patch.object(commands, "_self_name", lambda: "default"):
+            self.assertFalse(commands._is_bot_profile())
