@@ -34,6 +34,8 @@ HELP = (
     "  CONCIERGE\n"
     "  Bots, plugins and skills, one sentence at a time.\n"
     "\n"
+    "  /concierge                     the shelf: what can be added\n"
+    "  /concierge browse <word>       look through the shelf\n"
     "  /concierge <sentence>          install a plugin or skill, this profile\n"
     "  /concierge create <sentence>   make a new bot\n"
     "  /concierge improve <bot>: <what>  add what that bot is missing\n"
@@ -165,7 +167,11 @@ def handle_concierge(
 
     text = _clean(raw)
     low = text.lower()
-    if not text or low in HELP_WORDS:
+    if not text:
+        from . import shelf
+
+        return shelf.overview()
+    if low in HELP_WORDS:
         card.forget(session_key)
         _forget("", session_key)
         return HELP
@@ -176,6 +182,24 @@ def handle_concierge(
 
     head, _, _ = low.partition(" ")
     rest = text[len(head):].strip()
+
+    if head in ("browse", "shelf"):
+        from . import shelf
+
+        card.forget(session_key)
+        _forget("", session_key)
+        return shelf.browse(rest, session_key=session_key)
+
+    # A number picks from the last shelf this conversation was shown, unless a
+    # card is waiting: on a card "1" means yes.
+    if text.isdigit():
+        from . import shelf
+
+        waiting = bool((card._slot(session_key) or {}).get("entries"))
+        if not waiting and shelf.pending(session_key):
+            picked = shelf.pick(int(text), session_key=session_key, store=store)
+            if picked:
+                return picked
 
     if head == "bots":
         card.forget(session_key)
