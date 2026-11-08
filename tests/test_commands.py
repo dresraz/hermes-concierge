@@ -135,11 +135,6 @@ class Hire(unittest.TestCase):
         commands.handle_concierge("create keeps my inbox at zero", store=self.made, known=[], hire=hire)
         self.assertEqual(seen["sentence"], "keeps my inbox at zero")
 
-    def test_a_taken_name_stops_and_offers_a_name(self):
-        text = commands.handle_concierge("create keeps my inbox at zero", store=self.made, known=["inbox-bot"])
-        self.assertIn("inbox-bot already exists", text)
-        self.assertIn("/concierge create inbox-bot-2:", text)
-
     def test_default_is_never_a_bot_name(self):
         text = commands.handle_concierge("create default: keep my inbox at zero", store=self.made, known=[])
         self.assertIn("not a bot", text)

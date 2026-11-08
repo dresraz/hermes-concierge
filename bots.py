@@ -49,6 +49,7 @@ _FILLER_HEAD = (
 class Spec:
     name: str
     title: str
+    named: bool = False
     duties: list[str] = field(default_factory=list)
     boundaries: list[str] = field(default_factory=lambda: list(BOUNDARIES))
 
@@ -119,12 +120,23 @@ def _derive_name(words: Sequence[str]) -> str:
 
 
 def spec(sentence: str) -> Spec:
+    """A name a person can pick out of a list, not a word from their sentence.
+
+    A role sentence names the bot after the role: "make me a researcher that
+    reads papers" makes researcher-bot, not papers-bot. An explicit name still
+    wins.
+    """
+    from . import presets
+
     text = " ".join((sentence or "").split()).strip(" .!")
     name, rest = _explicit(text)
     body = _body(rest or text)
+    role = presets.detect(body)
+    derived = "{}-bot".format(role.name) if role is not None else _derive_name(_words(body))
     return Spec(
-        name=name or _derive_name(_words(body)),
+        name=(name or derived)[:NAME_MAX],
         title=_title(body),
+        named=bool(name),
         duties=_duties(body),
     )
 
