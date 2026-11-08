@@ -1,5 +1,5 @@
 name: concierge
-version: 0.3.3
+version: 0.3.4
 description: "One sentence in: make a bot, improve one, or install a plugin or skill. A shelf to look first, a card, one yes, a receipt read off the disk, and an undo that restores exactly what changed."
 author: "@dresraz"
 requires_hermes: ">=0.22.7"

@@ -35,8 +35,22 @@ class Share(unittest.TestCase):
         self.assertNotIn("TELEGRAM_BOT_TOKEN", text)
 
     def test_a_profile_without_credentials_says_so(self):
+        from unittest import mock
+
         empty = pathlib.Path(tempfile.mkdtemp())
-        self.assertEqual(seams.share_credentials(self.dst, empty), [])
+        with mock.patch.object(seams, "_credential_source", lambda _p=None: empty):
+            self.assertEqual(seams.share_credentials(self.dst, empty), [])
+
+    def test_the_owner_home_is_found_even_when_the_turn_is_scoped_elsewhere(self):
+        from unittest import mock
+
+        real = pathlib.Path(tempfile.mkdtemp())
+        (real / ".env").write_text("OPENCODE_GO_API_KEY=sk-x\n", encoding="utf-8")
+        scoped = pathlib.Path(tempfile.mkdtemp())  # a fresh bot home, no .env
+        with mock.patch.object(seams, "_credential_source", lambda _p=None: real):
+            copied = seams.share_credentials(self.dst, scoped)
+        self.assertIn(".env", copied)
+        self.assertIn("OPENCODE_GO_API_KEY", (self.dst / ".env").read_text())
 
 
 if __name__ == "__main__":

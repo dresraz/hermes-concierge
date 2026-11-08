@@ -236,17 +236,7 @@ def share_credentials(target_home: Path, source_home: Optional[Path] = None) -> 
     import shutil
     from pathlib import Path as _Path
 
-    if source_home is not None:
-        source = _Path(str(source_home))
-    else:
-        try:
-            from hermes_constants import get_hermes_home
-
-            source = _Path(str(get_hermes_home()))
-        except Exception:
-            import os as _os
-
-            source = _Path(_os.environ.get("HERMES_HOME") or _Path.home() / ".hermes")
+    source = _credential_source(source_home)
     target = _Path(str(target_home))
     copied = []
     for name in (".env", "auth.json"):
@@ -271,6 +261,44 @@ def share_credentials(target_home: Path, source_home: Optional[Path] = None) -> 
         except Exception:  # no channel inventory: the copy stays, minus nothing
             pass
     return copied
+
+
+def _credential_source(preferred: Any = None) -> Path:
+    """The home that actually holds the owner's login.
+
+    A routed gateway turn reports the bot's own home, which has no .env yet, so
+    the first candidate is not enough. Every plausible home is tried and the
+    first one with provider keys in its .env wins; the last candidate is the
+    default home, so there is always an answer.
+    """
+    import os as _os
+
+    candidates = []
+    if preferred is not None:
+        candidates.append(Path(str(preferred)))
+    candidates.append(Path(str(_os.environ.get("HERMES_HOME") or "")))
+    try:
+        from hermes_constants import get_hermes_home
+
+        candidates.append(Path(str(get_hermes_home())))
+    except Exception:
+        pass
+    candidates.append(Path.home() / ".hermes")
+
+    known = _known_provider_keys()
+    for candidate in candidates:
+        if not str(candidate) or not candidate.is_dir():
+            continue
+        env = candidate / ".env"
+        if not env.is_file():
+            continue
+        try:
+            text = env.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if any(line.partition("=")[0].strip() in known and line.partition("=")[2].strip() for line in text.splitlines()):
+            return candidate
+    return candidates[-1]
 
 
 def _known_provider_keys() -> set:
