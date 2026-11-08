@@ -2,7 +2,7 @@
 
 [![version](https://img.shields.io/github/v/tag/dresraz/hermes-concierge?color=E8C15A)](https://github.com/dresraz/hermes-concierge/tags)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
-[![tests](https://img.shields.io/badge/tests-196%20passing-3fb950)](tests)
+[![tests](https://img.shields.io/badge/tests-201%20passing-3fb950)](tests)
 [![hermes](https://img.shields.io/badge/hermes-%3E%3D0.22.7-4B5563)](plugin.yaml)
 
 **The front door to the Hermes marketplace.**
@@ -15,6 +15,10 @@ read off the disk, and one undo.
 
 Two moves over one marketplace: **create** a bot, or **improve** one. Both pull from what is
 already installable, and both end with a receipt you can check and an undo that restores it.
+
+Every bot it makes gets a `/concierge` it can use on itself, so you can say `get the skills you need
+for this job` in that bot's own chat and it pulls what it is missing. In there it is scoped to
+itself: no new bots, no deleting profiles, no reaching another bot.
 
 Concierge is a Hermes Agent plugin. It answers one question, *"can I add that?"*, without making
 you learn the catalog, read a manifest, or guess which of the a thousand-odd entries does the thing.
@@ -91,6 +95,10 @@ Everything is a word after `/concierge`: `create`, `improve`, `browse`, `bots`, 
 ```
 
 `/concierge` with nothing after it opens the shelf. `/concierge help` prints the command list.
+
+Inside a bot, the same command works on that bot alone: it can pull the skill it needs or write a
+rule into its own soul, and it cannot make bots, delete profiles, or reach another bot. The owner's
+profile keeps full power over all of them.
 
 ## Look first, if you do not know what to ask for
 
