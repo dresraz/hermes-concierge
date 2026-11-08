@@ -84,8 +84,42 @@ def _forget(message: str, session_key: str = "") -> str:
 # "install a research bot", "I want a research bot", "make me a coder". The role
 # cue is the tell, and a destination ("into <bot>") always wins over it.
 BOT_WORDS = frozenset({"bot", "bots", "agent", "agents"})
+# Asking for a capability is not asking for a bot, even when a role word shows up.
+CAPABILITY_WORDS = frozenset({
+    "skill", "skills", "plugin", "plugins", "tool", "tools", "integration",
+    "integrations", "app", "apps", "extension", "extensions",
+})
+# How people ask for a bot without saying "bot": "I need something that ...",
+# "I could use a writer", "another researcher".
+ASK_WORDS = ("i need", "i want", "i could use", "could use", "looking for",
+             "help me", "something that", "one that", "another ", "second ",
+             "one more ")
 MAKE_VERBS = ("hire", "make ", "make me", "create", "build", "spawn", "set up",
               "stand up", "give me")
+
+
+_BOTS_PHRASES = (
+    r"^(?:what|which|list|show)(?: me)?(?: my| the| all)? bots?\b",
+    r"^my bots\b",
+    r"^(?:what|how many) bots (?:do i have|have i got|are there)\b",
+    r"^bots\b",
+)
+_BROWSE_PHRASES = (
+    r"^(?:what|which) (?:can|should) i (?:install|add|get)\b",
+    r"^(?:show|list)(?: me)? what (?:i can|can i) (?:install|add|get)\b",
+    r"^(?:show|list)(?: me)?(?: everything| the catalog| the marketplace)\b",
+)
+
+
+def _natural_verb(low: str) -> str:
+    """The read-only command a plain sentence is asking for, or ""."""
+    for pattern in _BOTS_PHRASES:
+        if re.match(pattern, low):
+            return "bots"
+    for pattern in _BROWSE_PHRASES:
+        if re.match(pattern, low):
+            return "browse"
+    return ""
 
 
 def _wants_a_bot(text: str) -> bool:
@@ -103,6 +137,33 @@ def _wants_a_bot(text: str) -> bool:
     if words & BOT_WORDS:
         return True
     return any(low.startswith(verb) for verb in MAKE_VERBS)
+
+
+def _asks_for_bot(text: str) -> bool:
+    """A bot was asked for, whatever the sentence calls it.
+
+    This is the guard that keeps the worst outcome off the screen: showing an
+    install card for a random package when the person asked for a bot.
+    """
+    from . import market
+
+    low = " ".join((text or "").lower().split())
+    if not low or market.split_target(text)[1]:
+        return False
+    words = set(re.findall(r"[a-z']+", low))
+    if words & CAPABILITY_WORDS:
+        return False
+    asked = any(
+        verb.strip() in words or low.startswith(verb.strip()) for verb in MAKE_VERBS
+    ) or any(phrase in low for phrase in ASK_WORDS)
+    if not asked:
+        return False
+    if words & BOT_WORDS:
+        return True
+    # "I'd like another researcher" names the role, not the word bot.
+    from . import presets
+
+    return presets.detect(low) is not None
 
 
 def low_verb(text: str) -> str:
@@ -177,7 +238,27 @@ def _route(text: str) -> tuple:
         )
         if aimed:
             return "improve", name, query
+    # "make my researcher cite sources" is aimed at the researcher you have.
+    mine_word = re.search(r"\bmy\s+([a-z0-9][a-z0-9-]*)", low)
+    if mine_word:
+        wanted = mine_word.group(1)
+        if wanted in names or presets.get(wanted) is not None:
+            for name in names:
+                if name == wanted or name.startswith(wanted + "-"):
+                    return "improve", name, query
+            return "improve", wanted, query
+
     role = presets.detect(query)
+    if role is None:
+        # "another assistant" names the role after the qualifier, not before it.
+        trimmed = re.sub(r"^(?:one more|another|a second|second|new)\s+", "", low)
+        if trimmed != low:
+            role = presets.detect(trimmed)
+            if role is None:
+                for name in presets.names():
+                    if name in trimmed.split():
+                        role = presets.get(name)
+                        break
     if role is None:
         # "make me a bot that does X" with no known role is still a bot, not a
         # marketplace search: the sentence asked for a profile, not a plugin.
@@ -190,9 +271,13 @@ def _route(text: str) -> tuple:
     mine = bool(re.search(r"\bmy\s+(?:[a-z0-9-]+\s+){0,4}(" + "|".join(
         [re.escape(name) for name in names] + [re.escape(role.name)]
     ) + r")\b", low))
+    asking = any(phrase in low for phrase in ASK_WORDS)
     creating = not mine and (
         bool(words & BOT_WORDS)
         or any(low.startswith(verb.strip()) for verb in MAKE_VERBS)
+        # A role named inside a request, with no capability word anywhere, is a
+        # bot being asked for: "I need something that keeps my inbox at zero".
+        or (asking and not (words & CAPABILITY_WORDS))
     )
     # 2. a role that already has a bot is improved, unless the sentence asks for
     #    a new one in as many words: a second researcher has to be possible
@@ -251,6 +336,18 @@ def handle_concierge(
         card.forget(session_key)
         _forget("", session_key)
         return HELP
+    natural = _natural_verb(low)
+    if natural == "bots":
+        card.forget(session_key)
+        _forget("", session_key)
+        _repair_keys(store)
+        return lifecycle.card(store)
+    if natural == "browse":
+        from . import shelf
+
+        card.forget(session_key)
+        _forget("", session_key)
+        return shelf.overview()
     if low in UNDO_WORDS:
         card.forget(session_key)
         _forget("", session_key)
@@ -367,6 +464,9 @@ def handle_concierge(
     low = text.lower()
     if early is not None and any(item.name in low or item.name.replace("-", " ") in low for item in early.items):
         return improve.receipt(early, improve.apply(early, store=store))
+
+    if _asks_for_bot(text):
+        return handle_hire(text, store=store, hire=hire, known=known)
 
     answer = card.handle(text, session_key=session_key)
     if "best match  none" in answer:

@@ -27,6 +27,8 @@ STOPWORDS = frozenset(
     was way we what when where which who will with would you your
     add build create give install installed installing make makes making new
     something anything thing things bot bots agent agents
+    skill skills plugin plugins tool tools extension extensions app apps
+    look looking help helping job work working properly yourself myself
     """.split()
 )
 
@@ -133,6 +135,10 @@ PREFERRED_TIERS = frozenset({"official", "core", "verified", "safe"})
 # for ordinary multi-word asks, which is what stops a single coincidental
 # brand word from looking like a fit.
 MIN_SCORE = 1.5
+# Below this, a lead only counts when the ask's own words appear in the entry's
+# name or title. At 2.0 the whole catalog ties on filler ("general assistant"
+# scored 2.05 for a Czech language pack), and a tie is not a recommendation.
+STRONG_SCORE = 3.0
 
 # How rare a matched word must be to count towards the earned-word rule.
 # A word in nearly every description ("plugin", "the") cannot earn a slot;
@@ -409,6 +415,11 @@ def rank(query: str, entries: Iterable[Any], limit: int = 3) -> list:
             if not _missing_env(c) or c.score - best_usable > ENV_MARGIN
         ]
     keep.sort(key=lambda c: (-c.score, c.name))
+    if keep and keep[0].score < STRONG_SCORE:
+        asked = {_fold(word) for word in tokens(query)}
+        def named(candidate: Any) -> bool:
+            return bool(asked & {_fold(word) for word in tokens(candidate.name + " " + candidate.title)})
+        keep = [c for c in keep if c.score >= STRONG_SCORE or named(c)]
     return keep[:limit]
 
 

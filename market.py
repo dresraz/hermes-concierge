@@ -51,7 +51,12 @@ def split_target(text: str) -> tuple[str, str]:
     low = raw.lower()
     head, sep, tail = low.rpartition(" into ")
     if not sep:
-        return raw, ""
+        # "add pdf to inbox-bot" says the destination just as plainly. Only a
+        # single word that is really a profile counts, so "pdf for research"
+        # stays one sentence.
+        head, sep, tail = low.rpartition(" to ")
+        if not sep or len(tail.split()) != 1:
+            return raw, ""
     bot = raw[len(head) + len(sep):].strip()
     if not bot or len(bot.split()) != 1:
         return raw, ""

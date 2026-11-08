@@ -470,3 +470,25 @@ class AskingForABot(unittest.TestCase):
 
     def test_a_plain_capability_is_still_an_install(self):
         self.assertEqual(commands._route("install obsidian")[0], "install")
+
+
+class BotAskGuard(unittest.TestCase):
+    """An install card must never answer a request for a bot."""
+
+    def test_a_bot_sentence_is_never_an_install(self):
+        for sentence in (
+            "I want to make a general assistant bot",
+            "I need a bot that answers the door",
+            "could you build me an agent for invoices",
+            "I'd like another researcher",
+        ):
+            self.assertTrue(commands._asks_for_bot(sentence), sentence)
+
+    def test_a_capability_sentence_is_not_a_bot(self):
+        for sentence in (
+            "I need a skill that reads spreadsheets",
+            "install obsidian",
+            "add pdf support",
+            "install obsidian into lima-house-seller",
+        ):
+            self.assertFalse(commands._asks_for_bot(sentence), sentence)
