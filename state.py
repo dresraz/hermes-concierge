@@ -70,13 +70,25 @@ class Store:
         self.backend.set(RECORD_KEY, [asdict(r) for r in records])
 
     def add(self, record: Installed) -> Installed:
-        records = [r for r in self.all() if r.name != record.name]
-        records.append(record.stamp())
+        """Add a record. A rule is its own step; anything else replaces its twin.
+
+        Keying on the name alone let a rule record for a bot overwrite the record
+        of the hire that made it, so undo lost the bot. Keying on (name, kind)
+        keeps both, and keeping every rule means the last one can be taken back
+        without erasing the rest.
+        """
+        added = record.stamp()
+        records = self.all()
+        if added.kind != "rule":
+            records = [
+                r for r in records if (r.name, r.kind) != (added.name, added.kind)
+            ]
+        records.append(added)
         self.save(records)
-        return record
+        return added
 
     def find(self, name: str) -> Optional[Installed]:
-        for record in self.all():
+        for record in reversed(self.all()):
             if record.name == name:
                 return record
         return None

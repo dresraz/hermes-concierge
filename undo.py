@@ -9,6 +9,7 @@ an empty field never triggers an import.
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Sequence
@@ -68,6 +69,14 @@ def _default_remove_skill() -> Callable[[str], Any]:
     from tools.skills_hub_install import uninstall_skill
 
     def _remove(skill_name: str) -> None:
+        # A skill Concierge copied lives at a path it recorded; a hub skill is
+        # owned by core and only core may remove it.
+        if os.path.isabs(skill_name):
+            from . import effects
+
+            if effects.remove_skill_dir(skill_name):
+                return
+            raise RuntimeError("no SKILL.md under " + skill_name)
         ok, message = uninstall_skill(skill_name)
         if not ok:
             raise RuntimeError(message)

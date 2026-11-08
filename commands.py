@@ -113,24 +113,41 @@ def _route(text: str) -> tuple:
     """
     from . import presets
 
-    low = " ".join((text or "").lower().split())
+    from . import market
+
+    query, target = market.split_target(text)
+    if target:
+        return "install", "", text
+    low = " ".join((query or "").lower().split())
+    if not low:
+        return "install", "", text
+    words = set(re.findall(r"[a-z0-9'-]+", low))
     names = [name for name in _bot_names() if name != "default"]
-    # 1. an existing bot is named outright, longest name first so a suffix
-    #    like "-bot" never steals the match from the full name
+    # A word, not a substring: a bot called "art" must not swallow "start a chart".
     for name in sorted(names, key=len, reverse=True):
-        if name in low:
-            return "improve", name, text
-    role = presets.detect(text)
+        if name in words:
+            return "improve", name, query
+    role = presets.detect(query)
     if role is None:
         return "install", "", text
-    # 2. a role that already has a bot is improved, not duplicated
+    # "my researcher" is the one you have, however the sentence starts.
+    mine = bool(re.search(r"\bmy\s+(?:[a-z0-9-]+\s+){0,2}(" + "|".join(
+        [re.escape(name) for name in names] + [re.escape(role.name)]
+    ) + r")\b", low))
+    creating = not mine and (
+        bool(words & BOT_WORDS)
+        or any(low.startswith(verb.strip()) for verb in MAKE_VERBS)
+    )
+    # 2. a role that already has a bot is improved, unless the sentence asks for
+    #    a new one in as many words: a second researcher has to be possible
     for name in names:
         if name == role.name or name.startswith(role.name + "-"):
-            return "improve", name, text
+            if creating:
+                return "create", "", query
+            return "improve", name, query
     # 3. a role with no bot is created when the sentence asks for one
-    words = set(re.findall(r"[a-z0-9'-]+", low))
-    if words & BOT_WORDS or any(low.startswith(verb) for verb in MAKE_VERBS) or role.name in words:
-        return "create", "", text
+    if creating or role.name in words:
+        return "create", "", query
     return "install", "", text
 
 
@@ -192,10 +209,12 @@ def handle_concierge(
 
     # A number picks from the last shelf this conversation was shown, unless a
     # card is waiting: on a card "1" means yes.
-    if text.isdigit():
+    if text.isascii() and text.isdigit() and len(text) <= 3:
         from . import shelf
 
         waiting = bool((card._slot(session_key) or {}).get("entries"))
+        if waiting and text != "1":
+            return "  One card at a time. /concierge yes takes it, /concierge no drops it.\n"
         if not waiting and shelf.pending(session_key):
             picked = shelf.pick(int(text), session_key=session_key, store=store)
             if picked:

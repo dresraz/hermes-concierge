@@ -136,17 +136,35 @@ def _read(path: Path) -> str:
         return ""
 
 
-def add_rule(plan_: Plan, *, home: Optional[Path] = None) -> Optional[str]:
-    """Append the rule to the bot's SOUL. Returns the path written."""
-    soul = Path(str(home or plan_.home)) / "SOUL.md"
+MAX_RULE_TEXT = 4000
+
+
+def add_rule(plan_: Plan, *, home: Optional[Path] = None) -> Optional[dict]:
+    """Append the rule to the bot's SOUL, once. Returns what undo needs.
+
+    Three things a standing rule must never do: repeat itself every time it is
+    said again, grow the file without end, or write through a symlink to a file
+    outside the bot. Each is checked here, and the write goes through the same
+    snapshot path every other soul write uses.
+    """
+    from . import effects
+
+    home = Path(str(home or plan_.home))
+    soul = home / "SOUL.md"
     try:
+        if soul.is_symlink() and not str(soul.resolve()).startswith(str(home.resolve())):
+            return None
         text = _read(soul)
-        block = RULE_HEAD if RULE_HEAD not in text else "\n"
         bullet = "- {}\n".format(plan_.sentence.rstrip("."))
-        soul.write_text(text + block + RULE_NOTE + bullet, encoding="utf-8")
+        if bullet in text:
+            return {"path": str(soul), "backup": "", "existed": True, "duplicate": True}
+        if len(text) + len(bullet) > MAX_RULE_TEXT * 4:
+            return None
+        block = RULE_HEAD if RULE_HEAD not in text else "\n"
+        snapshot = effects.write_soul(str(soul), text + block + RULE_NOTE + bullet)
     except OSError:
         return None
-    return str(soul)
+    return {"path": snapshot.path, "backup": snapshot.backup, "existed": snapshot.existed}
 
 
 def _install_one(bot: str, item: Item, *, home: Path, runner=None) -> bool:
@@ -185,8 +203,10 @@ def apply(plan_: Plan, *, store: Any = None) -> list:
     added = []
     for item in plan_.items:
         if item.kind == "rule":
-            path = add_rule(plan_)
-            if path:
+            written = add_rule(plan_)
+            if written and written.get("duplicate"):
+                lines.append("  rule     already there: " + plan_.sentence)
+            elif written:
                 lines.append("  rule     " + plan_.sentence)
                 store.add(
                     state.Installed(
@@ -194,24 +214,32 @@ def apply(plan_: Plan, *, store: Any = None) -> list:
                         kind="rule",
                         title=plan_.sentence[:120],
                         profile=plan_.bot,
-                        soul_path=path,
-                    ).stamp()
+                        soul_path=written["path"],
+                        soul_backup=written["backup"],
+                        soul_existed=bool(written["existed"]),
+                    )
                 )
             else:
                 lines.append("  rule     could not write SOUL.md, nothing changed")
             continue
         if _install_one(plan_.bot, item, home=plan_.home):
             lines.append("  skill    {}".format(item.name))
-            added.append(str(plan_.home / "skills"))
+            # Record the directory that actually exists: undo removes a path,
+            # never a guess at where the skill might be.
+            folder = next(
+                (p.parent for p in (plan_.home / "skills").glob("**/" + item.name + "/SKILL.md")),
+                None,
+            )
+            added.append(str(folder or plan_.home / "skills"))
             store.add(
                 state.Installed(
                     name=item.name,
                     kind="skill",
                     title=plan_.sentence[:120],
                     profile=plan_.bot,
-                    skills=[str(item.name)],
+                    skills=[str(folder)] if folder else [],
                     enabled=True,
-                ).stamp()
+                )
             )
         else:
             lines.append("  skill    {} did not install".format(item.name))

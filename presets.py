@@ -23,7 +23,7 @@ from typing import Callable, Sequence
 
 MAX_SKILLS_SHOWN = 6
 INSTALL_TIMEOUT = 180
-WORKERS = 3
+WORKERS = 1  # one at a time: the installer writes into a shared tree
 
 
 @dataclass(frozen=True)

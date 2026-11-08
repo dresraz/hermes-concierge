@@ -33,7 +33,12 @@ def rewrite(text: str, session_key: str = "") -> str | None:
     """
 
     answer = ANSWERS.get(" ".join(str(text or "").split()).lower())
-    if answer is None or not card.is_waiting(session_key):
+    if answer is None:
+        return None
+    from . import market
+
+    # Two shelves can hold a card: the plugin catalog and the skill registries.
+    if not (card.is_waiting(session_key) or market.is_waiting(session_key)):
         return None
     return f"/concierge {answer}"
 

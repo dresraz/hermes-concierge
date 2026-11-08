@@ -64,7 +64,7 @@ def resolve(store: Any, token: Any) -> Optional[str]:
         return None
     if low == DEFAULT:
         return DEFAULT
-    if low.isdigit():
+    if low.isascii() and low.isdigit() and len(low) <= 4:
         items = bots(store)
         index = int(low)
         if 1 <= index <= len(items):

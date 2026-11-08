@@ -55,7 +55,7 @@ return nothing at all.
 
 ## One command
 
-Everything is a word after `/concierge`. There is no `/concierge create` and no `/concierge improve` to remember.
+Everything is a word after `/concierge`: `create`, `improve`, `browse`, `bots`, `fire`, `reset`, `undo`.
 
 ```
   CONCIERGE
@@ -73,9 +73,9 @@ Everything is a word after `/concierge`. There is no `/concierge create` and no 
   /concierge help                this list
 ```
 
-`/concierge` with nothing after it prints that same list.
+`/concierge` with nothing after it opens the shelf. `/concierge help` prints the command list.
 
-## The point: a working bot in one sentence, trainable later
+## The point: a working bot in one sentence, better every week
 
 Hermes gives you a lot of power and asks you to assemble it. That is the slow part. You read the
 catalog, guess which of the a thousand-odd entries matters, install six into a profile, write the
@@ -327,7 +327,7 @@ number there would be a guess.
 - `default` cannot be fired; it can only be reset to what Concierge changed.
 - Anything Concierge did not create cannot be fired through Concierge.
 - `undo` is a record diff, not a guess: it reverses exactly what the record says was written, then checks the disk. A partial undo keeps the record so you can run it again.
-- No background processes, no self-updater, no telemetry, no network calls of its own.
+- No background processes, no self-updater, no telemetry. Its only network calls are the plugin catalog index and one pinned manifest for the card.
 
 ## Limits
 

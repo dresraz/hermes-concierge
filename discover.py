@@ -81,9 +81,6 @@ def _roots() -> list[Path]:
         home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
     for base in (home, Path.home() / ".hermes"):
         candidates += [base / "hermes-agent" / "skills", base / "hermes-agent" / "optional-skills"]
-    for entry in sys.path:
-        if entry:
-            candidates.append(Path(entry) / "skills")
 
     seen: list[Path] = []
     for path in candidates:
@@ -154,7 +151,7 @@ def catalogue(roots: Optional[Sequence[Path]] = None) -> list[dict]:
                 text = skill_file.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            head = text[:6000].lower()
+            head = text.lower()
             if any(marker in head for marker in HEAVY_MARKERS):
                 continue
             front_name, desc = _head(text)
