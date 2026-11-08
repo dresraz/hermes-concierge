@@ -219,7 +219,7 @@ class Surface(unittest.TestCase):
             )
         finally:
             presets.install = original_install
-        self.assertIn("Hired", out)
+        self.assertIn("Created", out)
         self.assertIn("skills   researcher 1/1 installed: parallel-cli", out)
 
     def test_hire_without_a_role_shows_no_preset_line(self):
@@ -231,7 +231,7 @@ class Surface(unittest.TestCase):
             hire=lambda text: (type("P", (), {"name": "desk", "title": "t"})(), home),
             known=[],
         )
-        self.assertIn("Hired", out)
+        self.assertIn("Created", out)
         self.assertNotIn("installed: ", out)
 
 

@@ -105,7 +105,7 @@ class Hire(unittest.TestCase):
             known=[],
             hire=lambda sentence: (harness.load("bots").spec(sentence), home),
         )
-        self.assertIn("Hired invoices-bot", text)
+        self.assertIn("Created invoices-bot", text)
         self.assertNotIn("yes", text.lower().replace("yesterday", ""))
         self.assertIsNotNone(self.made.find("invoices-bot"))
         self.assertEqual(self.made.find("invoices-bot").kind, "bot")
@@ -119,7 +119,7 @@ class Hire(unittest.TestCase):
             known=[],
             hire=lambda sentence: (harness.load("bots").spec(sentence), home),
         )
-        self.assertIn("Hired invoices-bot", text)
+        self.assertIn("Created invoices-bot", text)
         self.assertNotIn("/concierge undo", text)
         self.assertIn("no undo", text)
 
@@ -358,7 +358,7 @@ class Reset(unittest.TestCase):
 class BareYes(unittest.TestCase):
     def test_a_yes_with_no_card_is_not_a_command(self):
         text = commands.handle_concierge("yes", store=store())
-        self.assertNotIn("Hired", text)
+        self.assertNotIn("Created", text)
         self.assertNotIn("Fired", text)
 
 

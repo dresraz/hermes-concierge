@@ -218,13 +218,38 @@ def verify(home: Path, role: Role) -> list[str]:
 
 
 def _copy_bundled(home: Path, names: Sequence[str]) -> list[str]:
-    """Copy bundled picks into a lean profile through core's own sync helpers."""
-    try:
-        from . import seams  # plugin-relative inside Hermes
-    except ImportError:  # loaded as a top-level module (spikes, tests)
-        import seams
+    """Copy bundled picks into a lean profile, believing the disk.
 
-    return seams.copy_bundled(home, names)
+    Core's helper resolves the tree from the running package, which points at a
+    finder path under an editable install and at nothing at all when HERMES_HOME
+    is a scratch home. So the copy is done here from the tree the index actually
+    read, and core's helper is kept only as the first attempt.
+    """
+    import shutil
+
+    from . import seams
+
+    copied = list(seams.copy_bundled(home, names))
+    want = [name for name in names if name not in copied]
+    if not want:
+        return copied
+
+    from . import discover
+
+    for name in want:
+        folder = next(
+            (item["path"] for item in discover.catalogue() if item["name"] == name),
+            None,
+        )
+        if folder is None:
+            continue
+        target = home / "skills" / folder.parent.name / name
+        try:
+            shutil.copytree(folder, target)
+        except Exception:
+            continue
+        copied.append(name)
+    return copied
 
 
 def write_soul(home: Path, role: Role) -> int:

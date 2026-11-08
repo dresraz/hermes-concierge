@@ -439,7 +439,7 @@ def handle_hire(
         ),
         store,
     )
-    head = "Hired {}".format(plan.name) if ok else "Hired {}, but check this".format(plan.name)
+    head = "Created {}".format(plan.name) if ok else "Created {}, but check this".format(plan.name)
     undo_line = "  undo     /concierge undo" if saved else "  no undo  the record could not be saved"
     return "\n".join(
         [head, ""]
