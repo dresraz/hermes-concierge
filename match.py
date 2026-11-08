@@ -56,6 +56,25 @@ VOCABULARY = {
     "speak": ["voice", "tts", "speech"],
     "talk": ["voice", "tts"],
     "audio": ["voice", "tts"],
+    "spreadsheet": ["excel", "xlsx", "csv", "sheet"],
+    "spreadsheets": ["excel", "xlsx", "csv", "sheet"],
+    "deck": ["slide", "presentation", "pptx", "powerpoint"],
+    "slides": ["slide", "presentation", "pptx", "powerpoint"],
+    "lights": ["home", "lamp", "light"],
+    "lamp": ["light", "home"],
+    "thermostat": ["home", "climate", "temperature"],
+    "invoice": ["pdf", "billing", "document"],
+    "contract": ["pdf", "document"],
+    "receipt": ["pdf", "expense", "document"],
+    "video": ["youtube", "transcript", "mp4"],
+    "podcast": ["audio", "transcript", "rss"],
+    "news": ["rss", "feed", "monitor"],
+    "site": ["web", "hosting", "deploy"],
+    "website": ["web", "hosting", "deploy"],
+    "prices": ["price", "monitor", "stock"],
+    "stocks": ["stock", "market"],
+    "inbox": ["email", "mail", "gmail"],
+    "calendar": ["calendar", "event", "schedule"],
     "song": ["music"],
     "songs": ["music"],
     "picture": ["image", "vision", "generate"],
@@ -99,7 +118,7 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 # Weights. A capability that does the job beats a name that merely mentions the
 # word: an entry whose tools do X should win over one whose name contains X.
-W_NAME = 2.0
+W_NAME = 3.0
 W_DESCRIPTION = 1.0
 W_CAPABILITY = 4.0
 W_PHRASE = 5.0
@@ -171,6 +190,10 @@ def expand(query: str) -> list:
     seen = dict.fromkeys(words)
     for word in words:
         for extra in VOCABULARY.get(word, ()):  # ordered, so results stay stable
+            seen.setdefault(extra, None)
+        # tokens() folds plurals, so "colors" arrives as "color": the same
+        # translation has to work for the folded spelling too.
+        for extra in VOCABULARY.get(_fold(word), ()):
             seen.setdefault(extra, None)
     return list(seen)
 
@@ -261,6 +284,9 @@ def score(query: str, entry: Any, weights: Optional[dict] = None) -> Candidate:
             if weights is not None
             else 1.0
         )
+        # Past twelve words a description is a keyword dump, not a description:
+        # a plugin that names everything must not beat one that names the ask.
+        worth = worth if len(seen) < 12 else worth * 0.6
         hit = False
         if key in name_words or key in title_words:
             total += W_NAME * worth

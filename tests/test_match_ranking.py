@@ -186,5 +186,35 @@ class NoFit(unittest.TestCase):
             self.assertTrue(match.rank("fish in audio form", catalog))
 
 
+class EverydayAsks(unittest.TestCase):
+    """What a person types, not what a catalog writes."""
+
+    def test_the_noun_in_the_ask_finds_the_tool(self):
+        catalog = [
+            entry("pdf-surgeon", title="PDF Surgeon",
+                  description="Read and edit PDF files.", category="documents"),
+            entry("sticker-pack", title="Stickers", description="Send stickers.", category="chat"),
+        ]
+        found = match.rank("read a scanned pdf", catalog)
+        self.assertTrue(found)
+        self.assertIn("pdf", found[0].name)
+
+    def test_a_keyword_dump_does_not_beat_a_named_tool(self):
+        dump = (
+            "backup archive sync copy mirror drive file folder cloud restore version "
+            "snapshot encrypt compress remote local schedule rotate retention policy"
+        )
+        catalog = [
+            entry("everything-tool", title="Everything", description=dump, category="tools"),
+            entry("backup-now", title="Backup Now", description="Back up a folder.", category="tools"),
+        ]
+        # A two-entry catalog has no rare words, so the absolute floor is not
+        # the point here: the order is. The named tool must outscore the dump.
+        weights = match.word_weights(catalog)
+        named = match.score("backup my files", catalog[1], weights).score
+        dumped = match.score("backup my files", catalog[0], weights).score
+        self.assertGreater(named, dumped)
+
+
 if __name__ == "__main__":
     unittest.main()
