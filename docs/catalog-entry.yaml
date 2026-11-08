@@ -1,7 +1,7 @@
 name: concierge
 title: Concierge
 repo: https://github.com/dresraz/hermes-concierge
-sha: dd83471bafcbbb5a42375c542ce1b7182be08919
+sha: b7447523f8a9acca862166c11278e8c074e321b1
 description: >-
   Install a plugin or a skill like an app: one card, one yes, a receipt, one undo. Say what you want
   in a sentence and Concierge matches it against both marketplace shelves, the plugin catalog and
