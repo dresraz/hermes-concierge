@@ -443,3 +443,30 @@ class SelfOnly(unittest.TestCase):
         token = set_hermes_home_override(str(self.tmp))
         self.addCleanup(reset_hermes_home_override, token)
         self.assertFalse(commands._is_bot_profile())
+
+
+class AskingForABot(unittest.TestCase):
+    """How a person actually asks for a bot."""
+
+    def test_i_want_to_make_a_general_assistant_bot_creates_one(self):
+        for sentence in (
+            "I want to make a general assistant bot",
+            "make me a general assistant",
+            "create an assistant bot for me",
+            "I need an assistant",
+        ):
+            self.assertEqual(commands._route(sentence)[0], "create", sentence)
+
+    def test_a_research_assistant_is_a_researcher_not_the_generic_one(self):
+        from concierge import presets
+
+        role = presets.detect("hire a research assistant")
+        self.assertIsNotNone(role)
+        self.assertEqual(role.name, "researcher")
+
+    def test_a_bot_ask_with_no_known_role_still_makes_a_bot(self):
+        intent, _, _ = commands._route("make me a bot that answers the door")
+        self.assertEqual(intent, "create")
+
+    def test_a_plain_capability_is_still_an_install(self):
+        self.assertEqual(commands._route("install obsidian")[0], "install")

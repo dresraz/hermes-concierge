@@ -55,9 +55,16 @@ class Detection(unittest.TestCase):
                 self.assertEqual(found.name, role)
 
     def test_generic_words_do_not_pick_a_role(self):
-        for sentence in ("hire a bot", "make me an assistant", ""):
+        for sentence in ("hire a bot", "make me an agent", "a helper please", ""):
             with self.subTest(sentence=sentence):
                 self.assertIsNone(presets.detect(sentence))
+
+    def test_the_word_assistant_is_a_role_in_a_plain_phrase(self):
+        for sentence in ("make me an assistant", "a general assistant", "personal assistant bot"):
+            with self.subTest(sentence=sentence):
+                found = presets.detect(sentence)
+                self.assertIsNotNone(found, sentence)
+                self.assertEqual(found.name, "assistant")
 
     def test_roster_is_ten_and_named(self):
         self.assertEqual(len(presets.ROLES), 10)

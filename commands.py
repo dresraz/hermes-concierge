@@ -179,6 +179,12 @@ def _route(text: str) -> tuple:
             return "improve", name, query
     role = presets.detect(query)
     if role is None:
+        # "make me a bot that does X" with no known role is still a bot, not a
+        # marketplace search: the sentence asked for a profile, not a plugin.
+        if bool(words & BOT_WORDS) and any(
+            verb.strip() in words for verb in MAKE_VERBS
+        ):
+            return "create", "", query
         return "install", "", text
     # "my researcher" is the one you have, however the sentence starts.
     mine = bool(re.search(r"\bmy\s+(?:[a-z0-9-]+\s+){0,4}(" + "|".join(

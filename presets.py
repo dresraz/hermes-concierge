@@ -106,7 +106,12 @@ CUES: dict[str, tuple[str, ...]] = {
     # "assistant" is the generic word, not a role: leave it out so
     # "hire a research assistant" lands on researcher.
     "assistant": ("inbox", "email", "calendar", "schedule", "errands",
-                  "admin", "files", "logins"),
+                  "admin", "files", "logins",
+                  # The generic word is a cue only inside a phrase that cannot
+                  # be read as "research assistant" or "coding assistant".
+                  "general assistant", "personal assistant", "virtual assistant",
+                  "assistant bot", "my assistant", "an assistant",
+                  "office assistant", "executive assistant"),
     "marketer": ("marketing", "marketer", "seo", "social", "campaign", "ads",
                  "audience", "growth", "instagram", "twitter", "reddit"),
     "watcher": ("watch", "watcher", "monitor", "alert", "ping me", "track",
