@@ -53,15 +53,23 @@ class Plan:
     home: Path
     sentence: str
     items: list = field(default_factory=list)
+    have: list = field(default_factory=list)
 
     @property
     def skills(self) -> list:
         return [item for item in self.items if item.kind == "skill"]
 
 
+# A sentence that starts like behaviour is a rule, even without "always": the
+# bot does not get a skill out of "start replies with the answer".
+RULE_SHAPES = ("start ", "end ", "reply ", "answer ", "keep ", "write ", "prefer ", "use ")
+
+
 def is_rule(sentence: str) -> bool:
     low = " " + " ".join((sentence or "").lower().split()) + " "
-    return any(" " + word + " " in low or low.strip().startswith(word) for word in RULE_WORDS)
+    if any(" " + word + " " in low or low.strip().startswith(word) for word in RULE_WORDS):
+        return True
+    return low.strip().startswith(RULE_SHAPES)
 
 
 def resolve(bot: str) -> Optional[Path]:
@@ -117,6 +125,9 @@ def plan(bot: str, sentence: str, *, limit: int = MAX_ITEMS) -> Optional[Plan]:
         return result
 
     have = installed(home)
+    # "add pdf capabilities" when it already reads PDFs is not a miss, it is a
+    # no-op, and saying "nothing fits" there is a lie.
+    result.have = [name for name in discover.named_hits(text) if name in have]
     picks = discover.suggest(text, skip=have, limit=limit)
     for pick in picks:
         result.items.append(
@@ -317,6 +328,12 @@ def apply(plan_: Plan, *, store: Any = None) -> list:
 
 def receipt(plan_: Plan, lines: Sequence[str]) -> str:
     """One short block: what the bot got, and how to take it back."""
+    if not plan_.items and getattr(plan_, "have", None):
+        return (
+            "  {} already has {}. Nothing changed.\n".format(
+                plan_.bot, ", ".join(plan_.have)
+            )
+        )
     if not plan_.items:
         return (
             "  Nothing in the marketplace fits that yet.\n"

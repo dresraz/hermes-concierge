@@ -180,6 +180,22 @@ def catalogue(roots: Optional[Sequence[Path]] = None) -> list[dict]:
     return out
 
 
+def named_hits(sentence: str) -> list:
+    """Skills whose own name is one of the words asked for, installed or not."""
+    wanted = {_bare(word) for word in _words(sentence)}
+    hits = [
+        item["name"] for item in catalogue()
+        if {_bare(word) for word in _words(item["name"].replace("-", " "))} & wanted
+    ]
+    return sorted(hits, key=lambda name: (len(name), name))
+
+
+def _bare(word: str) -> str:
+    """'pdfs' and 'pdf' are the same word to a person."""
+    word = _fold(word)
+    return word[:-1] if len(word) > 3 and word.endswith("s") else word
+
+
 def suggest(
     sentence: str,
     role: str = "",
@@ -210,6 +226,17 @@ def suggest(
     if not items:
         return []
     blocked = {s.rsplit("/", 1)[-1] for s in skip}
+    # Naming the thing by its own name always wins: "handle pdfs" is the skill
+    # called pdf, not a coincidence of shared words.
+    named = [
+        item for item in items
+        if item["name"] not in blocked
+        and {_bare(word) for word in _words(item["name"].replace("-", " "))}
+        & {_bare(word) for word in wanted}
+    ]
+    if named:
+        named.sort(key=lambda item: (len(item["name"]), item["name"]))
+        return named[:limit]
     frequency: dict[str, int] = {}
     for item in items:
         for word in _words(item["name"].replace("-", " ")) | _words(item["description"]):

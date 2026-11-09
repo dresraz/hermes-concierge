@@ -393,6 +393,22 @@ def _strip_name(text: str, name: str) -> str:
     return " ".join(out.split()).strip(" :,-") or text
 
 
+_SELF = ("yourself", "itself", "your self", "yourself.")
+
+_SELF_VERBS = (
+    "improve", "add ", "capable", "capabilities", "capability", "ability",
+    "handle", "support", "better at", "able to",
+)
+
+
+def _self_improve(text: str) -> bool:
+    """'make yourself able to read pdfs' is about the bot you are talking to."""
+    low = " " + " ".join((text or "").lower().split()) + " "
+    if not any(word in low for word in _SELF):
+        return False
+    return any(verb in low for verb in _SELF_VERBS)
+
+
 def _improve_shape(text: str) -> bool:
     """"<bot>: <what>" is an improve, whatever word came before it."""
     head, sep, rest = (text or "").partition(":")
@@ -618,6 +634,11 @@ def handle_concierge(
     if first.lower() == "train":
         return "  train is gone. Same thing: /concierge improve {}\n".format(after.strip() or "<bot>: <what>")
 
+    if _self_improve(text) and not (_asks_for_bot(text) or _wants_a_bot(text)):
+        _drop_cards(session_key)
+        return handle_improve(
+            text, store=store, known=known, bot=_self_name() if _is_bot_profile() else None
+        )
     spanish = re.match(r"^(?:mejora|mejorar|ens[eñ]a|entrena)\s+(.+)", low)
     if spanish:
         _drop_cards(session_key)
@@ -1050,7 +1071,7 @@ def handle_improve(
     bot, sentence = (bot, text) if bot else training.guess_bot(text)
     if _is_bot_profile():
         here = _self_name()
-        if (bot or "").lower() in ("me", "myself", "self", ""):
+        if (bot or "").lower() in ("me", "myself", "self", "yourself", "itself", "you", "your self", ""):
             bot = here
         if bot != here:
             return "  This bot can only improve itself, not {}.\n".format(bot)
