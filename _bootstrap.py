@@ -13,10 +13,13 @@ about which build is answering.
 
 from __future__ import annotations
 
+import importlib
 import pathlib
 import sys
 
-_PACKAGE = "concierge"
+# The loader may import this package under any name (a profile symlink loads it
+# as its own module), so never assume "concierge": ask the package we are in.
+_PACKAGE = __package__ or "concierge"
 _HERE = pathlib.Path(__file__).resolve().parent
 _fingerprint: tuple = ()
 _ctx = None
@@ -41,10 +44,12 @@ def _current():
 
     stamp = _stamp()
     if _fingerprint and stamp != _fingerprint:
-        for name in [n for n in sys.modules if n == _PACKAGE or n.startswith(_PACKAGE + ".")]:
+        # Drop the modules, never the package itself: it may have been loaded by
+        # path (a profile symlink) and could not be imported again by name.
+        for name in [n for n in sys.modules if n.startswith(_PACKAGE + ".")]:
             del sys.modules[name]
     _fingerprint = stamp
-    module = __import__(_PACKAGE + ".commands", fromlist=["commands"])
+    module = importlib.import_module(".commands", _PACKAGE)
     if _ctx is not None:
         module.bind(_ctx)
     return module
@@ -55,7 +60,7 @@ def handle(text, **kwargs):
 
 
 def on_admission(*args, **kwargs):
-    module = __import__(_PACKAGE + ".reply", fromlist=["reply"])
+    module = importlib.import_module(".reply", _PACKAGE)
     return module.on_admission(*args, **kwargs)
 
 
