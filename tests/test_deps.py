@@ -81,8 +81,8 @@ class CardLine(unittest.TestCase):
     def test_packages_are_named_before_the_yes(self):
         _, e = candidate()
         text = card.render("do the thing", [candidate()[0]], deps=["httpx", "rich>=13"])
-        self.assertIn("deps        httpx, rich", text)
-        self.assertIn("no extra question", text)
+        self.assertIn("It also needs httpx, rich", text)
+        self.assertIn("It also needs", text)
 
     def test_no_packages_means_no_line(self):
         text = card.render("do the thing", [candidate()[0]], deps=[])
@@ -92,7 +92,7 @@ class CardLine(unittest.TestCase):
         text = card.render(
             "do the thing", [candidate()[0]], deps=["cfrust @ git+https://github.com/x/cfrust"]
         )
-        self.assertIn("git or a url, not PyPI", text)
+        self.assertIn("from git, not PyPI", text)
         self.assertEqual(seams.risky_deps(["cfrust @ git+https://github.com/x/cfrust"]), [
             "cfrust @ git+https://github.com/x/cfrust"
         ])

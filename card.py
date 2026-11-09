@@ -24,9 +24,33 @@ CONTENDER_RATIO = 0.75
 _PENDING: dict = {}
 
 
+CARD_TTL = 600
+CARD_MAX = 32
+_STAMP: dict = {}
+
+
+def _prune() -> None:
+    """A card nobody answered expires, and the map never grows without bound."""
+    import time
+
+    now = time.time()
+    for key in [k for k, when in _STAMP.items() if now - when > CARD_TTL]:
+        _PENDING.pop(key, None)
+        _STAMP.pop(key, None)
+    while len(_STAMP) > CARD_MAX:
+        oldest = min(_STAMP, key=_STAMP.get)
+        _PENDING.pop(oldest, None)
+        _STAMP.pop(oldest, None)
+
+
 def _slot(session_key: str = "") -> dict:
+    import time
+
+    _prune()
+    key = session_key or ""
+    _STAMP[key] = time.time()
     return _PENDING.setdefault(
-        session_key or "", {"sentence": "", "entries": [], "caution_accepted": False}
+        key, {"sentence": "", "entries": [], "caution_accepted": False}
     )
 
 YES = frozenset({"y", "yes", "install", "do it", "ok", "okay", "go"})
@@ -120,39 +144,55 @@ def deps_line(deps) -> str:
     return f"  deps        {shown}  installed with it, no extra question"
 
 
+def _plain_adds(entry) -> str:
+    """What the plugin does to the agent, in words a new person parses once."""
+    tools = _caps(entry).get("tools") or []
+    if not tools:
+        return "Nothing new. It just works when you ask."
+    count = len(tools) if isinstance(tools, (list, tuple)) else 1
+    return "{} the agent can use on every message.".format(_count(count, "extra tool"))
+
+
 def render(sentence: str, candidates: list, deps: Optional[list] = None,
            target: str = "") -> str:
-    """The card for one sentence and the candidates that earned a place on it."""
+    """The card for one sentence and the candidates that earned a place on it.
+
+    Written for someone who has never installed a plugin: the first line is the
+    offer, then four short facts, then two words you can type. No tiers, no
+    category labels, no commit shas on the main line.
+    """
     from . import seams
 
     top = candidates[0]
-    lines = [
-        "Concierge",
-        "",
-        f"  you said    {sentence.strip()}",
-        f"  best match  {top.name}  ({top.tier or 'unknown tier'}, {top.category or 'general'})",
-        f"  matched     {top.why()}",
-    ]
+    where = "into {} (not this profile)".format(target) if target else "this profile"
+    lines = ["", "Install {}?".format(top.name), ""]
     description = " ".join(top.description.split())
     if description:
-        lines.append(f"  what        {_fit(description, 160)}")
-    lines.append(f"  adds        {_adds(top.entry)}")
+        lines.append("  What it is    {}".format(_fit(description, 150)))
+    lines.append("  What it adds  {}".format(_plain_adds(top.entry)))
     if deps:
-        lines.append(deps_line(deps))
-    if target:
-        lines.append(f"  into        bot {target}  (not this profile)")
-    else:
-        lines.append(f"  into        this profile ({seams.current_profile()})")
-    lines.append(f"  cost        {cost_line(top.entry)}")
-    lines.append(f"  install     {_pin(top.entry)}")
+        names = ", ".join(_dep_name(str(d)) for d in deps[:4])
+        if len(deps) > 4:
+            names += " (+{} more)".format(len(deps) - 4)
+        risky = seams.risky_deps(deps)
+        lines.append(
+            "  It also needs {}{}".format(names, " (from git, not PyPI)" if risky else "")
+        )
+    lines.append("  Goes          {}".format(where))
 
     rival = _contender(candidates)
     if rival is not None:
-        # The runner-up is named so it can be asked for by name. It is never one
-        # keystroke away: a number that installs something the card did not describe
-        # is a decision made blind.
-        lines += ["", f"  also        {rival.name}  ({rival.tier or 'unknown tier'})"]
-    lines += ["", "Install it?  /concierge yes   or   /concierge no", ""]
+        lines += ["", "  Not what you meant? There is also {}.".format(rival.name)]
+        lines.append("  Say its name to see it instead.")
+    repo = str(getattr(top.entry, "repo", "") or "")
+    if repo:
+        lines += ["", "  From           {}".format(repo.replace("https://", "").replace("http://", ""))]
+    lines += [
+        "",
+        "  /concierge yes     install it",
+        "  /concierge no      skip it",
+        "",
+    ]
     return "\n".join(lines)
 
 
@@ -167,14 +207,15 @@ def _contender(candidates: list):
 
 def nothing(sentence: str, entries: Optional[list] = None) -> str:
     """The honest no: nothing in the catalog does this, and nothing was installed."""
+    said = " ".join((sentence or "").split())[:80]
     return "\n".join(
         [
             "Concierge",
             "",
-            f"  you said    {sentence.strip()}",
-            "  best match  none",
+            "  Nothing here fits {} yet.".format('"' + said + '"' if said else "that"),
+            "  Nothing was installed.",
             "",
-            "Nothing in the catalog does that yet. Nothing was installed.",
+            "  Try the word for the tool you want: /concierge browse pdf",
             "",
         ]
     )
@@ -254,20 +295,15 @@ def more(session_key: str = "") -> str:
         return f"{picked[0].name} is the only match on the card.\n"
 
     rival = picked[1]
-    lines = [
-        f"{rival.name}  ({rival.tier or 'unknown tier'}, {rival.category or 'general'})",
-        "",
-        f"  matched     {rival.why()}",
-    ]
+    lines = ["", "{}".format(rival.name), ""]
     description = " ".join(rival.description.split())
     if description:
-        lines.append(f"  what        {_fit(description, 160)}")
-    lines.append(f"  adds        {_adds(rival.entry)}")
-    lines.append(f"  cost        {cost_line(rival.entry)}")
+        lines.append("  What it is    {}".format(_fit(description, 150)))
+    lines.append("  What it adds  {}".format(_plain_adds(rival.entry)))
     lines += [
         "",
-        f"The card still holds {picked[0].name}: /concierge yes installs that.",
-        f"For this one instead: /concierge {rival.name}",
+        "The card still holds {}. /concierge yes installs that.".format(picked[0].name),
+        "For this one instead: /concierge {}".format(rival.name),
         "",
     ]
     return "\n".join(lines)
@@ -390,6 +426,7 @@ def _remember(record, store) -> bool:
 def _reset(session_key: str = "") -> None:
     """Drop this conversation's card; nothing of it survives in another chat."""
     _PENDING.pop(session_key or "", None)
+    _STAMP.pop(session_key or "", None)
 
 
 def forget(session_key: str = "") -> None:

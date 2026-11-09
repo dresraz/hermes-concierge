@@ -21,6 +21,9 @@ from .card import NO, YES, _fit
 # A skills search is a network call, so it is spent once per sentence and never
 # on a yes. The pending offer holds the identifier the search already returned.
 _PENDING: dict = {}
+_STAMP: dict = {}
+MARKET_TTL = 600
+MARKET_MAX = 32
 
 
 @dataclass
@@ -124,40 +127,41 @@ def _hub_search(query: str, limit: int) -> list:
 
 
 def render(text: str, offers: list, target: str) -> str:
-    """The skill card. Same shape as the plugin card, one yes, one install."""
+    """The skill card, in the same plain words as the plugin card."""
     from . import seams
 
     top = offers[0]
     profile = target or seams.current_profile()
-    lines = [
-        "Concierge",
-        "",
-        f"  you said    {text.strip()}",
-        f"  best match  {top.name}  ({top.where})",
-    ]
+    where = "into {} (not this profile)".format(target) if target else "this profile"
+    lines = ["", "Install {}?".format(top.name), ""]
     if top.description:
-        lines.append(f"  what        {_fit(top.description, 160)}")
-    lines.append(f"  adds        a skill: SKILL.md and its files")
-    if target:
-        lines.append(f"  into        bot {target}  (not this profile)")
-    else:
-        lines.append(f"  into        this profile ({profile})")
-    lines.append(f"  install     hermes -p {profile} skills install {top.identifier}")
+        lines.append("  What it is    {}".format(_fit(top.description, 150)))
+    lines.append("  What it adds  a skill: instructions the agent can follow.")
+    lines.append("  Goes          {}".format(where))
+    if getattr(top, "identifier", ""):
+        lines += ["", "  From           {}".format(top.identifier)]
     if len(offers) > 1:
-        lines += ["", f"  also        {offers[1].name}  ({offers[1].where})"]
-    lines += ["", "Install it?  /concierge yes   or   /concierge no", ""]
+        lines += ["", "  Not what you meant? There is also {}.".format(offers[1].name)]
+        lines.append("  Say its name to see it instead.")
+    lines += [
+        "",
+        "  /concierge yes     install it",
+        "  /concierge no      skip it",
+        "",
+    ]
     return "\n".join(lines)
 
 
 def nothing(text: str, target: str = "") -> str:
-    where = f"bot {target}" if target else "this profile"
+    where = "bot {}".format(target) if target else "this profile"
+    said = " ".join((text or "").split())[:80]
     return "\n".join([
         "Concierge",
         "",
-        f"  you said    {text.strip()}",
-        f"  best match  none in the plugin catalog or the skill registries",
+        "  Nothing here fits {} yet.".format('"' + said + '"' if said else "that"),
+        "  Nothing was installed in {}.".format(where),
         "",
-        f"Nothing answers to that, so nothing was installed in {where}.",
+        "  Try the word for the tool you want: /concierge browse pdf",
         "",
     ])
 
@@ -186,6 +190,17 @@ def handle(text: str, *, target: str = "", session_key: str = "",
         _PENDING.pop(session_key, None)
         return nothing(query, target)
 
+    import time
+
+    now = time.time()
+    for key in [k for k, when in _STAMP.items() if now - when > MARKET_TTL]:
+        _PENDING.pop(key, None)
+        _STAMP.pop(key, None)
+    while len(_STAMP) > MARKET_MAX:
+        oldest = min(_STAMP, key=_STAMP.get)
+        _PENDING.pop(oldest, None)
+        _STAMP.pop(oldest, None)
+    _STAMP[session_key] = now
     _PENDING[session_key] = {"query": query, "offers": offers, "target": target}
     return render(query, offers, target)
 

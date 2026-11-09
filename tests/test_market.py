@@ -86,9 +86,9 @@ class Card(unittest.TestCase):
             session_key="s1",
             search_fn=lambda query, limit: [hit("stripe", "stripe@skills.sh")],
         )
-        self.assertIn("best match  stripe", card)
-        self.assertIn("into        bot intern  (not this profile)", card)
-        self.assertIn("hermes -p intern skills install stripe@skills.sh", card)
+        self.assertIn("Install stripe?", card)
+        self.assertIn("Goes          into intern (not this profile)", card)
+        self.assertIn("From           stripe@skills.sh", card)
         self.assertTrue(market.is_waiting("s1"))
 
     def test_the_card_says_this_profile_when_no_bot_was_named(self):
@@ -97,15 +97,15 @@ class Card(unittest.TestCase):
             session_key="s1",
             search_fn=lambda query, limit: [hit("stripe")],
         )
-        self.assertIn("into        this profile (default)", card)
+        self.assertIn("Goes          this profile", card)
 
     def test_nothing_found_installs_nothing(self):
         card = market.handle(
             "a time machine", target="intern", session_key="s1",
             search_fn=lambda query, limit: [],
         )
-        self.assertIn("best match  none", card)
-        self.assertIn("nothing was installed in bot intern", card)
+        self.assertIn("Nothing here fits", card)
+        self.assertIn("Nothing was installed in bot intern", card)
         self.assertFalse(market.is_waiting("s1"))
 
     def test_yes_installs_into_the_named_bot_and_says_where(self):
@@ -185,8 +185,8 @@ class BothShelves(unittest.TestCase):
                 "themes into intern", catalog=[entry],
                 search=lambda query, limit: asked.append(query) or [],
             )
-        self.assertIn("best match  hermes-themes-pack", text)
-        self.assertIn("into        bot intern", text)
+        self.assertIn("Install hermes-themes-pack?", text)
+        self.assertIn("Goes          into intern", text)
         self.assertEqual(asked, [])
 
     def test_the_skill_shelf_answers_when_no_plugin_matches(self):
@@ -195,8 +195,8 @@ class BothShelves(unittest.TestCase):
                 "stripe payments into intern", catalog=[],
                 search=lambda query, limit: [hit("stripe", "stripe@skills.sh")],
             )
-        self.assertIn("best match  stripe", text)
-        self.assertIn("hermes -p intern skills install stripe@skills.sh", text)
+        self.assertIn("Install stripe?", text)
+        self.assertIn("From           stripe@skills.sh", text)
 
 
 class CardSplitsTheBot(unittest.TestCase):
