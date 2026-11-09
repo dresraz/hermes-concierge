@@ -847,7 +847,16 @@ def handle_concierge(
     if bare in ("yes", "no", "more", "next", "1", "2") and not (
         card.is_waiting(session_key) or market.is_waiting(session_key)
     ):
-        return "  Nothing is waiting. Start with: /concierge install <what you want>\n"
+        from . import shelf
+
+        # A shelf was just shown: "no" closes it, it is not a mistake.
+        if bare == "no" or shelf._rows(session_key):
+            shelf.forget(session_key)
+            if bare == "no":
+                return "  Nothing installed.\n"
+        if bare in ("yes", "1"):
+            return "  Nothing to say yes to yet. Say the job: /concierge something that reads my pdfs\n"
+        return "  Pick a number from the list, or say the job in one sentence.\n"
     if low in ("help all", "help -a", "help --all"):
         _drop_cards(session_key)
         return HELP
