@@ -37,6 +37,8 @@ class Router(unittest.TestCase):
         )
         self.assertEqual(route, {"action": "improve", "bot": "assistant-bot", "what": "handle pdfs"})
         self.assertIn("inside_bot: assistant-bot", llm.prompts[0])
+        # Looking is browsing: a question must not be answered with "already has".
+        self.assertIn("Words that ask to LOOK are browse", llm.prompts[0])
 
     def test_an_invented_action_is_refused(self):
         llm = FakeLlm({"action": "format_disk", "bot": "", "what": ""})

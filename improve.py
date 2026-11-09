@@ -329,8 +329,9 @@ def receipt(plan_: Plan, lines: Sequence[str]) -> str:
     """One short block: what the bot got, and how to take it back."""
     if not plan_.items and getattr(plan_, "have", None):
         return (
-            "  {} already has {}. Nothing changed.\n".format(
-                plan_.bot, ", ".join(plan_.have)
+            "  {} already has {}. Nothing changed.\n"
+            "  See what else does that job: /concierge browse {}\n".format(
+                plan_.bot, ", ".join(plan_.have), plan_.have[0]
             )
         )
     if not plan_.items:
