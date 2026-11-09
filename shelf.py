@@ -176,11 +176,6 @@ def _rank(rows: list, query: str) -> list:
     return sorted(rows, key=key)
 
 
-def _broad_hint(query: str) -> str:
-    words = [w for w in (query or "").split() if len(w) > 2]
-    return words[0] if words else "notes"
-
-
 def browse(query: str = "", session_key: str = "", page: int = 1) -> str:
     """A numbered window. The number is the pick. Page 2 is the next window."""
     import time
@@ -201,14 +196,13 @@ def browse(query: str = "", session_key: str = "", page: int = 1) -> str:
                 head + "\n\n"
                 "  There {} only {} page{}. You asked for page {}.\n"
                 "  Back to the start: /concierge browse {}\n".format(
-                    "is" if pages == 1 else "are", pages, "" if pages == 1 else "s", page,
-                    "" if pages == 1 else " 1", query,
+                    "is" if pages == 1 else "are", pages, "" if pages == 1 else "s", page, query,
                 )
             )
         return (
             head + "\n\n"
-            "  Nothing on this machine matches that.\n"
-            "  Try a broader word: /concierge browse {}\n".format(_broad_hint(query))
+            "  Nothing matches {}.\n"
+            "  See everything: /concierge browse\n".format(query)
         )
     lines = [head, ""]
     for index, row in enumerate(rows, start=1):

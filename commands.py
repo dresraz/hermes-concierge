@@ -30,6 +30,11 @@ NO = frozenset({"n", "no", "cancel", "stop", "never mind", "nvm"})
 UNDO_WORDS = frozenset({"undo", "revert", "roll back", "rollback", "reverse"})
 HELP_WORDS = frozenset({"help", "?", "-h", "--help", "h", "commands"})
 
+CANCEL_WORDS = frozenset({
+    "cancel", "stop", "forget it", "never mind", "nevermind", "drop it",
+    "same as last time", "do it again", "not now", "abort",
+})
+
 HELP_SHORT = (
     "\n"
     "  Concierge\n"
@@ -196,6 +201,13 @@ def _asks_for_bot(text: str) -> bool:
     words = set(re.findall(r"[a-z']+", low))
     if words & CAPABILITY_WORDS:
         return False
+    # "make the house bot shorter" names a bot you already have: that is a
+    # change to it, not a request for another one.
+    try:
+        if any(re.search(r"(?<![\w-]){}(?![\w-])".format(re.escape(name)), low) for name in _bot_names()):
+            return False
+    except Exception:
+        pass
     asked = any(
         verb.strip() in words or low.startswith(verb.strip()) for verb in MAKE_VERBS
     ) or any(phrase in low for phrase in ASK_WORDS)
@@ -421,6 +433,10 @@ def handle_concierge(
         from . import shelf
 
         return shelf.overview()
+    if low in CANCEL_WORDS:
+        card.forget(session_key)
+        _forget("", session_key)
+        return "  Dropped. Nothing was installed.\n"
     if low in ("help all", "help -a", "help --all"):
         card.forget(session_key)
         _forget("", session_key)
@@ -429,13 +445,20 @@ def handle_concierge(
         card.forget(session_key)
         _forget("", session_key)
         return HELP_SHORT
+    what_is_in = re.match(r"^(what(?:'s| is)? (?:in|inside|installed in))\s+(?:my\s+|the\s+)?([a-z0-9_-]+)", low)
+    if what_is_in:
+        card.forget(session_key)
+        _forget("", session_key)
+        return handle_concierge("skills " + what_is_in.group(2), store=store,
+                                session_key=session_key, known=known, hire=hire, search=search)
+
     natural = _natural_verb(low)
     if natural == "bots":
         card.forget(session_key)
         _forget("", session_key)
         return _safe_bots(store)
     first_word = low.split(" ", 1)[0]
-    if natural == "fire" and first_word not in ("fire", "reset"):
+    if natural == "fire" and first_word not in ("fire", "reset", "delete", "remove", "rm"):
         card.forget(session_key)
         _forget("", session_key)
         return (
@@ -507,11 +530,14 @@ def handle_concierge(
 
         if not rest and not _is_bot_profile():
             # No name in the owner's profile: a fleet summary, not 200 lines.
-            bots = _safe_bots(store)
-            if not bots:
+            try:
+                made = [lifecycle.name_of(record) for record in lifecycle.bots(store)]
+            except Exception:
+                return "  The bot list could not be read just now. Nothing was changed.\n"
+            if not made:
                 return "  No bots yet. Make one: /concierge create a researcher\n"
             lines = ["  Skills per bot", ""]
-            for bot in bots:
+            for bot in made:
                 home = improve.resolve(bot)
                 count = len(improve.installed(home)) if home is not None else 0
                 lines.append("  {:<26} {}".format(bot, "{} skills".format(count) if count else "none yet"))
@@ -539,7 +565,7 @@ def handle_concierge(
         _forget("", session_key)
         return _safe_bots(store)
 
-    if head in ("fire", "reset"):
+    if head in ("fire", "delete", "remove", "rm", "reset"):
         if _is_bot_profile():
             return "  A bot cannot delete or reset profiles. Ask the owner.\n"
         # "fire the intern" is a sentence, not a bot: only a selector fires.
@@ -551,7 +577,7 @@ def handle_concierge(
         card.forget(session_key)
         _forget("", session_key)
         try:
-            if head == "fire":
+            if head in ("fire", "delete", "remove", "rm"):
                 return lifecycle.fire(store, selector, confirm=confirm, seams=seams)
             return lifecycle.reset(store, selector, seams=seams)
         except lifecycle.Refused as exc:
@@ -686,7 +712,10 @@ def handle_concierge(
     if _asks_for_bot(text):
         return handle_hire(text, store=store, hire=hire, known=known)
 
-    answer = card.handle(text, session_key=session_key)
+    # One decision point for "install this": handle_install owns the shortlist
+    # and the model's pick. A second card.handle here would answer again from a
+    # different ranking, which is how two screens could disagree.
+    answer = handle_install(text, store=store, session_key=session_key)
     if "Nothing here fits" in answer:
         try:
             from . import seams as _seams
@@ -775,8 +804,17 @@ def handle_install(
             catalog = seams.catalog()
         except Exception:
             catalog = []
-    # The matcher builds a shortlist; the model picks from it. A decisive
-    # lexical lead skips the model, so obvious asks stay instant.
+    # A waiting card owns yes/no/more and a bare number, so those answer before
+    # any search. A new sentence is a new request, not an answer to the card.
+    answer_word = re.sub(r"[^a-z0-9 ]", "", text.lower()).strip()
+    if card.is_waiting(session_key) and (
+        answer_word in ("yes", "y", "no", "n", "more") or answer_word.isdigit()
+    ):
+        return card.handle(text, entries=catalog, store=store,
+                           session_key=session_key, target=target)
+
+    # The matcher builds a shortlist; the model picks from it. A name asked for
+    # by name skips the model, so obvious asks stay instant.
     from . import choose
 
     choice = choose.pick(query, llm=_llm(), entries=catalog)
@@ -786,8 +824,18 @@ def handle_install(
                                  store=store, search_fn=search)
         return card.handle(choice.name, entries=catalog, store=store,
                            session_key=session_key, target=target)
-    return market.handle(query, target=target, session_key=session_key,
-                         store=store, search_fn=search)
+    if _llm() is None:
+        # No model at all: the old two-shelf search still beats a dead end.
+        return market.handle(text, target=target, session_key=session_key,
+                             store=store, search_fn=search)
+    # Nothing was picked, so nothing is installed. Falling through to a second
+    # lexical search here is how a polite "keep my desk tidy" ended up offering
+    # a submission ledger: two shots at a wrong answer instead of one honest no.
+    answer = card.nothing(query)
+    answer += (
+        "  If no tool can do it, a bot can try: /concierge create {}\n".format(query[:60])
+    )
+    return answer
 
 
 def handle_hire(
@@ -859,7 +907,11 @@ def handle_hire(
     except Exception:
         self_lines = []
 
-    lines, ok = bots.receipt(plan, path, known=taken)
+    from . import presets
+
+    lines, ok = bots.receipt(
+        plan, path, known=taken, count_skills=presets.detect(text) is None
+    )
     saved = _remember(
         state.Installed(
             name=plan.name,
@@ -923,8 +975,9 @@ def _apply_preset(text: str, name: str, profile_path: Any) -> list[str]:
 
     role = presets.detect(text)
     if role is None:
-        # No role: the bot still gets the job the owner asked for.
-        return _job_line(text, profile_path, bots)
+        # No role word in the sentence: a general assistant is more useful
+        # than a thin shell, and the job line still says what it is for.
+        role = presets.get("assistant")
     try:
         report = presets.install(name, Path(str(profile_path)), role)
     except Exception as exc:

@@ -187,7 +187,8 @@ def _skills_on_disk(home) -> int:
     return found
 
 
-def receipt(plan: Spec, path: object, known: Sequence[str] | None = None) -> tuple[list[str], bool]:
+def receipt(plan: Spec, path: object, known: Sequence[str] | None = None,
+            count_skills: bool = True) -> tuple[list[str], bool]:
     """Read the new profile off the disk and report what is really there."""
     from pathlib import Path
 
@@ -205,10 +206,11 @@ def receipt(plan: Spec, path: object, known: Sequence[str] | None = None) -> tup
     except Exception:
         listed = plan.name in (list(known) if known is not None else names())
     ok = home.is_dir() and bool(soul_text.strip()) and listed
-    lines = [
-        "  soul     " + ("a personality, {} chars".format(len(soul_text)) if soul_text else "MISSING"),
-        "  skills   " + ("{} installed".format(skills) if skills else "none yet"),
-    ]
+    lines = ["  soul     " + ("a personality, {} chars".format(len(soul_text)) if soul_text else "MISSING")]
+    # One count only: when the role line below names the skills, a second
+    # number above it reads as a mismatch to anyone who is not the author.
+    if count_skills and skills:
+        lines.append("  skills   {} installed".format(skills))
     if not listed:
         lines.append("  profile  not confirmed yet, it is there on disk")
     return lines, ok

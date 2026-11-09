@@ -229,7 +229,7 @@ class Surface(unittest.TestCase):
         self.assertIn("Created", out)
         self.assertIn("skills   researcher 1/1 installed: parallel-cli", out)
 
-    def test_hire_without_a_role_shows_no_preset_line(self):
+    def test_hire_without_a_role_becomes_a_general_assistant(self):
         home = Path(tempfile.mkdtemp(prefix="preset-plain-")) / "profile"
         home.mkdir()
         out = commands.handle_hire(
@@ -239,7 +239,9 @@ class Surface(unittest.TestCase):
             known=[],
         )
         self.assertIn("Created", out)
-        self.assertNotIn("installed: ", out)
+        # A sentence with no role word still gets a useful bot: the assistant
+        # preset, not a shell with one skill.
+        self.assertIn("assistant", out)
 
 
 if __name__ == "__main__":

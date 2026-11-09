@@ -142,18 +142,51 @@ def _ask_model(ask: str, rows: list, llm: Any) -> Optional[str]:
     return str(data.get("pick") or "").strip()
 
 
+INSTALL_WORDS = ("install", "add", "get me", "get", "fetch", "download", "give me")
+
+
+def _bare(ask: str) -> str:
+    """The ask with the install verb and decoration peeled off."""
+    low = " ".join((ask or "").lower().split()).strip(" .!?")
+    for word in INSTALL_WORDS:
+        if low.startswith(word + " "):
+            low = low[len(word) + 1 :]
+            break
+    for word in ("the", "a", "an", "skill", "plugin", "tool"):
+        low = " ".join(w for w in low.split() if w != word)
+    return low.strip()
+
+
+def _confident(rows: list) -> bool:
+    """Offline only: a clear lexical winner, used when no model is reachable."""
+    if not rows:
+        return False
+    if len(rows) == 1:
+        return True
+    best = getattr(rows[0], "score", 0.0) or 0.0
+    second = getattr(rows[1], "score", 0.0) or 0.0
+    return bool(best) and best >= DECISIVE * max(second, 0.01)
+
+
 def _decisive(rows: list) -> bool:
-    """A clear lexcial winner: no model call needed."""
+    """Only a literal name is decided without the model.
+
+    A score margin is not enough: with a junk runner-up, 2x is easy, and that is
+    how "keep my desk tidy" became "submission-desk" without anyone reading it.
+    """
     if not rows:
         return False
     top = rows[0]
-    if len(rows) == 1:
-        return True
-    second = getattr(rows[1], "score", 0.0) or 0.0
-    best = getattr(top, "score", 0.0) or 0.0
-    if not best:
+    asked = _bare(getattr(top, "_ask", ""))
+    name = str(getattr(top, "name", "")).lower().replace("-", " ").strip()
+    if not asked or not name:
         return False
-    return best >= DECISIVE * max(second, 0.01)
+    if asked == name:
+        return True
+    # A two-word product name said out loud ("install obsidian memory") is the
+    # product, not a coincidence. One short word is not enough: "desk" lives
+    # inside "keep my desk tidy" and inside "submission-desk".
+    return len(name.split()) >= 2 and name in asked
 
 
 def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> Optional[Any]:
@@ -169,10 +202,14 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
     rows = shortlist(ask, entries)
     if not rows:
         return None
+    for row in rows:
+        row._ask = ask
     if _decisive(rows):
         return rows[0]
     if llm is None:
-        return None
+        # No model: fall back to the old lexical rule. Weaker, but the plugin
+        # still works offline and in tests instead of answering nothing.
+        return rows[0] if _confident(rows) else None
     chosen = _ask_model(ask, rows, llm)
     if not chosen or chosen.upper() == "NOTHING":
         return None

@@ -44,10 +44,10 @@ class Choice(unittest.TestCase):
         with mock.patch.object(choose, "shortlist", lambda *a, **k: rows):
             return choose.pick(ask, llm=llm, entries=[])
 
-    def test_a_decisive_lead_is_taken_without_a_model_call(self):
+    def test_a_name_asked_by_name_is_taken_without_a_model_call(self):
         llm = FakeLlm("tabella")
         rows = [Row("pdf", "PDF files.", "skill", 20.0), Row("tabella", "Sheets.", "plugin", 2.0)]
-        picked = self.pick("read pdf files", llm, rows)
+        picked = self.pick("install pdf", llm, rows)
         self.assertEqual(picked.name, "pdf")
         self.assertEqual(llm.seen, "")
 

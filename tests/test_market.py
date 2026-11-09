@@ -192,7 +192,7 @@ class BothShelves(unittest.TestCase):
     def test_the_skill_shelf_answers_when_no_plugin_matches(self):
         with mock.patch.object(seams, "profile_exists", lambda name: name == "intern"):
             text = commands.handle_install(
-                "stripe payments into intern", catalog=[],
+                "stripe payments", catalog=[],
                 search=lambda query, limit: [hit("stripe", "stripe@skills.sh")],
             )
         self.assertIn("Install stripe?", text)
