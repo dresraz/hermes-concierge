@@ -192,6 +192,34 @@ def _plain_adds(entry) -> str:
     return "Adds {}.".format(_count(count, "tool")).format(_count(count, "extra tool"))
 
 
+def _caution_for(name: str, description: str = "") -> str:
+    """What a card should say before you say yes, worked out from the entry.
+
+    It lives here, at the card, because the card is the last place every path
+    passes through: the model pick, the offline fallback and a direct install by
+    name all end up rendering it. A warning that only some paths reach is a
+    warning that will be missing one day.
+    """
+    from . import presets
+
+    if presets.heavy(name):
+        return "heavy"
+    low = "{} {}".format(name, description or "").lower()
+    for marker in ("memory provider", "long-term memory", "long term memory",
+                   "memory plugin", "memory layer", "memory backend"):
+        if marker in low:
+            return "memory"
+    return ""
+
+
+def _caution_line(caution: str) -> str:
+    if caution == "memory":
+        return "  Memory provider: usually needs a paid plan."
+    if caution == "heavy":
+        return "  Heavy: downloads models and wants a GPU."
+    return ""
+
+
 def render(sentence: str, candidates: list, deps: Optional[list] = None,
            target: str = "", caution: str = "") -> str:
     """The card for one sentence and the candidates that earned a place on it.
@@ -208,6 +236,7 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
         if target
         else ""
     )
+    caution = caution or _caution_for(top.name, top.description)
     lines = ["", "Install {}?".format(top.name), ""]
     sentence = _one_line(top.description)
     if sentence:
@@ -233,10 +262,9 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
         # Only when the ask did not name that country itself.
         lines.append("  Only for {}. Not your country? Say no.".format(locked))
 
-    if caution == "memory":
-        lines.append("  Memory provider: usually needs a paid plan.")
-    elif caution == "heavy":
-        lines.append("  Heavy: downloads models and wants a GPU.")
+    line = _caution_line(caution)
+    if line:
+        lines.append(line)
 
     rival = _contender(candidates)
     if rival is not None:
@@ -275,21 +303,13 @@ def _has_hits(word: str) -> bool:
 def nothing(sentence: str, entries: Optional[list] = None) -> str:
     """The honest no: nothing in the catalog does this, and nothing was installed."""
     said = " ".join((sentence or "").split())[:80]
-    return "\n".join(
-        [
-            "Concierge",
-            "",
-            "  Nothing here fits {} yet.".format('"' + said + '"' if said else "that"),
-            "  Nothing was installed.",
-            "",
-            "  Try the word for the tool you want: /concierge browse {}".format(_hint(sentence))
-            if _has_hits(_hint(sentence))
-            else "  No tool does this, but a bot can try: /concierge create {}".format(
-                " ".join((sentence or "").split())[:60]
-            ),
-            "",
-        ]
-    )
+    head = 'Nothing here fits "{}". Nothing was installed.'.format(said) if said else "Nothing here fits that. Nothing was installed."
+    hint = _hint(sentence)
+    if _has_hits(hint):
+        nxt = "  Next: /concierge browse {}".format(hint)
+    else:
+        nxt = "  Next: /concierge create a bot that does it"
+    return "\n".join([head, "", nxt, ""])
 
 
 def handle(sentence: str, *, entries=None, store=None, install=None,

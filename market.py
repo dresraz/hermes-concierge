@@ -139,9 +139,38 @@ def _shipped_line(name: str) -> str:
     return ""
 
 
+def _caution_for(name: str, description: str = "") -> str:
+    """What a card should say before you say yes, worked out from the entry.
+
+    It lives here, at the card, because the card is the last place every path
+    passes through: the model pick, the offline fallback and a direct install by
+    name all end up rendering it. A warning that only some paths reach is a
+    warning that will be missing one day.
+    """
+    from . import presets
+
+    if presets.heavy(name):
+        return "heavy"
+    low = "{} {}".format(name, description or "").lower()
+    for marker in ("memory provider", "long-term memory", "long term memory",
+                   "memory plugin", "memory layer", "memory backend"):
+        if marker in low:
+            return "memory"
+    return ""
+
+
+def _caution_line(caution: str) -> str:
+    if caution == "memory":
+        return "  Memory provider: usually needs a paid plan."
+    if caution == "heavy":
+        return "  Heavy: downloads models and wants a GPU."
+    return ""
+
+
 def render(text: str, offers: list, target: str, caution: str = "") -> str:
     """The skill card: a name, one line, two words."""
     top = offers[0]
+    caution = caution or _caution_for(top.name, top.description)
     lines = ["", "Install {}?".format(top.name)]
     body = []
     # A registry blurb ("Indexed by skills.sh · 225,675 installs") tells a
@@ -164,10 +193,9 @@ def render(text: str, offers: list, target: str, caution: str = "") -> str:
         body.append("  It goes into {}.".format(target))
     if body:
         lines += [""] + body
-    if caution == "memory":
-        lines.append("  Memory provider: usually needs a paid plan.")
-    elif caution == "heavy":
-        lines.append("  Heavy: downloads models and wants a GPU.")
+    line = _caution_line(caution)
+    if line:
+        lines.append(line)
 
     rival = next((offer for offer in offers[1:] if offer.name != top.name), None)
     if rival is not None:
@@ -185,17 +213,18 @@ def _hint(text: str) -> str:
 
 
 def nothing(text: str, target: str = "") -> str:
-    where = "bot {}".format(target) if target else "this profile"
+    """The honest no, in the same shape as the plugin card's."""
     said = " ".join((text or "").split())[:80]
-    return "\n".join([
-        "Concierge",
-        "",
-        "  Nothing here fits {} yet.".format('"' + said + '"' if said else "that"),
-        "  Nothing was installed in {}.".format(where),
-        "",
-        "  Try the word for the tool you want: /concierge browse {}".format(_hint(text)),
-        "",
-    ])
+    where = " into {}".format(target) if target else ""
+    head = 'Nothing here fits "{}". Nothing was installed{}.'.format(said, where) if said else "Nothing here fits that. Nothing was installed."
+    hint = _hint(text)
+    try:
+        from . import shelf
+
+        nxt = "  Next: /concierge browse {}".format(hint) if shelf.items(hint, limit=2) else "  Next: /concierge create a bot that does it"
+    except Exception:
+        nxt = "  Next: /concierge create a bot that does it"
+    return "\n".join([head, "", nxt, ""])
 
 
 def handle(text: str, *, target: str = "", session_key: str = "",
@@ -213,6 +242,10 @@ def handle(text: str, *, target: str = "", session_key: str = "",
         return "Nothing installed.\n"
     if lowered in YES:
         return _answer(session_key=session_key, install=install, store=store)
+    if lowered == "2":
+        # The card describes one offer and may name a runner-up; a number is not
+        # a choice between two cards. Refuse it without dropping the offer.
+        return "One install at a time. Say yes for the top match, or name the other one.\n"
 
     query, named = split_target(text)
     if named and not target:

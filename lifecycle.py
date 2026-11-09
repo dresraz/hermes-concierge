@@ -206,7 +206,10 @@ def fire(
 
     for other in for_profile(store, name):
         store.drop(other.name, other.kind)
-    return "\n".join(["Fired: {}".format(name), ""] + ["  " + line for line in lines] + [""])
+    head = "Deleted {}".format(name)
+    return "\n".join([head, ""] + ["  " + line for line in lines] + [
+        "", "  The profile, its skills and its history are gone. A new one costs one sentence.",
+        ""])
 
 
 def reset(store: Any = None, token: Any = "", *, seams: Any = None) -> str:

@@ -105,7 +105,7 @@ class Card(unittest.TestCase):
             search_fn=lambda query, limit: [],
         )
         self.assertIn("Nothing here fits", card)
-        self.assertIn("Nothing was installed in bot intern", card)
+        self.assertIn("Nothing was installed into intern", card)
         self.assertFalse(market.is_waiting("s1"))
 
     def test_yes_installs_into_the_named_bot_and_says_where(self):

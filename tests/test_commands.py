@@ -290,7 +290,7 @@ class Fire(unittest.TestCase):
         made = store(bot("inbox-bot"))
         seams = FakeSeams({"inbox-bot": self.home})
         text = commands.handle_concierge("fire 1", store=made, seams=seams)
-        self.assertIn("Fired: inbox-bot", text)
+        self.assertIn("Deleted inbox-bot", text)
         self.assertEqual(seams.removed, ["inbox-bot"])
         self.assertFalse(self.home.exists())
         self.assertEqual(made.all(), [])
@@ -311,7 +311,7 @@ class Fire(unittest.TestCase):
         seams = FakeSeams({"inbox-bot": self.home})
         seams.history["inbox-bot"] = {"sessions": 14, "memories": 0, "cron": 0}
         text = commands.handle_concierge("fire 1 inbox-bot", store=made, seams=seams)
-        self.assertIn("Fired: inbox-bot", text)
+        self.assertIn("Deleted inbox-bot", text)
         self.assertEqual(seams.removed, ["inbox-bot"])
         self.assertFalse(self.home.exists())
 

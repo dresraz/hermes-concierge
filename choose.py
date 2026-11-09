@@ -175,16 +175,17 @@ def asks_about_memory(ask: str) -> bool:
     return any(word in low for word in MEMORY_WORDS)
 
 
+def _field(row: Any, name: str) -> str:
+    if isinstance(row, dict):
+        return str(row.get(name, "") or "")
+    return str(getattr(row, name, "") or "")
+
+
 def is_memory_provider(row: Any) -> bool:
     """A plugin that replaces how Hermes remembers things."""
-    if str(getattr(row, "kind", row.get("kind", ""))) != "plugin" and not isinstance(row, dict):
+    if _field(row, "kind") != "plugin":
         return False
-    if isinstance(row, dict):
-        kind, blob = row.get("kind", ""), "{} {}".format(row.get("name", ""), row.get("description", ""))
-    else:
-        kind, blob = getattr(row, "kind", ""), "{} {}".format(getattr(row, "name", ""), getattr(row, "description", ""))
-    if kind != "plugin":
-        return False
+    blob = "{} {}".format(_field(row, "name"), _field(row, "description"))
     low = blob.lower()
     return any(marker in low for marker in MEMORY_MARKERS) or "memory" in low.split(" ", 1)[-1][:40]
 
@@ -438,6 +439,7 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
     for row in rows:
         row._ask = ask
     if _decisive(rows):
+        rows[0].caution = caution_for(rows[0], ask)
         return rows[0]
     if llm is not None:
         # Every name in the marketplace, one call. Measured against a keyword
@@ -448,6 +450,7 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
             return whole
         wide = _ask_wide(ask, rows[:30], llm)
         if wide is not None:
+            wide.caution = caution_for(wide, ask)
             return wide
     if not rows:
         # Nothing shares a word with the ask. Ask the model whether Hermes
@@ -456,8 +459,12 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
         return Option("Hermes itself", tool, "builtin") if tool else None
     if llm is None:
         # No model: fall back to the old lexical rule. Weaker, but the plugin
-        # still works offline and in tests instead of answering nothing.
-        return rows[0] if _confident(rows) else None
+        # still works offline and in tests instead of answering nothing. The
+        # caution still applies - an offline pick must not skip the warning.
+        if not _confident(rows):
+            return None
+        rows[0].caution = caution_for(rows[0], ask)
+        return rows[0]
     chosen = _ask_model(ask, rows, llm)
     if not chosen or chosen.upper() == "NOTHING":
         # The catalogue has no fit. Before saying nothing exists, check whether

@@ -235,6 +235,14 @@ def _self_name() -> str:
         return ""
 
 
+def _inside(path: "Path", home: "Path") -> bool:
+    """True when path really lives under home, not beside a name that shares a prefix."""
+    try:
+        return path.resolve().is_relative_to(home.resolve())
+    except AttributeError:  # pragma: no cover - very old pythons
+        return str(path.resolve()).startswith(str(home.resolve()) + "/")
+
+
 def _is_bot_profile() -> bool:
     """True when this command runs inside a bot, not the owner's profile.
 
@@ -417,7 +425,7 @@ def handle_concierge(
     undo: Optional[Callable[..., Any]] = None,
 ) -> str:
     """The whole surface behind one command."""
-    from . import card, lifecycle
+    from . import card, lifecycle, market
 
     if store is None:
         from . import state
@@ -435,8 +443,17 @@ def handle_concierge(
         return shelf.overview()
     if low in CANCEL_WORDS:
         card.forget(session_key)
+        market.forget(session_key)
         _forget("", session_key)
         return "  Dropped. Nothing was installed.\n"
+
+    # A card word with no card in front of it is not a search term: "more" was
+    # once answered by installing a random plugin.
+    bare = re.sub(r"[^a-z0-9 ]", "", low).strip()
+    if bare in ("yes", "no", "more", "next", "1", "2") and not (
+        card.is_waiting(session_key) or market.is_waiting(session_key)
+    ):
+        return "  Nothing is waiting. Start with: /concierge install <what you want>\n"
     if low in ("help all", "help -a", "help --all"):
         card.forget(session_key)
         _forget("", session_key)
@@ -450,7 +467,7 @@ def handle_concierge(
         card.forget(session_key)
         _forget("", session_key)
         return handle_concierge("skills " + what_is_in.group(2), store=store,
-                                session_key=session_key, known=known, hire=hire, search=search)
+                                session_key=session_key, known=known, hire=hire)
 
     natural = _natural_verb(low)
     if natural == "bots":
@@ -749,10 +766,8 @@ def handle_concierge(
             subject = "a {} for this".format(role.name)
         else:
             subject = "a bot that does that"
-        answer += (
-            "  Nothing in the marketplace handles that. A bot can still try:\n"
-            "  /concierge create {}\n".format(subject)
-        )
+        if "/concierge create" not in answer:
+            answer += "  Next: /concierge create {}\n".format(subject)
         return answer
     if "best match  none" in answer:
         plan = improve.plan(here, text)
@@ -833,7 +848,21 @@ def handle_install(
         return card.handle(choice.name, entries=catalog, store=store,
                            session_key=session_key, target=target, caution=caution)
     if _llm() is None:
-        # No model at all: the old two-shelf search still beats a dead end.
+        # No model at all: the old two-shelf search still beats a dead end. The
+        # caution still has to reach the card, or offline is the one path where a
+        # paid memory provider or a GPU-heavy skill installs without a word.
+        from . import choose
+
+        rows = choose.shortlist(query, entries=catalog)
+        if rows:
+            top = rows[0]
+            warning = choose.caution_for(top, query)
+            if warning and getattr(top, "kind", "") == "skill":
+                return market.handle(top.name, target=target, session_key=session_key,
+                                     store=store, search_fn=search, caution=warning)
+            if warning:
+                return card.handle(top.name, entries=catalog, store=store,
+                                   session_key=session_key, target=target, caution=warning)
         return market.handle(text, target=target, session_key=session_key,
                              store=store, search_fn=search)
     # Nothing was picked, so nothing is installed. Falling through to a second
@@ -1122,6 +1151,19 @@ def handle_undo(*, store: Any = None, undo: Optional[Callable[..., Any]] = None,
         if owner and owner != here:
             return "  This bot can only undo its own changes.\n"
     if record is None:
+        try:
+            from . import lifecycle as _lifecycle
+
+            made = _lifecycle.bots(store)
+        except Exception:
+            made = []
+        if made:
+            # Undo reverses installs and rules, never a profile: saying nothing
+            # changed while a bot is standing there reads as a lie.
+            return (
+                "  Nothing to undo. Bots are removed with a sentence of their own:\n"
+                "  /concierge bots, then /concierge delete 1\n"
+            )
         return "Nothing to undo. Concierge has not changed anything yet.\n"
 
     lines = _undo_record(record, undo=undo, seams=seams)
@@ -1236,7 +1278,7 @@ def _undo_in(record: Any, profile: str, seams: Any) -> list:
         exact = Path(str(path))
         # The receipt holds the exact folder that was written. Removing that is
         # the only removal that cannot miss a nested category directory.
-        if exact.is_dir() and str(exact).startswith(str(home)):
+        if exact.is_dir() and _inside(exact, Path(str(home))):
             try:
                 gone = effects.remove_skill_dir(str(exact))
             except Exception as exc:
