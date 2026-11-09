@@ -407,8 +407,8 @@ plugin or a bot that does not exist.
 
 | | result |
 |---|---|
-| correct entry in the top 3 | **31/32** |
-| correct entry ranked first | 26/32 |
+| correct entry in the top 3 | **32/32** |
+| correct entry ranked first | 27/32 |
 | nonsense installs nothing | 8/8 |
 
 No LLM call is involved, so those numbers are the same on every run. They are also my own set, written while tuning the matcher, so read them as an upper bound. On a second, smaller set I did not tune on (12 everyday asks): 7 put the fitting entry first and 9 put it in the top three. The vocabulary pass and the keyword-dump penalty moved that from 2 and 5. The card says what it would add before anything happens, so a near miss costs one no.
