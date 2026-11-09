@@ -157,9 +157,48 @@ def add_rule(plan_: Plan, *, home: Optional[Path] = None) -> Optional[dict]:
 
     home = Path(str(home or plan_.home))
     soul = home / "SOUL.md"
+    lock = _soul_lock(soul)
     try:
         if soul.is_symlink() and not str(soul.resolve()).startswith(str(home.resolve())):
             return None
+        with lock:
+            return _append_locked(soul, plan_, uuid)
+    except OSError:
+        return None
+
+
+def _soul_lock(soul: Path):
+    """One writer per soul, or two rules read the same bytes and one is lost."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def held():
+        handle = None
+        try:
+            import fcntl
+
+            handle = open(str(soul) + ".lock", "a+")
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            yield
+        finally:
+            if handle is not None:
+                try:
+                    import fcntl
+
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                except Exception:
+                    pass
+                handle.close()
+
+    return held()
+
+
+def _append_locked(soul: Path, plan_: Plan, uuid) -> Optional[dict]:
+    """Read, append, write. Only ever called with the soul's lock held."""
+    import os
+    import shutil
+
+    try:
         text = _read(soul)
         bullet = "- {}\n".format(plan_.sentence.rstrip("."))
         if bullet in text:

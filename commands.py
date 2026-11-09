@@ -105,10 +105,10 @@ _BOTS_PHRASES = (
     r"^bots\b",
 )
 _UNDO_PHRASES = (
-    r"^(?:undo|revert|roll ?back)\b",
+    r"^(?:undo|revert|roll ?back|deshaz|deshacer)\b",
 )
 _FIRE_PHRASES = (
-    r"^(?:delete|remove|fire|reset|get rid of|kill|drop|uninstall)\b",
+    r"^(?:delete|remove|fire|reset|get rid of|kill|drop|uninstall|borra|elimina)\b",
 )
 _BROWSE_PHRASES = (
     r"^(?:what|which) (?:can|should) i (?:install|add|get)\b",
@@ -140,7 +140,12 @@ def _natural_verb(low: str) -> str:
 
 
 def _wants_a_bot(text: str) -> bool:
-    """True when the sentence asks for a bot, not for a plugin or a skill."""
+    """True when the sentence asks for a bot, not for a plugin or a skill.
+
+    A bot word next to a role cue is not enough on its own: "a bot that writes
+    my taxes" names a writer and asks for nothing, and it must reach the
+    marketplace answer ("nothing fits") rather than invent a bot.
+    """
     from . import market, presets
 
     low = " ".join((text or "").lower().split())
@@ -148,12 +153,15 @@ def _wants_a_bot(text: str) -> bool:
         return False
     if market.split_target(text)[1]:
         return False
-    if presets.detect(text) is None:
+    role = presets.detect(text)
+    if role is None:
         return False
     words = set(re.findall(r"[a-z']+", low))
+    stripped = _strip_polite(low)
+    asking = _asks_create(stripped) or _asks_create(low)
     if words & BOT_WORDS:
-        return True
-    return any(low.startswith(verb) for verb in MAKE_VERBS)
+        return asking
+    return asking
 
 
 def _asks_for_bot(text: str) -> bool:
@@ -219,8 +227,10 @@ POLITE = (
     "i need ", "i want ", "i'd like ", "help me ", "let's ", "lets ",
 )
 CREATE_ANY = ("hire", "make", "create", "build", "spawn", "set up", "stand up",
-              "give me", "get me", "spin up", "start")
-NEED_ANY = ("need", "want", "looking for", "could use")
+              "give me", "get me", "spin up", "start",
+              "hazme", "haz", "crea", "crear", "arma", "armar", "monta", "montar")
+NEED_ANY = ("need", "want", "looking for", "could use", "necesito", "quiero",
+            "kiero", "busco")
 SECOND_ANY = ("another", "second one", "one more", "twin", "number 2", "a new")
 
 
@@ -519,6 +529,11 @@ def handle_concierge(
     if first.lower() == "train":
         return "  train is gone. Same thing: /concierge improve {}\n".format(after.strip() or "<bot>: <what>")
 
+    spanish = re.match(r"^(?:mejora|mejorar|ens[eñ]a|entrena)\s+(.+)", low)
+    if spanish:
+        card.forget(session_key)
+        _forget("", session_key)
+        return handle_improve(spanish.group(1), store=store, known=known)
     if _improve_shape(text):
         card.forget(session_key)
         _forget("", session_key)
@@ -527,8 +542,10 @@ def handle_concierge(
     intent_name, bot, sentence = _classify(text, store=store)
     # A sentence that plainly asks for a bot is a bot, whatever the model said:
     # a prompt that talks the model into "install" must not override the guard.
-    if intent_name != "create" and (_asks_for_bot(text) or _wants_a_bot(text)):
-        intent_name, bot, sentence = "create", "", text
+    already = (bot or "") in _bot_names()
+    if intent_name != "create" and not (intent_name == "improve" and already):
+        if _asks_for_bot(text) or _wants_a_bot(text):
+            intent_name, bot, sentence = "create", "", text
     card.forget(session_key)
     _forget("", session_key)
     if intent_name == "create":
@@ -639,9 +656,13 @@ def handle_install(
         target = here
     if not target:
         aimed = re.search(r"\binto\s+([a-z0-9_-]+)\s*$", text, re.I)
-        if aimed and not seams.profile_exists(aimed.group(1)):
+        try:
+            known_destination = bool(aimed and seams.profile_exists(aimed.group(1)))
+        except Exception:
+            known_destination = False
+        if aimed and not known_destination:
             return "  No bot called {}. Say /concierge bots to see them.\n".format(aimed.group(1))
-        if aimed and seams.profile_exists(aimed.group(1)):
+        if aimed and known_destination:
             target = aimed.group(1)
             query = text[: aimed.start()].strip()
 
@@ -1022,7 +1043,7 @@ def _undo_in(record: Any, profile: str, seams: Any) -> list:
     try:
         home = seams.profile_home(profile)
     except Exception as exc:
-        return ["could not find {}: {}: {}({})".format(profile, type(exc).__name__, exc)]
+        return ["could not find {}: {}: {}".format(profile, type(exc).__name__, exc)]
     if not plugin and not list(getattr(record, "skills", None) or []):
         return ["nothing to remove: the receipt has no name"]
     if plugin and seams.plugin_dir_in(home, (plugin,)) is None:
