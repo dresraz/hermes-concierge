@@ -93,7 +93,8 @@ class Ask(unittest.TestCase):
     def test_card_carries_the_decision(self):
         text = card.handle("change the colors of my terminal", entries=CATALOG)
         self.assertIn("hermes-themes-pack", text)
-        self.assertIn("/concierge yes", text)
+        self.assertIn("yes", text)
+        self.assertIn("no", text)
         self.assertIn("Install hermes-themes-pack?", text)
 
     def test_card_explains_why(self):
@@ -126,14 +127,16 @@ class Ask(unittest.TestCase):
         # ...but there is no second number: a number installs what the card did not
         # describe, which is a decision made blind.
         self.assertNotIn("1 or 2", text)
-        self.assertIn("/concierge yes", text)
+        self.assertIn("yes", text)
+        self.assertIn("no", text)
 
     def test_more_describes_the_runner_up_and_leaves_the_yes_alone(self):
         card.handle("themes memory browser", entries=CATALOG)
         text = card.handle("more", entries=CATALOG)
         self.assertIn("hermes-memory-locus", text)
         self.assertIn("Memory provider", text)
-        self.assertIn("/concierge yes", text)
+        self.assertIn("yes", text)
+        self.assertIn("no", text)
 
         picked = []
 

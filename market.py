@@ -172,7 +172,7 @@ def render(text: str, offers: list, target: str, caution: str = "") -> str:
     rival = next((offer for offer in offers[1:] if offer.name != top.name), None)
     if rival is not None:
         lines += ["", "  Another option: {}.".format(rival.name)]
-    lines += ["", "  /concierge yes     install it", "  /concierge no      skip it", ""]
+    lines += ["", "  yes     no", ""]
     return "\n".join(lines)
 
 

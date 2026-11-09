@@ -170,7 +170,7 @@ def jurisdiction(entry) -> str:
     return ""
 
 
-def _one_line(description: str, limit: int = 96) -> str:
+def _one_line(description: str, limit: int = 92) -> str:
     """One sentence a stranger reads without scrolling."""
     text = " ".join((description or "").split())
     if not text:
@@ -241,7 +241,7 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
     rival = _contender(candidates)
     if rival is not None:
         lines += ["", "  Another option: {}.".format(rival.name)]
-    lines += ["", "  /concierge yes     install it", "  /concierge no      skip it", ""]
+    lines += ["", "  yes     no", ""]
     return "\n".join(lines)
 
 
