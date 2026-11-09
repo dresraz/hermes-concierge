@@ -29,7 +29,7 @@ class Shelf(unittest.TestCase):
         text = shelf.overview()
         self.assertIn("Concierge", text)
         self.assertIn("ready", text)
-        self.assertIn("in the marketplace", text)
+        self.assertIn("connector", text)
 
     def test_browse_numbers_what_it_shows(self):
         text = shelf.browse("notes", session_key="t")

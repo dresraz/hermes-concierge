@@ -127,11 +127,19 @@ def overview() -> str:
     root = improve.resolve("default")
     if root is not None and (root / "profiles").is_dir():
         bots = sorted(p.name for p in (root / "profiles").iterdir() if p.is_dir() and not p.name.startswith("."))
+    # Count what the search actually reads, not what happens to be on this disk.
+    # The shelf said "144 skills" while a search could reach 711, which is the
+    # kind of number a reader checks once and stops trusting.
     try:
-        total_plugins = len(seams.catalog())
+        from . import search
+
+        total_plugins = len(search._plugins_meta().get("rows") or []) or len(seams.catalog())
+        available = len(search._skills_meta().get("rows") or []) or len(discover.catalogue())
+        total_connectors = len(search._connectors())
     except Exception:
         total_plugins = 0
-    available = len(discover.catalogue())
+        available = len(discover.catalogue())
+        total_connectors = 0
     def _n(count: int, word: str) -> str:
         return "{} {}".format(count, word if count == 1 else word + "s")
 
@@ -153,8 +161,8 @@ def overview() -> str:
         "",
         "  {}".format(bot_bit),
         "  {}".format(here_bit),
-        "  ready    {} built-in, {} in the marketplace".format(
-            _n(available, "skill"), _n(total_plugins, "plugin")
+        "  ready    {}, {}, {}".format(
+            _n(available, "skill"), _n(total_plugins, "plugin"), _n(total_connectors, "connector")
         ),
         "",
         "  say what you need in one sentence, or look first:",
