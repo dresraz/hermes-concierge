@@ -30,6 +30,22 @@ NO = frozenset({"n", "no", "cancel", "stop", "never mind", "nvm"})
 UNDO_WORDS = frozenset({"undo", "revert", "roll back", "rollback", "reverse"})
 HELP_WORDS = frozenset({"help", "?", "-h", "--help", "h", "commands"})
 
+HELP_SHORT = (
+    "\n"
+    "  Concierge\n"
+    "  One sentence does the work.\n"
+    "\n"
+    "  /concierge install obsidian            add a plugin or skill\n"
+    "  /concierge create a researcher         make a bot, with skills\n"
+    "  /concierge improve coder-bot: always run tests\n"
+    "\n"
+    "  /concierge browse pdf     look first\n"
+    "  /concierge bots           your bots\n"
+    "  /concierge undo           take back the last change\n"
+    "  /concierge help all       every command\n"
+    "\n"
+)
+
 HELP = (
     "\n"
     "  CONCIERGE\n"
@@ -403,10 +419,14 @@ def handle_concierge(
         from . import shelf
 
         return shelf.overview()
-    if low in HELP_WORDS:
+    if low in ("help all", "help -a", "help --all"):
         card.forget(session_key)
         _forget("", session_key)
         return HELP
+    if low in HELP_WORDS:
+        card.forget(session_key)
+        _forget("", session_key)
+        return HELP_SHORT
     natural = _natural_verb(low)
     if natural == "bots":
         card.forget(session_key)
@@ -445,6 +465,12 @@ def handle_concierge(
         _forget("", session_key)
         return handle_undo(store=store, undo=undo, seams=seams)
 
+    if low.replace(" ", "").isdigit() and len(low.replace(" ", "")) > 4:
+        return (
+            "  That looks like a number, not a request.\n"
+            "  Say what you want in one sentence, like /concierge install obsidian.\n"
+        )
+
     head, _, _ = low.partition(" ")
     rest = text[len(head):].strip()
 
@@ -453,7 +479,12 @@ def handle_concierge(
 
         card.forget(session_key)
         _forget("", session_key)
-        return shelf.browse(rest, session_key=session_key)
+        words = rest.split()
+        page = 1
+        if len(words) > 1 and words[-1].isdigit() and len(words[-1]) <= 3:
+            page = int(words[-1])
+            rest = " ".join(words[:-1])
+        return shelf.browse(rest, session_key=session_key, page=page)
 
     # A number picks from the last shelf this conversation was shown, unless a
     # card is waiting: on a card "1" means yes.
@@ -468,6 +499,24 @@ def handle_concierge(
                 return picked
         if waiting and text != "1":
             return "  One card at a time. /concierge yes takes it, /concierge no drops it.\n"
+
+    if head in ("skills", "show"):
+        from . import improve, lifecycle, state
+
+        name = rest.split()[0] if rest else _self_name()
+        try:
+            home = improve.resolve(name)
+        except Exception:
+            home = None
+        if home is None:
+            return "  No bot called {}. Say /concierge bots to see them.\n".format(name)
+        have = sorted(improve.installed(home))
+        if not have:
+            return "  {} has no skills of its own yet.\n  Give it one: /concierge improve {}: it needs to read scanned PDFs\n".format(name, name)
+        return "  {}\n\n{}".format(
+            name,
+            "".join("  - {}\n".format(skill) for skill in have),
+        )
 
     if head == "bots":
         card.forget(session_key)

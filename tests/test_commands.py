@@ -82,12 +82,16 @@ class Help(unittest.TestCase):
         self.assertIn("browse", text)
 
     def test_the_menu_is_still_one_word_away(self):
-        text = commands.handle_concierge("help")
-        for verb in ("create", "improve", "bots", "fire", "reset", "undo"):
-            self.assertIn(verb, text)
+        short = commands.handle_concierge("help")
+        for verb in ("install", "create", "improve", "browse", "bots", "undo"):
+            self.assertIn(verb, short)
+        full = commands.handle_concierge("help all")
+        for verb in ("fire", "reset", "undo"):
+            self.assertIn(verb, full)
 
-    def test_help_word_is_the_same_text(self):
-        self.assertEqual(commands.handle_concierge("help"), commands.HELP)
+    def test_help_and_help_all_are_not_the_same_screen(self):
+        self.assertNotEqual(commands.handle_concierge("help"), commands.handle_concierge("help all"))
+        self.assertEqual(commands.handle_concierge("help all"), commands.HELP)
 
     def test_no_other_command_is_offered(self):
         source = pathlib.Path(commands.__file__).read_text(encoding="utf-8")

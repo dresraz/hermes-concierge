@@ -68,7 +68,8 @@ def _skills(query: str = "", limit: int = LIMIT) -> list:
     wanted = discover._words(query)
     for item in discover.catalogue():
         haystack = discover._words(item["name"].replace("-", " ") + " " + (item["description"] or ""))
-        if wanted and not (wanted & haystack):
+        # Two words mean both, not either: "pdf scan" is not "pdf OR scan".
+        if wanted and not (wanted <= haystack):
             continue
         rows.append(
             {
@@ -84,7 +85,7 @@ def _skills(query: str = "", limit: int = LIMIT) -> list:
         )
     rows.sort(key=lambda row: (
         row["installed"],
-        not (wanted & discover._words(row["name"].replace("-", " "))),
+        -len(wanted & discover._words(row["name"].replace("-", " "))),
         row["name"],
     ))
     return rows[:limit]
@@ -134,21 +135,31 @@ def overview() -> str:
     def _n(count: int, word: str) -> str:
         return "{} {}".format(count, word if count == 1 else word + "s")
 
+    # A profile that carries the whole shipped tree should not read as 258
+    # "installed" skills: that is the tree, not a choice the person made.
+    if not here:
+        here_bit = "no extra skills yet"
+    elif len(here) >= 60:
+        here_bit = "the full skill tree is available here"
+    else:
+        here_bit = "{} added".format(_n(len(here), "skill"))
+    bot_bit = (
+        "{}: {}".format(_n(len(bots), "bot"), ", ".join(bots[:3]) + (" +{}".format(len(bots) - 3) if len(bots) > 3 else ""))
+        if bots
+        else "no bots yet"
+    )
     lines = [
         "Concierge",
         "",
-        "  here     {}, {}{}".format(
-            _n(len(here), "skill"),
-            _n(len(bots), "bot"),
-            ("  " + ", ".join(bots[:4]) + (" +{}".format(len(bots) - 4) if len(bots) > 4 else "")) if bots else "",
-        ),
-        "  ready    {} ship with Hermes, {} in the catalog".format(
+        "  {}".format(bot_bit),
+        "  {}".format(here_bit),
+        "  ready    {} built-in, {} in the marketplace".format(
             _n(available, "skill"), _n(total_plugins, "plugin")
         ),
         "",
-        "  say what you need, or look first:",
-        "  /concierge browse papers     look through it",
-        "  /concierge help              every command",
+        "  say what you need in one sentence, or look first:",
+        "  /concierge browse pdf        look through what is available",
+        "  /concierge help              the commands",
         "",
     ]
     return "\n".join(lines)
@@ -165,11 +176,14 @@ def _rank(rows: list, query: str) -> list:
     return sorted(rows, key=key)
 
 
-def browse(query: str = "", session_key: str = "") -> str:
-    """A numbered window. The number is the pick."""
+def browse(query: str = "", session_key: str = "", page: int = 1) -> str:
+    """A numbered window. The number is the pick. Page 2 is the next window."""
     import time
 
-    rows = _rank(items(query), query)
+    everything = _rank(items(query, limit=200), query)
+    page = max(1, int(page or 1))
+    start = (page - 1) * LIMIT
+    rows = everything[start:start + LIMIT]
     if len(_LAST) >= MAX_SESSIONS:
         oldest = min(_LAST, key=lambda key: _LAST[key][0])
         _LAST.pop(oldest, None)
@@ -189,7 +203,10 @@ def browse(query: str = "", session_key: str = "") -> str:
                 index, row["kind"], row["name"], tag, row["why"]
             ).rstrip()
         )
-    lines += ["", "  pick a number, or no to drop it", ""]
+    pages = max(1, (len(everything) + LIMIT - 1) // LIMIT)
+    if pages > 1:
+        lines += ["", "  page {} of {}. Next: /concierge browse {} {}".format(page, pages, query, page + 1)]
+    lines += ["", "  reply with a number to install it, or no to drop it", ""]
     return "\n".join(lines)
 
 

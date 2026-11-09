@@ -313,5 +313,8 @@ def receipt(plan_: Plan, lines: Sequence[str]) -> str:
         if plan_.bot in ("default", "custom", "main")
         else "Improved {}".format(plan_.bot)
     )
-    tail = ["", "  undo     /concierge undo"]
+    # "already there" means nothing changed, so an undo line would promise a
+    # reversal that has nothing to reverse.
+    duplicate = any("already there" in str(line) for line in lines)
+    tail = [""] if duplicate else ["", "  undo     /concierge undo"]
     return "\n".join([head, ""] + list(lines) + tail)

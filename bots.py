@@ -206,9 +206,9 @@ def receipt(plan: Spec, path: object, known: Sequence[str] | None = None) -> tup
         listed = plan.name in (list(known) if known is not None else names())
     ok = home.is_dir() and bool(soul_text.strip()) and listed
     lines = [
-        "  home     " + str(home),
-        "  soul     " + (f"SOUL.md, {len(soul_text)} chars" if soul_text else "MISSING"),
-        "  skills   " + f"{skills} installed",
-        "  profile  " + ("listed by hermes profile list" if listed else "NOT listed"),
+        "  soul     " + ("a personality, {} chars".format(len(soul_text)) if soul_text else "MISSING"),
+        "  skills   " + ("{} installed".format(skills) if skills else "none yet"),
     ]
+    if not listed:
+        lines.append("  profile  not confirmed yet, it is there on disk")
     return lines, ok

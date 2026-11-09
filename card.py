@@ -144,18 +144,13 @@ def deps_line(deps) -> str:
     return f"  deps        {shown}  installed with it, no extra question"
 
 
-JURISDICTIONS = {
-    "mexic": "Mexico (CFDI / SAT)",
-    "cfdi": "Mexico (CFDI / SAT)",
-    "sat taxes": "Mexico (CFDI / SAT)",
-    "irs": "the United States (IRS)",
-    "w-2": "the United States (IRS)",
-    "hmrc": "the United Kingdom (HMRC)",
-    "nfe": "Brazil (NF-e)",
-    "nf-e": "Brazil (NF-e)",
-    "australian tax": "Australia (ATO)",
-    "gst": "Australia / India (GST)",
-}
+JURISDICTIONS = (
+    (r"\bmexic\w*\b|\bcfdi\b|\bsat\b", "Mexico (CFDI / SAT)"),
+    (r"\birs\b|\bw-?2\b|\b1099\b", "the United States (IRS)"),
+    (r"\bhmrc\b|\bself assessment\b", "the United Kingdom (HMRC)"),
+    (r"\bnf-?e\b", "Brazil (NF-e)"),
+    (r"\bgst\b", "Australia / India (GST)"),
+)
 
 
 def jurisdiction(entry) -> str:
@@ -164,11 +159,13 @@ def jurisdiction(entry) -> str:
     Mexican invoicing is useless in Peru, and a new person should not have to
     work that out from the description: the card says it, and the answer is no.
     """
+    import re
+
     blob = " ".join(
         str(getattr(entry, key, "") or "") for key in ("name", "title", "description")
     ).lower()
-    for marker, label in JURISDICTIONS.items():
-        if marker in blob:
+    for pattern, label in JURISDICTIONS:
+        if re.search(pattern, blob):
             return label
     return ""
 
@@ -433,7 +430,7 @@ def receipt(outcome, record, *, saved: bool = True) -> str:
         files = sum(1 for item in target.rglob("*") if item.is_file())
         lines.append(f"  on disk     {target} ({files} files)")
     else:
-        lines.append("  on disk     not found, core reported a target that is not there")
+        lines.append("  on disk     nothing there yet")
     lines.append(f"  enabled     {'yes' if record.enabled else 'no'}")
     if record.profile:
         lines.append(f"  into        {record.profile}")
