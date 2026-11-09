@@ -25,6 +25,36 @@ MAX_SKILLS_SHOWN = 6
 INSTALL_TIMEOUT = 90  # one skill, not a whole role, has to finish in this
 
 
+# A preset is a sentence long. A skill this heavy is a decision the person makes
+# on purpose ("install comfyui"), never something a role drags in.
+HEAVY_KB = 150
+
+# Not about kilobytes alone: comfyui drags in diffusion models and wants a GPU,
+# and popular-web-designs is 855 KB of reference images. A role never installs
+# either; a person asks for it by name when they want it.
+HEAVY_NAMES = frozenset({"comfyui", "popular-web-designs"})
+
+
+def heavy(name: str) -> bool:
+    if name.rsplit("/", 1)[-1] in HEAVY_NAMES:
+        return True
+    return False
+
+
+def weight(path: Any) -> int:
+    """Kilobytes of a skill folder, so "is this heavy" is a number, not a vibe."""
+    from pathlib import Path as _Path
+
+    total = 0
+    for item in _Path(str(path)).rglob("*"):
+        if item.is_file():
+            try:
+                total += item.stat().st_size
+            except OSError:
+                pass
+    return total // 1024
+
+
 @dataclass(frozen=True)
 class Role:
     name: str
@@ -66,9 +96,9 @@ ROLES: tuple[Role, ...] = (
          ('product-price-monitor', 'competitor-news-monitor'),
          'polls sources, dedupes, pings you, keeps a board'),
     Role('designer', 'designer',
-         ('creative/sketch', 'creative/excalidraw', 'creative/design-md', 'creative/archify', 'creative/comfyui'),
+         ('creative/sketch', 'creative/excalidraw', 'creative/design-md', 'creative/archify'),
          ('claude-design', 'baoyu-infographic'),
-         'mocks, diagrams, tokens, generated images'),
+         'mocks, diagrams, tokens, infographics'),
     Role('analyst', 'analyst',
          ('finance/excel-author', 'finance/pptx-author', 'data-science/jupyter-notebook', 'finance/stocks', 'productivity/live-dashboard'),
          ('microsoft-office',),
@@ -301,7 +331,8 @@ def install(
         code, _ = (runner(args) if runner else _run(args, INSTALL_TIMEOUT, env))
         return identifier, code == 0
 
-    wanted = official(role)
+    wanted = [item for item in official(role) if not heavy(item)]
+    skipped = [item for item in official(role) if heavy(item)]
     outcomes = []
     misses = 0
     for identifier in wanted:
@@ -313,6 +344,8 @@ def install(
             # instead of holding the conversation for nine of them.
             outcomes += [(left, False) for left in wanted[len(outcomes):]]
             break
+
+    outcomes += [(item, False) for item in skipped]
 
     # Bundled copies go in last: the installer archives any same-name skill it
     # finds, so a copy made first would end up retired under `.archive/`.

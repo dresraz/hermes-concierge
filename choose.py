@@ -153,6 +153,42 @@ def _live() -> list:
         return []
 
 
+MEMORY_WORDS = (
+    "memory", "remember", "recall", "forget", "long term", "long-term",
+    "memorize", "remembers", "context across", "across sessions",
+)
+MEMORY_MARKERS = (
+    "memory provider", "long-term memory", "long term memory", "memory plugin",
+    "memory layer", "memory backend", "memory system", "episodic memory",
+)
+
+
+def asks_about_memory(ask: str) -> bool:
+    low = " ".join((ask or "").lower().split())
+    return any(word in low for word in MEMORY_WORDS)
+
+
+def is_memory_provider(row: Any) -> bool:
+    """A plugin that replaces how Hermes remembers things."""
+    if str(getattr(row, "kind", row.get("kind", ""))) != "plugin" and not isinstance(row, dict):
+        return False
+    if isinstance(row, dict):
+        kind, blob = row.get("kind", ""), "{} {}".format(row.get("name", ""), row.get("description", ""))
+    else:
+        kind, blob = getattr(row, "kind", ""), "{} {}".format(getattr(row, "name", ""), getattr(row, "description", ""))
+    if kind != "plugin":
+        return False
+    low = blob.lower()
+    return any(marker in low for marker in MEMORY_MARKERS) or "memory" in low.split(" ", 1)[-1][:40]
+
+
+def _allowed(row: Any, ask: str) -> bool:
+    """A memory provider is opt-in, never something a sentence sweeps in."""
+    if is_memory_provider(row) and not asks_about_memory(ask):
+        return False
+    return True
+
+
 def _ask_whole(ask: str, llm: Any) -> Optional[Option]:
     """One call, every name in the marketplace. No keyword gate in front."""
     from . import search
@@ -185,6 +221,8 @@ def _ask_whole(ask: str, llm: Any) -> Optional[Option]:
         return None
     for row in rows:
         if str(row.get("name", "")).lower() == pick.lower():
+            if not _allowed(row, ask):
+                return None
             return Option(row["name"], row.get("description", ""), row.get("kind", "plugin"), row)
     return None
 
