@@ -518,16 +518,20 @@ MANIFESTS = ("plugin.yaml", "pyproject.toml", "requirements.txt")
 
 def _raw_url(entry, path: str) -> str:
     """The pinned raw URL for one manifest, or "" when there is nothing to read."""
-    import re
-
     repo = str(getattr(entry, "repo", "") or "").rstrip("/")
     sha = str(getattr(entry, "sha", "") or "")
-    match = re.match(r"https://github\.com/([^/]+/[^/]+)", repo)
-    if not match or not sha:
+    prefix = "https://github.com/"
+    if not repo.startswith(prefix):
+        return ""
+    owner, sep, rest = repo[len(prefix):].partition("/")
+    name = rest.split("/", 1)[0]
+    if not sep or not owner or not name:
+        return ""
+    if not sha:
         return ""
     sub = str(getattr(entry, "subdir", "") or "").strip("/")
     tail = f"{sub}/{path}" if sub else path
-    return _RAW.format(repo=match.group(1), sha=sha, path=tail)
+    return _RAW.format(repo=owner + "/" + name, sha=sha, path=tail)
 
 
 def _fetch_text(url: str, timeout: float = 4.0) -> str:

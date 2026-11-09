@@ -13,10 +13,11 @@ says yes with the same command that installs anything else.
 from __future__ import annotations
 
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
+
+from . import text as _text
 
 # Under this, a skill is cheap enough to offer as an extra: a text skill with a
 # few references, not an asset tree or a service.
@@ -33,9 +34,33 @@ HEAVY_MARKERS = (
 )
 
 # A download piped into a shell runs code at install time: never a free extra.
-SHELL_PIPE = re.compile(r"curl[^\n]{0,120}\|\s*(?:sudo\s+)?(?:sh|bash)\b")
+def _has_shell_pipe(text: str) -> bool:
+    """A curl piped into sh/bash, the way installers run code on arrival.
 
-WORD = re.compile(r"[a-z0-9]{3,}")
+    The same shape the old pattern matched: "curl", then a pipe within the
+    next 120 characters on the same line, then sh or bash as a whole word.
+    """
+    start = 0
+    while True:
+        at = text.find("curl", start)
+        if at < 0:
+            return False
+        window = text[at + 4 : at + 4 + 121].split("\n", 1)[0]
+        pipe = window.find("|")
+        if pipe >= 0:
+            tail = window[pipe + 1 :].lstrip()
+            if tail.startswith("sudo"):
+                after = len("sudo")
+                if after >= len(tail) or not (tail[after].isalnum() or tail[after] == "_"):
+                    tail = tail[after:].lstrip()
+            for shell in ("sh", "bash"):
+                if tail.startswith(shell) and (
+                    len(tail) == len(shell) or not (tail[len(shell)].isalnum() or tail[len(shell)] == "_")
+                ):
+                    return True
+        start = at + 4
+
+
 STOP = frozenset(
     """
     and are but can for from has have into its not our out that the their then
@@ -71,8 +96,8 @@ FILLER = frozenset(
 def _words(text: str) -> set[str]:
     return {
         _fold(w)
-        for w in WORD.findall((text or "").lower())
-        if w not in STOP and w not in FILLER
+        for w in _text.words(text)
+        if len(w) >= 3 and w not in STOP and w not in FILLER
     }
 
 
@@ -164,7 +189,7 @@ def catalogue(roots: Optional[Sequence[Path]] = None) -> list[dict]:
             except OSError:
                 continue
             head = text.lower()
-            if any(marker in head for marker in HEAVY_MARKERS) or SHELL_PIPE.search(text):
+            if any(marker in head for marker in HEAVY_MARKERS) or _has_shell_pipe(text):
                 continue
             front_name, desc = _head(text)
             seen.add(name)

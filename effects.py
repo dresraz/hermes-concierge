@@ -12,7 +12,6 @@ module importable with the standard library alone.
 from __future__ import annotations
 
 import os
-import re
 import shutil
 from dataclasses import dataclass
 from typing import Sequence
@@ -20,8 +19,36 @@ from typing import Sequence
 BACKUP_SUFFIX = ".concierge-backup"
 MAX_SOUL_CHARS = 1200
 
-_DASH_PUNCTUATION = re.compile(r"\s+[-]{1,2}\s+")
 _DASH_CHARS = ("\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2212")
+
+
+def _dash_sub(text: str) -> str:
+    """Whitespace + one or two hyphens + whitespace, replaced with ", ".
+
+    The same cut the old pattern made: three hyphens in a row are not
+    punctuation, and the whitespace on both sides goes with it.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        if text[i].isspace():
+            gap = i
+            while gap < n and text[gap].isspace():
+                gap += 1
+            stop = gap
+            while stop < n and text[stop] == "-" and stop - gap < 3:
+                stop += 1
+            dashes = stop - gap
+            if 1 <= dashes <= 2 and stop < n and text[stop].isspace():
+                end = stop
+                while end < n and text[end].isspace():
+                    end += 1
+                out.append(", ")
+                i = end
+                continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
 
 
 @dataclass(frozen=True)
@@ -38,7 +65,7 @@ def _clean_prose(text: str) -> str:
     out = " ".join(str(text).split())
     for dash in _DASH_CHARS:
         out = out.replace(dash, " ")
-    out = _DASH_PUNCTUATION.sub(", ", out)
+    out = _dash_sub(out)
     return " ".join(out.split())
 
 

@@ -15,13 +15,13 @@ from __future__ import annotations
 import json
 import math
 import os
-import re
 import time
 import urllib.request
 from collections import Counter
 from typing import Any, Optional
 
 from . import seams
+from . import text as _text
 
 INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills.json"
 
@@ -35,7 +35,6 @@ INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills.json"
 # + 526 GitHub is the 711 the marketplace shows.
 NOUS_SOURCES = frozenset({"built-in", "optional", "GitHub"})
 
-TOKEN = re.compile(r"[a-z0-9]+")
 STOP = set(
     """a an and are as at be by can could do does for from get got have how i if in into is it its
     just like me my need of on or our please so some tell than that the their them then there these
@@ -59,7 +58,7 @@ def _cache_dir() -> str:
 
 
 def words(text: str) -> list:
-    return [w for w in TOKEN.findall((text or "").lower()) if w not in STOP and len(w) > 1]
+    return [w for w in _text.words(text) if w not in STOP and len(w) > 1]
 
 
 def fold(word: str) -> str:

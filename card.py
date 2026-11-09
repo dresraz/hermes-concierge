@@ -86,19 +86,26 @@ def _fit(text: str, limit: int) -> str:
 
 def _dep_name(spec: str) -> str:
     """The package name out of a requirement spec, so the card stays readable."""
-    import re
-
     head = str(spec).strip().split(";")[0]
-    match = re.match(r"[A-Za-z0-9_.\-]+", head)
-    return match.group(0) if match else head
+    out: list[str] = []
+    for char in head:
+        if "a" <= char <= "z" or "A" <= char <= "Z" or "0" <= char <= "9" or char in "_.-":
+            out.append(char)
+        else:
+            break
+    return "".join(out) if out else head
 
 
+# Word cues per jurisdiction, checked against text.words(blob). A single word
+# matches a whole token; "mexic" is a stem (mexico, mexican, ...); a cue with
+# a space needs both words side by side; "w2"/"nfe" also catch "w-2"/"nf-e",
+# because words() sees through the hyphen.
 JURISDICTIONS = (
-    (r"\bmexic\w*\b|\bcfdi\b|\bsat\b", "Mexico (CFDI / SAT)"),
-    (r"\birs\b|\bw-?2\b|\b1099\b", "the United States (IRS)"),
-    (r"\bhmrc\b|\bself assessment\b", "the United Kingdom (HMRC)"),
-    (r"\bnf-?e\b", "Brazil (NF-e)"),
-    (r"\bgst\b", "Australia / India (GST)"),
+    (("mexic", "cfdi", "sat"), "Mexico (CFDI / SAT)"),
+    (("irs", "w2", "1099"), "the United States (IRS)"),
+    (("hmrc", "self assessment"), "the United Kingdom (HMRC)"),
+    (("nfe",), "Brazil (NF-e)"),
+    (("gst",), "Australia / India (GST)"),
 )
 
 
@@ -108,14 +115,24 @@ def jurisdiction(entry) -> str:
     Mexican invoicing is useless in Peru, and a new person should not have to
     work that out from the description: the card says it, and the answer is no.
     """
-    import re
+    from . import text as _text
 
     blob = " ".join(
         str(getattr(entry, key, "") or "") for key in ("name", "title", "description")
     ).lower()
-    for pattern, label in JURISDICTIONS:
-        if re.search(pattern, blob):
-            return label
+    tokens = _text.words(blob)
+    pool = set(tokens) | set(_text.words(blob.replace("-", "")))
+    flat = " ".join(tokens)
+    for cues, label in JURISDICTIONS:
+        for cue in cues:
+            if " " in cue:
+                if cue in flat:
+                    return label
+            elif cue == "mexic":
+                if any(token.startswith("mexic") for token in tokens):
+                    return label
+            elif cue in pool:
+                return label
     return ""
 
 
@@ -234,19 +251,36 @@ def _hint(sentence: str) -> str:
     return words[0] if words else "plugins"
 
 
+def _word_hit(haystack: str, word: str) -> bool:
+    """True when word is a whole token of haystack, hyphens included.
+
+    "reads" is inside "threads"; a substring test would keep suggesting a word
+    that finds nothing. A hyphen joins ("pdf-skill" has no "pdf" to find).
+    """
+    word = (word or "").lower()
+    if not word:
+        return False
+    token: list[str] = []
+    for char in haystack.lower() + " ":
+        if "a" <= char <= "z" or "0" <= char <= "9" or char in "_-":
+            token.append(char)
+        elif token:
+            if "".join(token) == word:
+                return True
+            token = []
+    return False
+
+
 def _names(word: str) -> bool:
     """True when the word is a whole word of an entry's name, not a fragment.
 
     "reads" is inside "threads"; a substring test would keep suggesting a word
     that finds nothing.
     """
-    import re as _re
-
     try:
         from . import shelf
 
-        pattern = _re.compile(r"(?<![\w-]){}(?![\w-])".format(_re.escape(word)))
-        return any(pattern.search(row["name"].lower()) for row in shelf.items(word, limit=6))
+        return any(_word_hit(row["name"].lower(), word) for row in shelf.items(word, limit=6))
     except Exception:
         return False
 

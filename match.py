@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import math
 import os
-import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
+
+from . import text as _text
 
 # Words that carry no signal against a catalog description.
 STOPWORDS = frozenset(
@@ -131,8 +132,6 @@ VOCABULARY = {
     "schema": ["tool"],
 }
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
-
 # Weights. A capability that does the job beats a name that merely mentions the
 # word: an entry whose tools do X should win over one whose name contains X.
 W_NAME = 3.0
@@ -198,7 +197,7 @@ class Candidate:
 
 
 def tokens(text: str) -> list:
-    return [t for t in _TOKEN_RE.findall(text.lower()) if t not in STOPWORDS and len(t) > 1]
+    return [t for t in _text.words(text) if t not in STOPWORDS and len(t) > 1]
 
 
 def _fold(word: str) -> str:
@@ -210,7 +209,7 @@ def _fold(word: str) -> str:
 
 def _joined(query: str) -> list:
     """Adjacent words are often one product name: home assistant -> homeassistant."""
-    words = [w for w in _TOKEN_RE.findall((query or "").lower())]
+    words = [w for w in _text.words(query)]
     return [a + b for a, b in zip(words, words[1:]) if len(a) > 2 and len(b) > 2]
 
 
@@ -334,7 +333,7 @@ def score(query: str, entry: Any, weights: Optional[dict] = None) -> Candidate:
             # "obsidian"). "telegram-stickers" is a product called stickers
             # that happens to run on telegram, so it still has to win on what
             # it does, not on the word it shares.
-            raw_name_words = _TOKEN_RE.findall(str(getattr(entry, "name", "")).lower())
+            raw_name_words = _text.words(str(getattr(entry, "name", "")))
             if len(raw_name_words) == 1 and len(tokens(query)) <= 3:
                 total += W_NAME_HIT
             hit = True

@@ -14,11 +14,11 @@ result appears on a card the person has to read once.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Callable, Sequence
 
 from . import effects
+from . import text as _text
 
 NAME_MAX = 40
 MAX_DUTIES = 5
@@ -67,11 +67,11 @@ class Collision(Exception):
 
 
 def slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return _text.slug(text)
 
 
 def _words(text: str) -> list[str]:
-    return re.findall(r"[a-z0-9]+", (text or "").lower())
+    return _text.words(text)
 
 
 def _explicit(text: str) -> tuple[str, str]:
@@ -92,8 +92,11 @@ def _body(text: str) -> str:
         if lowered.startswith(filler):
             body = body[len(filler):]
             break
-    body = re.sub(r"^(that|to|which)\s+", "", body.strip(), flags=re.I)
-    return body.strip(" .!?,")
+    stripped = body.strip()
+    bits = stripped.split(None, 1)
+    if len(bits) == 2 and bits[0].lower() in ("that", "to", "which"):
+        stripped = bits[1]
+    return stripped.strip(" .!?,")
 
 
 def _title(body: str) -> str:
@@ -103,8 +106,34 @@ def _title(body: str) -> str:
     return text
 
 
+def _split_duties(body: str) -> list[str]:
+    """Split on semicolons, commas and the word "and", the way the old split did."""
+    parts: list[str] = []
+    buf: list[str] = []
+    i, n = 0, len(body)
+    while i < n:
+        char = body[i]
+        if char == ";" or char == ",":
+            parts.append("".join(buf))
+            buf = []
+            i += 1
+            continue
+        if body.startswith("and", i):
+            left = body[i - 1] if i > 0 else ""
+            right = body[i + 3] if i + 3 < n else ""
+            if not (left.isalnum() or left == "_") and not (right.isalnum() or right == "_"):
+                parts.append("".join(buf))
+                buf = []
+                i += 3
+                continue
+        buf.append(char)
+        i += 1
+    parts.append("".join(buf))
+    return parts
+
+
 def _duties(body: str) -> list[str]:
-    parts = re.split(r";|,|\band\b", body)
+    parts = _split_duties(body)
     clean = [" ".join(p.split()).strip(" .!?,") for p in parts]
     return [p for p in clean if p][:MAX_DUTIES]
 

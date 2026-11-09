@@ -13,7 +13,6 @@ JSON shape. Anything unexpected falls back to the rules rather than guessing.
 from __future__ import annotations
 
 import json
-import re
 from typing import Any, Optional, Sequence
 
 INTENTS = ("create", "improve", "install", "bots", "browse", "help", "undo", "fire")

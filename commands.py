@@ -21,9 +21,10 @@ visible, and undo covers regret.
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
+
+from . import text as _text
 
 YES = frozenset({"y", "yes", "do it", "ok", "okay", "go", "confirm"})
 NO = frozenset({"n", "no", "cancel", "stop", "never mind", "nvm"})
@@ -110,22 +111,96 @@ MAKE_VERBS = ("hire", "make ", "make me", "create", "build", "spawn", "set up",
               "stand up", "give me")
 
 
+def _is_word_char(char: str) -> bool:
+    """A word character for boundary checks, the old \\w without importing it."""
+    return char.isalnum() or char == "_"
+
+
+def _starts_anchored(low: str, prefix: str) -> bool:
+    """low starts with prefix on a word boundary, the old ^prefix\\b."""
+    return low.startswith(prefix) and (
+        len(low) == len(prefix) or not _is_word_char(low[len(prefix)])
+    )
+
+
+def _starts_any(low: str, prefixes: Sequence[str]) -> bool:
+    return any(_starts_anchored(low, prefix) for prefix in prefixes)
+
+
+def _plain_words(low: str, extra: str) -> set:
+    """Lowercase letter runs plus extra chars, the old [a-z...]+ findalls."""
+    out: set = set()
+    buf: list[str] = []
+    for char in low:
+        if "a" <= char <= "z" or char in extra:
+            buf.append(char)
+        elif buf:
+            out.add("".join(buf))
+            buf = []
+    if buf:
+        out.add("".join(buf))
+    return out
+
+
+def _apostrophe_words(low: str) -> set:
+    """The old [a-z']+ tokens: "what's" stays one word."""
+    return _plain_words(low, "'")
+
+
+def _dash_words(low: str) -> set:
+    """The old [a-z0-9'-]+ tokens."""
+    return _plain_words(low, "0123456789'-")
+
+
+def _underscore_words(low: str) -> set:
+    """The old [a-z0-9_-]+ tokens."""
+    return _plain_words(low, "0123456789_-")
+
+
+
 _BOTS_PHRASES = (
-    r"^(?:what|which|list|show)(?: me)?(?: my| the| all)? bots?\b",
-    r"^my bots\b",
-    r"^(?:what|how many) bots (?:do i have|have i got|are there)\b",
-    r"^bots\b",
+    tuple(
+        head + mid + noun
+        for head in ("what", "which", "list", "show")
+        for mid in ("", " me", " my", " the", " all",
+                    " me my", " me the", " me all")
+        for noun in (" bot", " bots")
+    )
+    + ("my bots",)
+    + tuple(
+        head + " bots " + tail
+        for head in ("what", "how many")
+        for tail in ("do i have", "have i got", "are there")
+    )
+    + ("bots",)
 )
 _UNDO_PHRASES = (
-    r"^(?:undo|revert|roll ?back|deshaz|deshacer)\b",
+    "undo", "revert", "roll back", "rollback", "deshaz", "deshacer",
 )
 _FIRE_PHRASES = (
-    r"^(?:delete|remove|fire|reset|get rid of|kill|drop|uninstall|borra|elimina)\b",
+    "delete", "remove", "fire", "reset", "get rid of", "kill", "drop",
+    "uninstall", "borra", "elimina",
 )
 _BROWSE_PHRASES = (
-    r"^(?:what|which) (?:can|should) i (?:install|add|get)\b",
-    r"^(?:show|list)(?: me)? what (?:i can|can i) (?:install|add|get)\b",
-    r"^(?:show|list)(?: me)?(?: everything| the catalog| the marketplace)\b",
+    tuple(
+        head + " " + mid + " i " + tail
+        for head in ("what", "which")
+        for mid in ("can", "should")
+        for tail in ("install", "add", "get")
+    )
+    + tuple(
+        head + mid + " what " + able + " " + tail
+        for head in ("show", "list")
+        for mid in ("", " me")
+        for able in ("i can", "can i")
+        for tail in ("install", "add", "get")
+    )
+    + tuple(
+        head + mid + tail
+        for head in ("show", "list")
+        for mid in ("", " me")
+        for tail in (" everything", " the catalog", " the marketplace")
+    )
 )
 
 
@@ -136,18 +211,14 @@ def _natural_verb(low: str) -> str:
     "list my bots", and "can you remove the old coder bot" is a fire.
     """
     low = _strip_polite(low)
-    for pattern in _UNDO_PHRASES:
-        if re.match(pattern, low):
-            return "undo"
-    for pattern in _BOTS_PHRASES:
-        if re.match(pattern, low):
-            return "bots"
-    for pattern in _BROWSE_PHRASES:
-        if re.match(pattern, low):
-            return "browse"
-    for pattern in _FIRE_PHRASES:
-        if re.match(pattern, low):
-            return "fire"
+    if _starts_any(low, _UNDO_PHRASES):
+        return "undo"
+    if _starts_any(low, _BOTS_PHRASES):
+        return "bots"
+    if _starts_any(low, _BROWSE_PHRASES):
+        return "browse"
+    if _starts_any(low, _FIRE_PHRASES):
+        return "fire"
     return ""
 
 
@@ -168,7 +239,7 @@ def _wants_a_bot(text: str) -> bool:
     role = presets.detect(text)
     if role is None:
         return False
-    words = set(re.findall(r"[a-z']+", low))
+    words = _apostrophe_words(low)
     stripped = _strip_polite(low)
     asking = _asks_create(stripped) or _asks_create(low)
     if words & BOT_WORDS:
@@ -187,13 +258,13 @@ def _asks_for_bot(text: str) -> bool:
     low = " ".join((text or "").lower().split())
     if not low or market.split_target(text)[1]:
         return False
-    words = set(re.findall(r"[a-z']+", low))
+    words = _apostrophe_words(low)
     if words & CAPABILITY_WORDS:
         return False
     # "make the house bot shorter" names a bot you already have: that is a
     # change to it, not a request for another one.
     try:
-        if any(re.search(r"(?<![\w-]){}(?![\w-])".format(re.escape(name)), low) for name in _bot_names()):
+        if any(_has_token_word(low, name) for name in _bot_names()):
             return False
     except Exception:
         pass
@@ -279,7 +350,67 @@ def _strip_polite(low: str) -> str:
 
 
 def _has_phrase(low: str, phrases: Sequence[str]) -> bool:
-    return any(re.search(r"\b" + re.escape(p) + r"\b", low) for p in phrases)
+    """A phrase as whole words, the old \\bphrase\\b search."""
+    for phrase in phrases:
+        if not phrase:
+            continue
+        start = 0
+        while True:
+            at = low.find(phrase, start)
+            if at < 0:
+                break
+            end = at + len(phrase)
+            left_ok = (at > 0 and _is_word_char(low[at - 1])) != _is_word_char(low[at])
+            right_ok = _is_word_char(low[end - 1]) != (end < len(low) and _is_word_char(low[end]))
+            if left_ok and right_ok:
+                return True
+            start = at + 1
+    return False
+
+
+def _has_token_word(haystack: str, needle: str) -> bool:
+    """needle as a whole token, where a hyphen joins: the old (?<![\\w-])m(?![\\w-]).
+
+    "reads" is inside "threads" and "pdf" is inside "pdf-skill": neither counts.
+    """
+    if not needle:
+        return False
+    start = 0
+    while True:
+        at = haystack.find(needle, start)
+        if at < 0:
+            return False
+        end = at + len(needle)
+        left = haystack[at - 1] if at > 0 else ""
+        right = haystack[end] if end < len(haystack) else ""
+        if left and (left.isalnum() or left in "_-"):
+            start = at + 1
+            continue
+        if right and (right.isalnum() or right in "_-"):
+            start = at + 1
+            continue
+        return True
+
+
+def _help_me_job(low: str) -> bool:
+    """'help me <word>' where the word is not 'with', the old lookahead."""
+    start = 0
+    while True:
+        at = low.find("help me ", start)
+        if at < 0:
+            return False
+        if at > 0 and _is_word_char(low[at - 1]):
+            start = at + 1
+            continue
+        rest = low[at + len("help me "):]
+        if rest.startswith("with") and (
+            len(rest) == 4 or not _is_word_char(rest[4])
+        ):
+            start = at + 1
+            continue
+        if rest and _is_word_char(rest[0]):
+            return True
+        start = at + 1
 
 
 def _asks_create(low: str) -> bool:
@@ -287,7 +418,83 @@ def _asks_create(low: str) -> bool:
     if _has_phrase(low, CREATE_ANY) or _has_phrase(low, NEED_ANY):
         return True
     # "help me keep my inbox at zero" is a job; "help me with excel" is a tool.
-    return bool(re.search(r"\bhelp me (?!with\b)\w+", low))
+    return _help_me_job(low)
+
+
+def _has_det_name(stripped: str, name: str) -> bool:
+    """'my/the/for/to/into <name>' as whole words, the old det + \\s+ + name."""
+    for det in ("my", "the", "for", "to", "into"):
+        start = 0
+        while True:
+            at = stripped.find(det, start)
+            if at < 0:
+                break
+            end = at + len(det)
+            if at > 0 and _is_word_char(stripped[at - 1]):
+                start = at + 1
+                continue
+            gap = end
+            while gap < len(stripped) and stripped[gap].isspace():
+                gap += 1
+            if gap == end or not stripped.startswith(name, gap):
+                start = at + 1
+                continue
+            stop = gap + len(name)
+            if stop < len(stripped) and _is_word_char(stripped[stop]):
+                start = at + 1
+                continue
+            return True
+    return False
+
+
+_LEAD_QUANTIFIERS = ("one more", "another", "a second", "second", "new")
+
+
+def _trim_leading_quantifier(stripped: str) -> str:
+    """Drop one leading 'another'/'a second'/..., the old anchored removal."""
+    for word in _LEAD_QUANTIFIERS:
+        if stripped.startswith(word):
+            tail = stripped[len(word):]
+            if tail and tail[0].isspace():
+                return tail.lstrip()
+    return stripped
+
+
+def _mine_word(stripped: str) -> str:
+    """The word after my/the/our, the old capture group."""
+    i, n = 0, len(stripped)
+    while i < n:
+        for det in ("my", "the", "our"):
+            if not stripped.startswith(det, i):
+                continue
+            if i > 0 and _is_word_char(stripped[i - 1]):
+                continue
+            gap = i + len(det)
+            if gap >= n or not stripped[gap].isspace():
+                continue
+            while gap < n and stripped[gap].isspace():
+                gap += 1
+            if gap >= n or not ("a" <= stripped[gap] <= "z" or "0" <= stripped[gap] <= "9"):
+                continue
+            stop = gap + 1
+            while stop < n and (
+                "a" <= stripped[stop] <= "z" or "0" <= stripped[stop] <= "9" or stripped[stop] == "-"
+            ):
+                stop += 1
+            return stripped[gap:stop]
+        i += 1
+    return ""
+
+
+def _starts_det_name(stripped: str, name: str) -> bool:
+    """stripped opens with 'a/an/the <name>', the old anchored article match."""
+    for det in ("a", "an", "the"):
+        if stripped.startswith(det):
+            gap = len(det)
+            if gap < len(stripped) and stripped[gap].isspace():
+                if stripped[gap:].lstrip().startswith(name):
+                    return True
+    return False
 
 
 def _route(text: str) -> tuple:
@@ -311,7 +518,7 @@ def _route(text: str) -> tuple:
     low = " ".join((query or "").lower().split())
     if not low:
         return "install", "", text
-    words = set(re.findall(r"[a-z0-9'-]+", low))
+    words = _dash_words(low)
     stripped = _strip_polite(low)
     names = [name for name in _bot_names() if name != "default"]
 
@@ -320,15 +527,13 @@ def _route(text: str) -> tuple:
     for name in sorted(names, key=len, reverse=True):
         if name not in words:
             continue
-        if "-" in name or re.search(
-            r"\b(?:my|the|for|to|into)\s+" + re.escape(name) + r"\b", stripped
-        ):
+        if "-" in name or _has_det_name(stripped, name):
             return "improve", name, query
 
     second = _has_phrase(stripped, SECOND_ANY)
     role = presets.detect(query)
     if role is None:
-        trimmed = re.sub(r"^(?:one more|another|a second|second|new)\s+", "", stripped)
+        trimmed = _trim_leading_quantifier(stripped)
         if trimmed != stripped:
             role = presets.detect(trimmed)
             if role is None:
@@ -346,9 +551,8 @@ def _route(text: str) -> tuple:
         return "install", "", text
 
     # "my coder" and "the coder" both point at the one you have.
-    mine = re.search(r"\b(?:my|the|our)\s+([a-z0-9][a-z0-9-]*)", stripped)
-    if mine and not second:
-        wanted = mine.group(1)
+    wanted = _mine_word(stripped)
+    if wanted and not second:
         if wanted in names or presets.get(wanted) is not None:
             for name in names:
                 if name == wanted or name.startswith(wanted + "-"):
@@ -372,7 +576,7 @@ def _route(text: str) -> tuple:
     if role is not None and role.name in words and not capability:
         return "create", "", query
     if role is not None and not capability and not _has_phrase(stripped, ("install", "add", "get")):
-        if re.match(r"^(?:a|an|the)\s+" + re.escape(role.name), stripped) or _is_role_bare(stripped, role):
+        if _starts_det_name(stripped, role.name) or _is_role_bare(stripped, role):
             return "create", "", query
     if role is not None:
         for name in names:
@@ -383,13 +587,29 @@ def _route(text: str) -> tuple:
 
 def _is_role_bare(low: str, role: Any) -> bool:
     """"a researcher, please" and "researcher for papers" are bot asks."""
-    head = re.sub(r"[,!.?]+$", "", low).strip()
+    head = low.rstrip(",!.?").strip()
     return head == role.name or head.startswith(role.name + " ")
 
 
 def _strip_name(text: str, name: str) -> str:
     """The ask without the bot's name in it."""
-    out = re.sub(r"\b" + re.escape(name) + r"\b", " ", text, count=1, flags=re.I)
+    target = (name or "").lower()
+    at = -1
+    if target:
+        low = text.lower()
+        start = 0
+        while True:
+            found = low.find(target, start)
+            if found < 0:
+                break
+            end = found + len(target)
+            if (found == 0 or not _is_word_char(low[found - 1])) and (
+                end >= len(low) or not _is_word_char(low[end])
+            ):
+                at = found
+                break
+            start = found + 1
+    out = text[:at] + " " + text[at + len(target):] if at >= 0 else text
     return " ".join(out.split()).strip(" :,-") or text
 
 
@@ -399,6 +619,124 @@ _SELF_VERBS = (
     "improve", "add ", "capable", "capabilities", "capability", "ability",
     "handle", "support", "better at", "able to",
 )
+
+
+_ROUTING = False
+
+
+def _model_route(text: str, *, store: Any) -> Optional[dict]:
+    """Ask the model what this sentence is. None when it cannot answer."""
+    global _ROUTING
+
+    if _ROUTING:
+        return None
+    from . import router
+
+    bots = _bot_names()
+    here = _self_name() if _is_bot_profile() else ""
+    _ROUTING = True
+    try:
+        return router.route(text, here=here, bots=bots, llm=_llm())
+    finally:
+        _ROUTING = False
+
+
+def _run_route(
+    route: dict,
+    text: str,
+    *,
+    store: Any,
+    session_key: str,
+    known: Optional[Sequence[str]] = None,
+    hire: Optional[Callable[..., Any]] = None,
+) -> Optional[str]:
+    """Carry out the action the model named, with the code that owns it."""
+    action = route.get("action")
+    what = route.get("what") or text
+    bot = (route.get("bot") or "").strip()
+    _drop_cards(session_key)
+
+    if action == "help":
+        return HELP_SHORT
+    if action == "list":
+        return _safe_bots(store)
+    if action == "browse":
+        from . import shelf
+
+        if what and what.lower() != text.lower():
+            return shelf.browse(what)
+        return shelf.overview()
+    if action == "undo":
+        global _ROUTING
+        _ROUTING = True
+        try:
+            return handle_concierge("undo", store=store, session_key=session_key)
+        finally:
+            _ROUTING = False
+    if action == "install":
+        return handle_install(what, store=store, session_key=session_key)
+    if action == "improve":
+        target = bot or (_self_name() if _is_bot_profile() else None)
+        return handle_improve(what, store=store, known=known, bot=target)
+    if action == "create":
+        return handle_hire(what, store=store, hire=hire, known=known)
+    if action in ("fire", "reset"):
+        selector = (what.split() or [""])[0].strip(" .:-")
+        from . import lifecycle
+
+        if not lifecycle.is_selector(store, selector):
+            return (
+                "  Deleting a bot needs its number, so nothing is removed by a guess.\n"
+                "  /concierge bots, then /concierge fire <number>\n"
+            )
+        return handle_concierge(
+            "{} {}".format(action, selector), store=store, session_key=session_key
+        )
+    if action == "none":
+        from . import card as card_mod
+
+        return card_mod.nothing(text)
+    return None
+
+
+_SPANISH_VERBS = ("mejora", "mejorar", "ensea", "ensña", "entrena")
+
+
+def _spanish_improve(low: str) -> str:
+    """The sentence after mejora/mejorar/ensea/ensña/entrena, or "" when it is not one."""
+    for verb in _SPANISH_VERBS:
+        if low.startswith(verb):
+            tail = low[len(verb):]
+            if tail and tail[0].isspace() and tail.lstrip():
+                return tail.lstrip()
+    return ""
+
+
+def _into_target(text: str):
+    """A trailing 'into <name>', as (name, start), the way the old search read it."""
+    low = text.lower()
+    start = 0
+    while True:
+        at = low.find("into", start)
+        if at < 0:
+            return None
+        end = at + len("into")
+        if (at == 0 or not _is_word_char(low[at - 1])) and (
+            end >= len(low) or not _is_word_char(low[end])
+        ):
+            gap = end
+            while gap < len(text) and text[gap].isspace():
+                gap += 1
+            if gap > end:
+                stop = gap
+                while stop < len(text) and (
+                    "a" <= text[stop] <= "z" or "A" <= text[stop] <= "Z"
+                    or "0" <= text[stop] <= "9" or text[stop] in "_-"
+                ):
+                    stop += 1
+                if stop > gap and not text[stop:].strip():
+                    return text[gap:stop], at
+        start = at + 1
 
 
 def _self_improve(text: str) -> bool:
@@ -416,10 +754,49 @@ def _improve_shape(text: str) -> bool:
         return False
     if "://" in head:
         return False
-    words = set(re.findall(r"[a-z0-9_-]+", head.lower()))
+    words = _underscore_words(head.lower())
     if words & BOT_WORDS:
         return False
-    return bool(re.fullmatch(r"[a-z0-9][a-z0-9 ._-]*", head.strip().lower()))
+    shape = head.strip().lower()
+    if not shape or not ("a" <= shape[0] <= "z" or "0" <= shape[0] <= "9"):
+        return False
+    return all(
+        "a" <= char <= "z" or "0" <= char <= "9" or char in " ._-"
+        for char in shape
+    )
+
+
+_WHAT_IN_HEADS = (
+    "what installed in", "what is installed in", "what's installed in",
+    "what inside", "what is inside", "what's inside",
+    "what is in", "what's in", "what in",
+)
+
+
+def _what_is_in(low: str) -> str:
+    """The bot after "what's in X", or "" when the sentence is not that shape."""
+    for head in _WHAT_IN_HEADS:
+        if not low.startswith(head):
+            continue
+        tail = low[len(head):]
+        if not tail or not tail[0].isspace():
+            continue
+        rest = tail.lstrip()
+        for det in ("my", "the"):
+            if rest.startswith(det):
+                gap = len(det)
+                if gap < len(rest) and rest[gap].isspace():
+                    rest = rest[gap:].lstrip()
+                    break
+        name: list[str] = []
+        for char in rest:
+            if "a" <= char <= "z" or "0" <= char <= "9" or char in "_-":
+                name.append(char)
+            else:
+                break
+        if name:
+            return "".join(name)
+    return ""
 
 
 def handle_concierge(
@@ -459,7 +836,9 @@ def handle_concierge(
 
     # A card word with no card in front of it is not a search term: "more" was
     # once answered by installing a random plugin.
-    bare = re.sub(r"[^a-z0-9 ]", "", low).strip()
+    bare = "".join(
+        char for char in low if "a" <= char <= "z" or "0" <= char <= "9" or char == " "
+    ).strip()
     if bare in ("yes", "no", "more", "next", "1", "2") and not (
         card.is_waiting(session_key) or market.is_waiting(session_key)
     ):
@@ -470,11 +849,20 @@ def handle_concierge(
     if low in HELP_WORDS:
         _drop_cards(session_key)
         return HELP_SHORT
-    what_is_in = re.match(r"^(what(?:'s| is)? (?:in|inside|installed in))\s+(?:my\s+|the\s+)?([a-z0-9_-]+)", low)
-    if what_is_in:
+    in_bot = _what_is_in(low)
+    if in_bot:
         _drop_cards(session_key)
-        return handle_concierge("skills " + what_is_in.group(2), store=store,
+        return handle_concierge("skills " + in_bot, store=store,
                                 session_key=session_key, known=known, hire=hire)
+
+    # The model reads the sentence; the action set is closed and every action
+    # runs through the code that already knows how to install, verify and undo.
+    routed = _model_route(text, store=store)
+    if routed:
+        answer = _run_route(routed, text, store=store, session_key=session_key,
+                            known=known, hire=hire)
+        if answer is not None:
+            return answer
 
     natural = _natural_verb(low)
     if natural == "bots":
@@ -506,7 +894,7 @@ def handle_concierge(
         ):
             return card_mod.handle(text, session_key=session_key, store=store)
         # Any other sentence is a new request: the old card is dropped below.
-    if low in UNDO_WORDS or re.match(r"^undo\b", low) or re.match(r"^roll ?back\b", low):
+    if low in UNDO_WORDS or _starts_anchored(low, "undo") or _starts_anchored(low, "roll back") or _starts_anchored(low, "rollback"):
         _drop_cards(session_key)
         return handle_undo(store=store, undo=undo, seams=seams)
 
@@ -639,10 +1027,10 @@ def handle_concierge(
         return handle_improve(
             text, store=store, known=known, bot=_self_name() if _is_bot_profile() else None
         )
-    spanish = re.match(r"^(?:mejora|mejorar|ens[eñ]a|entrena)\s+(.+)", low)
-    if spanish:
+    improved = _spanish_improve(low)
+    if improved:
         _drop_cards(session_key)
-        return handle_improve(spanish.group(1), store=store, known=known)
+        return handle_improve(improved, store=store, known=known)
     if _improve_shape(text):
         _drop_cards(session_key)
         return handle_improve(text, store=store, known=known)
@@ -693,14 +1081,15 @@ def handle_concierge(
         return card_mod.handle(text, session_key=session_key, store=store, target=here)
 
     # "into <word>" that is not a bot is a typo, not a destination.
-    aimed = re.search(r"\binto\s+([a-z0-9_-]+)\s*$", text, re.I)
+    aimed = _into_target(text)
     if aimed:
+        aimed_name = aimed[0]
         try:
             from . import seams as _seams
 
-            if not _seams.profile_exists(aimed.group(1)):
+            if not _seams.profile_exists(aimed_name):
                 return "  No bot called {}. Say /concierge bots to see them.\n".format(
-                    aimed.group(1)
+                    aimed_name
                 )
         except Exception:
             pass
@@ -718,7 +1107,7 @@ def handle_concierge(
     low = text.lower()
     def _named(item: Any) -> bool:
         for form in (item.name, item.name.replace("-", " ")):
-            if re.search(r"(?<![\w-])" + re.escape(form) + r"(?![\w-])", low):
+            if _has_token_word(low, form):
                 return True
         return False
 
@@ -803,16 +1192,16 @@ def handle_install(
             return "  This bot can only install into itself, not {}.\n".format(target)
         target = here
     if not target:
-        aimed = re.search(r"\binto\s+([a-z0-9_-]+)\s*$", text, re.I)
+        aimed = _into_target(text)
         try:
-            known_destination = bool(aimed and seams.profile_exists(aimed.group(1)))
+            known_destination = bool(aimed and seams.profile_exists(aimed[0]))
         except Exception:
             known_destination = False
         if aimed and not known_destination:
-            return "  No bot called {}. Say /concierge bots to see them.\n".format(aimed.group(1))
+            return "  No bot called {}. Say /concierge bots to see them.\n".format(aimed[0])
         if aimed and known_destination:
-            target = aimed.group(1)
-            query = text[: aimed.start()].strip()
+            target = aimed[0]
+            query = text[: aimed[1]].strip()
 
     # The plugin shelf answers first because its card carries the scan verdict.
     if catalog is None:
@@ -822,7 +1211,9 @@ def handle_install(
             catalog = []
     # A waiting card owns yes/no/more and a bare number, so those answer before
     # any search. A new sentence is a new request, not an answer to the card.
-    answer_word = re.sub(r"[^a-z0-9 ]", "", text.lower()).strip()
+    answer_word = "".join(
+        char for char in text.lower() if "a" <= char <= "z" or "0" <= char <= "9" or char == " "
+    ).strip()
     if card.is_waiting(session_key) and (
         answer_word in ("yes", "y", "no", "n", "more") or answer_word.isdigit()
     ):

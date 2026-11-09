@@ -139,11 +139,13 @@ def _build() -> str:
 
 def _version() -> str:
     try:
-        import re
-
         text = (pathlib.Path(__file__).resolve().parent / "plugin.yaml").read_text()
-        found = re.search(r"^version:\s*(\S+)", text, re.M)
-        return found.group(1) if found else "?"
+        for line in text.splitlines():
+            if line.startswith("version:"):
+                parts = line[len("version:"):].split()
+                if parts:
+                    return parts[0]
+        return "?"
     except Exception:
         return "?"
 

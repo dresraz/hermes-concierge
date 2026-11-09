@@ -17,7 +17,6 @@ a key, a service or a daemon is named with its cost and waits for a yes.
 from __future__ import annotations
 
 import os
-import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path

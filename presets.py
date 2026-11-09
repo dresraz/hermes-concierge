@@ -14,7 +14,6 @@ needs. Nothing here invents a skill: every name is read off the Hermes tree.
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -162,7 +161,12 @@ def detect(sentence: str) -> Role | None:
     """Best role for a sentence, or None. Longest cue wins, then roster order."""
     # Punctuation is glued to words often enough to hide a role: "researcher," and
     # "writer:" both have to read as the word.
-    cleaned = re.sub(r"[^a-z0-9\s'-]+", " ", (sentence or "").lower())
+    cleaned = "".join(
+        char
+        if "a" <= char <= "z" or "0" <= char <= "9" or char in " '-" or char.isspace()
+        else " "
+        for char in (sentence or "").lower()
+    )
     text = " " + " ".join(cleaned.split()) + " "
     totals: dict[str, int] = {}
     longest: dict[str, int] = {}
