@@ -369,9 +369,16 @@ def receipt(outcome, record, *, saved: bool = True) -> str:
 
     from . import seams
 
-    lines = [f"Installed {record.name}", ""]
     target = Path(record.target) if record.target else None
-    if target is not None and target.exists():
+    present = target is not None and target.exists()
+    # The headline may not claim more than the line under it proves.
+    head = (
+        "Installed {}".format(record.name)
+        if present
+        else "Not installed: {} is not on disk".format(record.name)
+    )
+    lines = [head, ""]
+    if present:
         files = sum(1 for item in target.rglob("*") if item.is_file())
         lines.append(f"  on disk     {target} ({files} files)")
     else:
@@ -398,8 +405,10 @@ def receipt(outcome, record, *, saved: bool = True) -> str:
         lines.append(f"  scan        {verdict}, {findings} notes")
     for note in outcome.notes:
         lines.append(f"  note        {note}")
-    if saved:
+    if saved and present:
         lines += ["", "Undo it with /concierge undo", ""]
+    elif saved:
+        lines += ["", "Nothing to undo yet: the files are not there.", ""]
     else:
         # A receipt may not promise an undo that was never recorded.
         lines += ["", "Undo is off for this one: the record could not be saved.", ""]

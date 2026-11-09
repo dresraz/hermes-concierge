@@ -195,7 +195,7 @@ class Confirm(unittest.TestCase):
         self.assertEqual(store.records, [])
 
         text = card.handle("yes", store=store, install=fake_install)
-        self.assertIn("Installed", text)
+        self.assertIn("hermes-themes-pack", text)
         self.assertIn("1 note", text)
 
     def test_caution_report_comes_back_as_text_not_as_stdout(self):

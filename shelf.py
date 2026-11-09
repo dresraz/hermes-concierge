@@ -160,7 +160,8 @@ def browse(query: str = "", session_key: str = "") -> str:
 
     rows = items(query)
     if len(_LAST) >= MAX_SESSIONS:
-        _LAST.clear()
+        oldest = min(_LAST, key=lambda key: _LAST[key][0])
+        _LAST.pop(oldest, None)
     _LAST[session_key or ""] = (time.time(), rows)
     head = "  LOOKING FOR  {}".format(query) if query else "  READY TO ADD"
     if not rows:

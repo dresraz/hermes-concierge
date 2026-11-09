@@ -383,8 +383,7 @@ def handle_concierge(
     if natural == "bots":
         card.forget(session_key)
         _forget("", session_key)
-        _repair_keys(store)
-        return lifecycle.card(store)
+        return _safe_bots(store)
     first_word = low.split(" ", 1)[0]
     if natural == "fire" and first_word not in ("fire", "reset"):
         card.forget(session_key)
@@ -437,8 +436,7 @@ def handle_concierge(
     if head == "bots":
         card.forget(session_key)
         _forget("", session_key)
-        _repair_keys(store)
-        return lifecycle.card(store)
+        return _safe_bots(store)
 
     if head in ("fire", "reset"):
         if _is_bot_profile():
@@ -501,6 +499,10 @@ def handle_concierge(
         return handle_improve(text, store=store, known=known)
 
     intent_name, bot, sentence = _classify(text, store=store)
+    # A sentence that plainly asks for a bot is a bot, whatever the model said:
+    # a prompt that talks the model into "install" must not override the guard.
+    if intent_name != "create" and (_asks_for_bot(text) or _wants_a_bot(text)):
+        intent_name, bot, sentence = "create", "", text
     card.forget(session_key)
     _forget("", session_key)
     if intent_name == "create":
@@ -510,7 +512,7 @@ def handle_concierge(
             return handle_improve(sentence or text, store=store, known=known)
         return handle_improve(_strip_name(sentence, bot), store=store, known=known, bot=bot)
     if intent_name == "bots":
-        return lifecycle.card(store)
+        return _safe_bots(store)
     if intent_name == "browse":
         from . import shelf
 
@@ -527,11 +529,13 @@ def handle_concierge(
 
     if _is_bot_profile() and intent_name == "install":
         here = _self_name()
+        from . import card as card_mod
         from . import market as market_mod
 
         _, target = market_mod.split_target(text)
         if target and target != here:
             return "  This bot can only install into itself, not {}.\n".format(target)
+        return card_mod.handle(text, session_key=session_key, store=store, target=here)
 
     # No bot named: a plugin or a skill. A skill this machine already ships wins
     # when the sentence names it, because it costs nothing and adds no tools;
@@ -708,23 +712,14 @@ def handle_hire(
     )
 
 
-def _repair_keys(store: Any) -> None:
-    """A bot Concierge made should never be missing the owner's login."""
-    from . import seams
+def _safe_bots(store: Any) -> str:
+    """The bot list, or an honest line when the store cannot be read."""
+    try:
+        from . import lifecycle
 
-    for record in getattr(store, "all", lambda: [])():
-        if getattr(record, "kind", "") != "bot":
-            continue
-        lookup = getattr(seams, "profile_home", None)
-        if lookup is None:
-            continue
-        home = lookup(record.profile or record.name)
-        try:
-            # Not only missing: a rotated key has to reach bots that already
-            # exist, or one of them fails auth while everything looks fine.
-            seams.share_credentials(home, _HOME)
-        except Exception:
-            continue
+        return lifecycle.card(store)
+    except Exception:
+        return "  The bot list could not be read just now. Nothing was changed.\n"
 
 
 def _share_keys(name: str, profile_path: Any) -> list[str]:
@@ -750,20 +745,33 @@ def _apply_preset(text: str, name: str, profile_path: Any) -> list[str]:
 
     role = presets.detect(text)
     if role is None:
-        return []
+        # No role: the bot still gets the job the owner asked for.
+        return _job_line(text, profile_path, bots)
     try:
         report = presets.install(name, Path(str(profile_path)), role)
+    except Exception as exc:
+        return ["  skills   preset skipped: {}: {}".format(type(exc).__name__, exc)] + _job_line(
+            text, profile_path, bots
+        )
+    lines = report.lines() if report.wanted else []
+    return lines + _job_line(text, profile_path, bots)
+
+
+def _job_line(text: str, profile_path: Any, bots: Any) -> list[str]:
+    """Keep the owner's job on the soul, whatever the role install did."""
+    try:
         job = bots.spec(text).title
         soul = Path(str(profile_path)) / "SOUL.md"
-        if job and soul.is_file():
-            line = "Your job here: {}{}.".format(job[:1].lower(), job[1:]).rstrip(".")
-            line += "."
-            body = soul.read_text(encoding="utf-8")
-            if "Your job here:" not in body:
-                soul.write_text(body.rstrip() + "\n\n" + line + "\n", encoding="utf-8")
-    except Exception as exc:
-        return ["  skills   preset skipped: {}: {}".format(type(exc).__name__, exc)]
-    return report.lines() if report.wanted else []
+        if not job or not soul.is_file():
+            return []
+        body = soul.read_text(encoding="utf-8")
+        if "Your job here:" in body:
+            return []
+        line = "Your job here: {}{}.".format(job[:1].lower(), job[1:]).rstrip(".") + "."
+        soul.write_text(body.rstrip() + "\n\n" + line + "\n", encoding="utf-8")
+        return []
+    except Exception:
+        return []
 
 
 def _suggest_extras(text: str, profile_path: Any) -> list[str]:
@@ -831,6 +839,10 @@ def _classify(text: str, store: Any = None) -> tuple:
     """What this sentence means: model first, rules when there is no model."""
     from . import intent as intent_mod, presets
 
+    # A sentence that plainly hires or installs is decided by the rules, so the
+    # common case costs no network wait at all.
+    if _asks_for_bot(text) or _wants_a_bot(text):
+        return _route(text)
     llm = None
     if _CTX is not None:
         try:

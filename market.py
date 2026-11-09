@@ -177,6 +177,7 @@ def handle(text: str, *, target: str = "", session_key: str = "",
     lowered = text.lower()
     if lowered in NO:
         _PENDING.pop(session_key, None)
+        _STAMP.pop(session_key, None)
         return "Nothing installed.\n"
     if lowered in YES:
         return _answer(session_key=session_key, install=install, store=store)
@@ -188,6 +189,7 @@ def handle(text: str, *, target: str = "", session_key: str = "",
     offers = search(query, search=search_fn)
     if not offers:
         _PENDING.pop(session_key, None)
+        _STAMP.pop(session_key, None)
         return nothing(query, target)
 
     import time

@@ -136,7 +136,7 @@ def classify(
                 schema_name="concierge_intent",
                 max_tokens=200,
                 temperature=0,
-                timeout=20,
+                timeout=8,
                 purpose="route a /concierge request",
             )
             parsed = _parse(result)

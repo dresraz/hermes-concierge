@@ -195,7 +195,15 @@ def receipt(plan: Spec, path: object, known: Sequence[str] | None = None) -> tup
     soul_file = home / "SOUL.md"
     soul_text = soul_file.read_text(encoding="utf-8") if soul_file.exists() else ""
     skills = _skills_on_disk(home)
-    listed = plan.name in (list(known) if known is not None else names())
+    # Ask core whether the profile exists now. Comparing against the list we
+    # took before creating it would always say "not listed".
+    listed = False
+    try:
+        from . import seams
+
+        listed = bool(seams.profile_exists(plan.name))
+    except Exception:
+        listed = plan.name in (list(known) if known is not None else names())
     ok = home.is_dir() and bool(soul_text.strip()) and listed
     lines = [
         "  home     " + str(home),

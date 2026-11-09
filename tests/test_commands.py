@@ -523,3 +523,38 @@ class TheCardStillWorks(unittest.TestCase):
                     "CARD ANSWER",
                     word,
                 )
+
+
+class RoundTwo(unittest.TestCase):
+    """The failures the second review found, pinned."""
+
+    def test_a_broken_store_does_not_raise_on_bots(self):
+        class Broken:
+            def all(self):
+                raise OSError("disk gone")
+
+        text = commands.handle_concierge("bots", store=Broken())
+        self.assertIn("could not be read", text)
+
+    def test_a_model_that_says_install_cannot_override_a_bot_request(self):
+        from concierge import intent
+
+        class Llm:
+            def complete_structured(self, **kwargs):
+                class Result:
+                    parsed = {"intent": "install", "query": "obsidian"}
+
+                return Result()
+
+        got = intent.classify(
+            "I want to make a general assistant bot",
+            llm=Llm(),
+            bots=["default"],
+            roles=["assistant"],
+            fallback=lambda text: ("install", "", text),
+        )
+        self.assertEqual(got[0], "install")  # the module alone trusts the model
+
+    def test_the_command_layer_overrides_that_model_answer(self):
+        # The guard lives where the reply is decided, not inside the classifier.
+        self.assertTrue(commands._asks_for_bot("I want to make a general assistant bot"))

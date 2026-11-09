@@ -313,9 +313,55 @@ def share_credentials(target_home: Path, source_home: Optional[Path] = None) -> 
             from hermes_cli.profile_channels import strip_channel_env_file
 
             strip_channel_env_file(env)
-        except Exception:  # no channel inventory: the copy stays, minus nothing
-            pass
+        except Exception:
+            # A silent strip is a lie: the receipt has to say the copy still
+            # carries whatever the owner's .env had in it.
+            notes.append("channel strip skipped, check .env by hand")
+    auth = target / "auth.json"
+    if auth.is_file():
+        dropped = _drop_platform_auth(auth)
+        if dropped:
+            notes.append("{} platform login(s) left out".format(dropped))
     return notes
+
+
+PLATFORM_AUTH_KEYS = (
+    "telegram", "discord", "slack", "whatsapp", "signal", "matrix", "irc",
+    "feishu", "teams", "line", "wechat", "messenger", "twilio", "photon",
+)
+
+
+def _drop_platform_auth(path: Path) -> int:
+    """Remove messaging-platform logins from a copied auth.json.
+
+    A bot that inherits Discord's token is a second process fighting the owner
+    for the same connection, and a single-use OAuth grant is worse: the first
+    refresh revokes the other copy.
+    """
+    import json
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    dropped = 0
+    for section in ("providers", "credential_pool"):
+        block = data.get(section)
+        if not isinstance(block, dict):
+            continue
+        for key in list(block):
+            low = str(key).lower()
+            if any(name in low for name in PLATFORM_AUTH_KEYS):
+                block.pop(key, None)
+                dropped += 1
+    if dropped:
+        try:
+            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except OSError:
+            return 0
+    return dropped
 
 
 def _env_value(value: str) -> Optional[str]:
