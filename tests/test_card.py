@@ -98,7 +98,7 @@ class Ask(unittest.TestCase):
 
     def test_card_explains_why(self):
         text = card.handle("drive a real browser", entries=CATALOG)
-        self.assertIn("why", text)
+        self.assertIn("matched", text)
         self.assertIn("browser", text)
 
     def test_cost_line_is_honest_when_no_tools_are_added(self):
@@ -132,7 +132,7 @@ class Ask(unittest.TestCase):
         card.handle("themes memory browser", entries=CATALOG)
         text = card.handle("more", entries=CATALOG)
         self.assertIn("hermes-memory-locus", text)
-        self.assertIn("why", text)
+        self.assertIn("matched", text)
         self.assertIn("adds", text)
         self.assertIn("cost", text)
 

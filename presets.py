@@ -129,10 +129,13 @@ CUES: dict[str, tuple[str, ...]] = {
                 "priorities", "decision", "schedule my", "keep me on"),
 }
 
+# The first cues of a role are the nouns that define it (inbox, spreadsheet,
+# repo); the later ones are verbs anyone might use (draft, plan, watch). A verb
+# must not outrank a defining noun just because it is a longer word.
 _CUES = tuple(
-    (role.name, cue)
+    (role.name, cue, 2 if index < 3 else 1)
     for role in ROLES
-    for cue in CUES[role.name]
+    for index, cue in enumerate(CUES[role.name])
 )
 
 
@@ -157,15 +160,18 @@ def detect(sentence: str) -> Role | None:
     # "writer:" both have to read as the word.
     cleaned = re.sub(r"[^a-z0-9\s'-]+", " ", (sentence or "").lower())
     text = " " + " ".join(cleaned.split()) + " "
-    best: tuple[int, int] | None = None
-    winner: Role | None = None
-    for index, (role_name, cue) in enumerate(_CUES):
+    totals: dict[str, int] = {}
+    longest: dict[str, int] = {}
+    order: dict[str, int] = {}
+    for index, (role_name, cue, weight) in enumerate(_CUES):
         if any(" {} ".format(form) in text for form in _forms(cue)):
-            score = len(cue)
-            if best is None or score > best[0]:
-                best = (score, index)
-                winner = _BY_NAME[role_name]
-    return winner
+            totals[role_name] = totals.get(role_name, 0) + weight
+            longest[role_name] = max(longest.get(role_name, 0), len(cue))
+            order.setdefault(role_name, index)
+    if not totals:
+        return None
+    winner = max(totals, key=lambda name: (totals[name], longest[name], -order[name]))
+    return _BY_NAME[winner]
 
 
 def official(role: Role) -> list[str]:

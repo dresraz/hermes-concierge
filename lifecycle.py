@@ -98,7 +98,7 @@ def card(store: Any = None) -> str:
         lines.append("")
         lines.append("  Make one: /concierge create keeps my inbox at zero")
     else:
-        lines.append("  BOTS  {}".format(len(items)))
+        lines.append("  Bots  {}".format(len(items)))
         lines.append("")
         width = max(len(name_of(r)) for r in items)
         for index, record in enumerate(items, 1):

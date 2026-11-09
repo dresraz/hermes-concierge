@@ -399,6 +399,12 @@ def handle_concierge(
         card.forget(session_key)
         _forget("", session_key)
         return shelf.overview()
+    # A card this conversation was shown owns yes, no, more and 1. Checked before
+    # anything forgets it, or the flagship loop dies on its own receipt.
+    from . import card as card_mod
+
+    if card_mod.is_waiting(session_key):
+        return card_mod.handle(text, session_key=session_key, store=store)
     if low in UNDO_WORDS or re.match(r"^undo\b", low) or re.match(r"^roll ?back\b", low):
         card.forget(session_key)
         _forget("", session_key)
@@ -504,7 +510,6 @@ def handle_concierge(
             return handle_improve(sentence or text, store=store, known=known)
         return handle_improve(_strip_name(sentence, bot), store=store, known=known, bot=bot)
     if intent_name == "bots":
-        _repair_keys(store)
         return lifecycle.card(store)
     if intent_name == "browse":
         from . import shelf
@@ -514,6 +519,19 @@ def handle_concierge(
         return HELP
     if intent_name == "undo":
         return handle_undo(store=store, undo=undo, seams=seams)
+    if intent_name == "fire":
+        return (
+            "  Deleting a bot needs its number, so nothing is removed by a guess.\n"
+            "  /concierge bots, then /concierge fire <number>\n"
+        )
+
+    if _is_bot_profile() and intent_name == "install":
+        here = _self_name()
+        from . import market as market_mod
+
+        _, target = market_mod.split_target(text)
+        if target and target != here:
+            return "  This bot can only install into itself, not {}.\n".format(target)
 
     # No bot named: a plugin or a skill. A skill this machine already ships wins
     # when the sentence names it, because it costs nothing and adds no tools;
@@ -659,9 +677,7 @@ def handle_hire(
     except Exception:
         self_lines = []
 
-    lines, ok = bots.receipt(
-        plan, path, known=(taken + [plan.name] if known is not None else None)
-    )
+    lines, ok = bots.receipt(plan, path, known=taken)
     saved = _remember(
         state.Installed(
             name=plan.name,
@@ -730,13 +746,21 @@ def _inherit_plugins(profile_path: Any) -> list[str]:
 
 def _apply_preset(text: str, name: str, profile_path: Any) -> list[str]:
     """A role sentence also installs that role's skills. Never fatal: the bot exists."""
-    from . import presets
+    from . import bots, presets
 
     role = presets.detect(text)
     if role is None:
         return []
     try:
         report = presets.install(name, Path(str(profile_path)), role)
+        job = bots.spec(text).title
+        soul = Path(str(profile_path)) / "SOUL.md"
+        if job and soul.is_file():
+            line = "Your job here: {}{}.".format(job[:1].lower(), job[1:]).rstrip(".")
+            line += "."
+            body = soul.read_text(encoding="utf-8")
+            if "Your job here:" not in body:
+                soul.write_text(body.rstrip() + "\n\n" + line + "\n", encoding="utf-8")
     except Exception as exc:
         return ["  skills   preset skipped: {}: {}".format(type(exc).__name__, exc)]
     return report.lines() if report.wanted else []
@@ -819,15 +843,19 @@ def _classify(text: str, store: Any = None) -> tuple:
         names = ["default"]
     # Each bot carries its job, so "the house bot" resolves to lima-house-seller.
     jobs = {}
-    for record in getattr(store, "all", lambda: [])() if store is not None else []:
+    try:
+        records = getattr(store, "all", lambda: [])() if store is not None else []
+    except Exception:
+        records = []
+    for record in records:
         if getattr(record, "kind", "") == "bot":
             jobs[record.profile or record.name] = getattr(record, "title", "")
-    names = ["{} ({})".format(name, jobs[name]) if jobs.get(name) else name for name in names]
     return intent_mod.classify(
         text,
         llm=llm,
         bots=names,
         roles=presets.names(),
+        jobs=jobs,
         fallback=_route,
     )
 
@@ -847,6 +875,11 @@ def handle_undo(*, store: Any = None, undo: Optional[Callable[..., Any]] = None,
     """Reverse the last record, then check on disk that it is really gone."""
     store = store if store is not None else _store()
     record = store.latest()
+    if record is not None and _is_bot_profile():
+        here = _self_name()
+        owner = getattr(record, "profile", "") or getattr(record, "name", "")
+        if owner and owner != here:
+            return "  This bot can only undo its own changes.\n"
     if record is None:
         return "Nothing to undo. Concierge has not changed anything yet.\n"
 
@@ -909,7 +942,10 @@ def _undo_rule(record: Any, effects: Any) -> list:
         backup=getattr(record, "soul_backup", "") or "",
         existed=bool(getattr(record, "soul_existed", False)),
     )
-    effects.restore_soul(snapshot)
+    try:
+        effects.restore_soul(snapshot)
+    except Exception as exc:
+        return ["could not restore the rule: {}: {}".format(type(exc).__name__, exc)]
     return ["restored: rule in " + (getattr(record, "profile", "") or "this profile")]
 
 

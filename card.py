@@ -131,7 +131,7 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
         "",
         f"  you said    {sentence.strip()}",
         f"  best match  {top.name}  ({top.tier or 'unknown tier'}, {top.category or 'general'})",
-        f"  why         {top.why()}",
+        f"  matched     {top.why()}",
     ]
     description = " ".join(top.description.split())
     if description:
@@ -201,7 +201,7 @@ def handle(sentence: str, *, entries=None, store=None, install=None,
     lowered = text.lower()
 
     if lowered in NO:
-        forgotten = slot["sentence"]
+        forgotten = slot.get("sentence", "") or ""
         _reset(session_key)
         return f"Nothing installed.{' Kept ' + forgotten + ' out.' if forgotten else ''}\n"
 
@@ -215,7 +215,12 @@ def handle(sentence: str, *, entries=None, store=None, install=None,
     if lowered in MORE:
         return more(session_key=session_key)
 
-    catalog = entries if entries is not None else seams.catalog()
+    if entries is None:
+        try:
+            entries = seams.catalog()
+        except Exception:
+            entries = []
+    catalog = entries
     candidates = match.rank(text, catalog, limit=2)
     if not candidates:
         return nothing(text, catalog)
@@ -233,7 +238,7 @@ def handle(sentence: str, *, entries=None, store=None, install=None,
 
 def _answer(*, store=None, install=None, session_key: str = "") -> str:
     slot = _slot(session_key)
-    picked = slot["entries"]
+    picked = slot.get("entries") or []
     if not picked:
         return "Nothing is waiting. Start with: /concierge <what you want>\n"
     return _install(picked[0].entry, store=store, install=install,
@@ -252,7 +257,7 @@ def more(session_key: str = "") -> str:
     lines = [
         f"{rival.name}  ({rival.tier or 'unknown tier'}, {rival.category or 'general'})",
         "",
-        f"  why         {rival.why()}",
+        f"  matched     {rival.why()}",
     ]
     description = " ".join(rival.description.split())
     if description:
@@ -283,7 +288,7 @@ def _install(entry, *, store=None, install=None, session_key: str = "",
     def approve(report: str) -> bool:
         # Core's own report is already on screen; the second yes is the answer
         # to core's question, not a repeat of the first one.
-        if slot["caution_accepted"]:
+        if slot.get("caution_accepted"):
             return True
         shown.append(report)
         return False
@@ -297,7 +302,7 @@ def _install(entry, *, store=None, install=None, session_key: str = "",
         outcome = install_fn(entry, approve=approve)
 
     if not outcome.ok:
-        if not target and outcome.verdict == "caution" and not slot["caution_accepted"]:
+        if not target and outcome.verdict == "caution" and not slot.get("caution_accepted"):
             slot["caution_accepted"] = True
             body = "\n".join(part for part in shown if part.strip())
             return (

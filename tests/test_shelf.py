@@ -27,7 +27,7 @@ class Shelf(unittest.TestCase):
 
     def test_the_overview_counts_what_is_here(self):
         text = shelf.overview()
-        self.assertIn("CONCIERGE", text)
+        self.assertIn("Concierge", text)
         self.assertIn("ready", text)
         self.assertIn("plugins in the catalog", text)
 

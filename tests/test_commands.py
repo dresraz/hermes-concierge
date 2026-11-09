@@ -77,7 +77,7 @@ class FakeSeams:
 class Help(unittest.TestCase):
     def test_bare_command_is_the_shelf(self):
         text = commands.handle_concierge("")
-        self.assertIn("CONCIERGE", text)
+        self.assertIn("Concierge", text)
         self.assertIn("here", text)
         self.assertIn("browse", text)
 
@@ -230,7 +230,7 @@ class Gateway(unittest.TestCase):
 
     def test_a_gateway_may_still_look(self):
         commands._CTX = self.Ctx("telegram")
-        self.assertIn("CONCIERGE", commands.handle_concierge("", store=store()))
+        self.assertIn("Concierge", commands.handle_concierge("", store=store()))
         self.assertTrue(commands.handle_concierge("browse notes", store=store()).startswith("  LOOKING FOR"))
 
     def test_the_owner_can_open_the_gateway(self):
@@ -266,7 +266,7 @@ class Bots(unittest.TestCase):
     def test_numbers_come_from_one_place(self):
         made = store(bot("inbox-bot", "keeps my inbox at zero"), bot("newsletter-bot", "writes my weekly newsletter"))
         text = commands.handle_concierge("bots", store=made)
-        self.assertIn("BOTS  2", text)
+        self.assertIn("Bots  2", text)
         self.assertIn("inbox-bot", text)
         self.assertIn("newsletter-bot", text)
 
@@ -492,3 +492,34 @@ class BotAskGuard(unittest.TestCase):
             "install obsidian into lima-house-seller",
         ):
             self.assertFalse(commands._asks_for_bot(sentence), sentence)
+
+
+class TheCardStillWorks(unittest.TestCase):
+    """One card, one yes: the loop the README promises."""
+
+    def test_a_waiting_card_owns_the_yes(self):
+        from unittest import mock
+
+        card = harness.load("card")
+
+        card._PENDING["chat-x"] = {"sentence": "install pdf", "entries": ["one"], "target": ""}
+        self.addCleanup(card._PENDING.pop, "chat-x", None)
+        with mock.patch.object(card, "handle", return_value="CARD ANSWER") as sent:
+            text = commands.handle_concierge("yes", store=store(), session_key="chat-x")
+        self.assertEqual(text, "CARD ANSWER")
+        self.assertEqual(sent.call_count, 1)
+
+    def test_a_waiting_card_owns_more_and_one(self):
+        from unittest import mock
+
+        card = harness.load("card")
+
+        for word in ("more", "1", "no"):
+            card._PENDING["chat-y"] = {"sentence": "install pdf", "entries": ["one"], "target": ""}
+            self.addCleanup(card._PENDING.pop, "chat-y", None)
+            with mock.patch.object(card, "handle", return_value="CARD ANSWER"):
+                self.assertEqual(
+                    commands.handle_concierge(word, store=store(), session_key="chat-y"),
+                    "CARD ANSWER",
+                    word,
+                )

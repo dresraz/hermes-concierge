@@ -245,6 +245,10 @@ def link_self_plugin(target_home: Any) -> bool:
     link = target / "plugins" / "concierge"
     try:
         link.parent.mkdir(parents=True, exist_ok=True)
+        if link.is_symlink() and not link.exists():
+            # The plugin moved: a dangling link is worse than none, because it
+            # looks present and loads nothing.
+            link.unlink()
         if not link.exists() and not link.is_symlink():
             link.symlink_to(source, target_is_directory=True)
     except OSError:
@@ -258,7 +262,9 @@ def link_self_plugin(target_home: Any) -> bool:
             data = safe_load(config.read_text(encoding="utf-8")) or {}
         plugins = data.setdefault("plugins", {})
         enabled = plugins.setdefault("enabled", [])
-        if isinstance(enabled, list) and "concierge" not in enabled:
+        if not isinstance(enabled, list):
+            return False
+        if "concierge" not in enabled:
             enabled.append("concierge")
         tmp = config.with_suffix(".yaml.tmp")
         tmp.write_text(safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")

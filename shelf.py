@@ -131,16 +131,19 @@ def overview() -> str:
     except Exception:
         total_plugins = 0
     available = len(discover.catalogue())
+    def _n(count: int, word: str) -> str:
+        return "{} {}".format(count, word if count == 1 else word + "s")
+
     lines = [
-        "CONCIERGE",
+        "Concierge",
         "",
-        "  here     {} skills, {} bots{}".format(
-            len(here),
-            len(bots),
+        "  here     {}, {}{}".format(
+            _n(len(here), "skill"),
+            _n(len(bots), "bot"),
             ("  " + ", ".join(bots[:4]) + (" +{}".format(len(bots) - 4) if len(bots) > 4 else "")) if bots else "",
         ),
-        "  ready    {} skills ship with Hermes, {} plugins in the catalog".format(
-            available, total_plugins
+        "  ready    {} ship with Hermes, {} in the catalog".format(
+            _n(available, "skill"), _n(total_plugins, "plugin")
         ),
         "",
         "  say what you need, or look first:",
