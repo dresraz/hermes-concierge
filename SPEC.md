@@ -1,5 +1,9 @@
 # Concierge build spec: batch 1
 
+> Historical design notes from before the 0.9 rewrite. The shipped behaviour is
+> described in [README.md](README.md); where this file disagrees with the code, the
+> code is right.
+
 > Archived build brief. This file is what was handed to the first round of coding
 > agents, kept for provenance. It is not a description of the finished plugin: the
 > surface is now four commands (`/concierge`, `/concierge create`, `/concierge improve`, `/concierge undo`),
@@ -11,10 +15,10 @@ wrong or impossible, stop and say so in your final answer; do not invent a worka
 
 ## Repo
 
-`/home/andres/concierge` is a flat Hermes directory plugin:
+`/home/andres/.hermes/plugins/concierge` is a flat Hermes directory plugin:
 
 ```
-/home/andres/concierge/
+/home/andres/.hermes/plugins/concierge/
   plugin.yaml
   __init__.py        # register(ctx), already present, do not touch
   match.py           # agent A writes this
@@ -34,13 +38,13 @@ Constraints, all hard:
 - No network, no subprocess, no LLM call, no filesystem write in `match.py` or `cost.py`.
 - `/home/andres/.hermes/hermes-agent` is READ-ONLY reference. Read it, never edit it,
   never import from it at runtime (tests may not either).
-- Do not touch any file outside `/home/andres/concierge`.
+- Do not touch any file outside `/home/andres/.hermes/plugins/concierge`.
 - No em dashes or en dashes in prose or comments. Plain words.
 
 ## How to run the tests
 
 ```
-cd /home/andres/concierge && python3 -m unittest discover -s tests -p 'test_*.py' -v
+cd /home/andres/.hermes/plugins/concierge && python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
 Tests use `unittest`, and load modules through `tests/harness.py`:
@@ -188,7 +192,7 @@ The interpreter that has Hermes dependencies is the staged runtime venv:
 /home/andres/.hermes/installs/efa56cb662777d08/environments/ae12b292110447cf8b2bda983d205ede/venv/bin/python
 ```
 
-Run tests from `/home/andres/concierge` with that interpreter, prefixing
+Run tests from `/home/andres/.hermes/plugins/concierge` with that interpreter, prefixing
 `PYTHONPATH=/home/andres/.hermes/hermes-agent` only when a test needs core. Plain
 `python3` lacks `ruamel` and will fail on any core import.
 
@@ -227,21 +231,21 @@ Behaviour that must hold, each one as a test:
 6. Nothing in the module imports `hermes_cli`, `cron`, `tools`, or reads the
    environment at import time.
 
-Write `/home/andres/concierge/effects.py` and
-`/home/andres/concierge/tests/test_effects.py`. Tests use `tempfile` and a fake
+Write `/home/andres/.hermes/plugins/concierge/effects.py` and
+`/home/andres/.hermes/plugins/concierge/tests/test_effects.py`. Tests use `tempfile` and a fake
 installer/creator. In your report, name the core function you would bind as the
 default installer and its real signature, read from the repo, plus the file and
 line you read it from.
 
 ## Agent D: command surface
 
-You own exactly two files: `/home/andres/concierge/plugin.yaml` and
-`/home/andres/concierge/__init__.py`. Nothing else. Do not edit `seams.py`,
+You own exactly two files: `/home/andres/.hermes/plugins/concierge/plugin.yaml` and
+`/home/andres/.hermes/plugins/concierge/__init__.py`. Nothing else. Do not edit `seams.py`,
 `match.py`, `cost.py`, `effects.py`, or `SPEC.md`.
 
 Read, in this order, before writing anything:
 
-1. `/home/andres/concierge/SPEC.md` (this file)
+1. `/home/andres/.hermes/plugins/concierge/SPEC.md` (this file)
 2. `/home/andres/.hermes/hermes-agent/plugins/disk-cleanup/__init__.py`
 3. Two more in-tree plugin entrypoints that register a slash command, found with
    `grep -rln "commands" /home/andres/.hermes/hermes-agent/plugins/*/plugin.yaml`
@@ -255,7 +259,7 @@ Then:
 - `__init__.py` registers one slash command handler for `/concierge` that parses
   a single free-text argument and hands it to `card.handle(text)`, imported
   lazily inside the handler so a missing sibling never breaks plugin load.
-- Run `hermes plugins validate /home/andres/concierge` and paste the **entire**
+- Run `hermes plugins validate /home/andres/.hermes/plugins/concierge` and paste the **entire**
   output, all lines, no `head`, no `tail`. If it emits warnings, list each one and
   say whether it is fixable without touching core.
 
