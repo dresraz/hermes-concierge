@@ -429,6 +429,8 @@ def handle_concierge(
     if refusal:
         return refusal
     text = _clean(raw)
+    if text.lower().startswith("/concierge"):
+        text = text[len("/concierge"):].strip()
     low = text.lower()
     if not text:
         from . import shelf
@@ -742,7 +744,7 @@ def handle_concierge(
             subject = "a {} for this".format(role.name)
         else:
             subject = "a bot that does that"
-        if "/concierge create" not in answer:
+        if answer.count("Next:") < 1:
             answer += "  Next: /concierge create {}\n".format(subject)
         return answer
     if "best match  none" in answer:
@@ -764,6 +766,8 @@ def handle_install(
     from . import card, market, match, seams
 
     text = _clean(raw)
+    if text.lower().startswith("/concierge"):
+        text = text[len("/concierge"):].strip()
     if not text:
         return (
             "Install what? Say it plainly, for example:\n"
@@ -865,6 +869,8 @@ def handle_hire(
         return "  A bot cannot make other bots. Ask the owner, or improve yourself.\n"
 
     text = _clean(raw)
+    if text.lower().startswith("/concierge"):
+        text = text[len("/concierge"):].strip()
     if not text:
         return "Usage: /concierge create <sentence>   e.g. /concierge create keeps my inbox at zero\n"
 
@@ -910,7 +916,7 @@ def handle_hire(
     # let the credential copy rewrite the file and drop the switch.
     try:
         self_lines = (
-            ["  self     /concierge inside this bot, for itself only"]
+            []
             if seams.link_self_plugin(path)
             else ["  self     no /concierge in this bot (link failed)"]
         )
@@ -1034,6 +1040,8 @@ def handle_improve(
     from . import improve, training
 
     text = _clean(raw)
+    if text.lower().startswith("/concierge"):
+        text = text[len("/concierge"):].strip()
     if not text:
         return (
             "Improve which bot? Say it plainly:\n"
@@ -1140,7 +1148,7 @@ def handle_undo(*, store: Any = None, undo: Optional[Callable[..., Any]] = None,
                 "  Nothing to undo. Bots are removed with a sentence of their own:\n"
                 "  /concierge bots, then /concierge delete 1\n"
             )
-        return "Nothing to undo. Concierge has not changed anything yet.\n"
+        return "  Nothing to undo.\n"
 
     lines = _undo_record(record, undo=undo, seams=seams)
     if any(line.startswith("kept:") for line in lines):
@@ -1306,8 +1314,8 @@ def _undo_bot(record: Any, seams: Any, *, guard: bool = True) -> list:
     except Exception as exc:
         return ["could not remove profile {}: {}: {}".format(name, type(exc).__name__, exc)]
     if getattr(home, "exists", lambda: False)():
-        return ["removed: profile {}".format(name), "still there: {}".format(home)]
-    return ["removed: profile {}".format(name)]
+        return ["still there: {}".format(home)]
+    return []
 
 
 def _undo_skill(record: Any, effects: Any) -> list:
@@ -1396,6 +1404,8 @@ def _gateway_refusal(raw: Any) -> Optional[str]:
     if _surface() in _LOCAL_SURFACES or _allow_gateway():
         return None
     text = _clean(raw)
+    if text.lower().startswith("/concierge"):
+        text = text[len("/concierge"):].strip()
     low = text.lower()
     if low in _READ_ONLY or low.split(" ", 1)[0] in _READ_ONLY:
         return None

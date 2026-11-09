@@ -159,6 +159,10 @@ def render(text: str, offers: list, target: str, caution: str = "") -> str:
     described = top.description
     if not described or described.lower().startswith("indexed by"):
         described = _shipped_line(top.name) or ""
+    if not described:
+        # The registry gave us a name and nothing else. Offering that is asking
+        # someone to install a word.
+        return nothing(text, target)
     if described:
         line = " ".join(described.split())
         cut = line.find(". ")
@@ -185,11 +189,10 @@ def render(text: str, offers: list, target: str, caution: str = "") -> str:
 
 
 def _hint(text: str) -> str:
-    """A word to browse for, taken from the ask itself."""
-    from . import match
+    """One hint, shared: the card module decides which word is worth browsing."""
+    from . import card
 
-    words = [w for w in match.tokens(text) if len(w) > 2]
-    return words[0] if words else "plugins"
+    return card._hint(text)
 
 
 def nothing(text: str, target: str = "") -> str:

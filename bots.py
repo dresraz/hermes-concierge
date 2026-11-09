@@ -192,7 +192,10 @@ def _soul_gist(soul_text: str) -> str:
     for line in soul_text.splitlines():
         clean = " ".join(line.strip().lstrip("#").split())
         if len(clean) > 12 and not clean.endswith(":") and clean.lower() != "learned rules":
-            return clean[:72]
+            if len(clean) <= 72:
+                return clean
+            cut = clean[:72].rsplit(" ", 1)[0].rstrip(",;")
+            return cut + "."
     return "a personality"
 
 

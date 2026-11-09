@@ -168,6 +168,9 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
     caution = caution or choose.caution_for(top, sentence)
     lines = ["", "Install {}?".format(top.name), ""]
     sentence = _one_line(top.description)
+    if not sentence:
+        # A card with an empty body asks someone to install a word.
+        return nothing(sentence or top.name, candidates)
     if sentence:
         lines.append("  " + sentence)
     adds = _plain_adds(top.entry)
@@ -212,21 +215,59 @@ def _contender(candidates: list):
 
 
 def _hint(sentence: str) -> str:
-    """A word to browse for, taken from the ask itself rather than a canned one."""
+    """A word to browse for, taken from the ask, preferring one that finds something."""
     from . import match
 
     words = [w for w in match.tokens(sentence) if len(w) > 2]
+    variants = []
+    for word in words:
+        variants.append(word)
+        if word.endswith("s") and len(word) > 4:
+            variants.append(word[:-1])
+    # English puts the noun last: "reads my pdfs" is about pdfs, not reading.
+    for word in reversed(variants):
+        if _names(word):
+            return word
+    for word in reversed(variants):
+        if _has_hits(word):
+            return word
     return words[0] if words else "plugins"
 
 
-def _has_hits(word: str) -> bool:
-    """Whether browsing for that word would show anything at all."""
+def _names(word: str) -> bool:
+    """True when the word is a whole word of an entry's name, not a fragment.
+
+    "reads" is inside "threads"; a substring test would keep suggesting a word
+    that finds nothing.
+    """
+    import re as _re
+
     try:
         from . import shelf
 
-        return bool(shelf.items(word, limit=2))
+        pattern = _re.compile(r"(?<![\w-]){}(?![\w-])".format(_re.escape(word)))
+        return any(pattern.search(row["name"].lower()) for row in shelf.items(word, limit=6))
+    except Exception:
+        return False
+
+
+def _has_hits(word: str) -> bool:
+    """Whether browsing for that word would show a skill or a plugin.
+
+    Bot rows come back for any query, so counting rows alone always says yes.
+    """
+    try:
+        from . import shelf
+
+        return any(row.get("kind") != "bot" for row in shelf.items(word, limit=6))
     except Exception:
         return True
+
+
+def _replaced(session_key: str) -> str:
+    """The previous card is gone; say so, or a yes answers the wrong question."""
+    held = _slot(session_key).get("sentence", "")
+    return "  (This replaces the {} card.)\n".format(held) if held else ""
 
 
 def nothing(sentence: str, entries: Optional[list] = None) -> str:

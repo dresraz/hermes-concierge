@@ -18,7 +18,7 @@ commands = harness.load("commands")
 seams = harness.load("seams")
 
 
-def hit(name, identifier="", description="", source="skills.sh", trust="community"):
+def hit(name, identifier="", description="What it does.", source="skills.sh", trust="community"):
     return SimpleNamespace(
         name=name,
         identifier=identifier or name,

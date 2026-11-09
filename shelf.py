@@ -138,7 +138,7 @@ def overview() -> str:
     # A profile that carries the whole shipped tree should not read as 258
     # "installed" skills: that is the tree, not a choice the person made.
     if not here:
-        here_bit = "no extra skills yet"
+        here_bit = ""
     elif len(here) >= 60:
         here_bit = "the full skill tree is available here"
     else:
