@@ -106,14 +106,21 @@ Answer JSON only: {{"built_in": true or false, "tool": "<six words naming what d
 
 
 class Option:
-    """One shortlist row, whichever shelf it came from."""
+    """One shortlist row, whichever shelf it came from.
 
-    def __init__(self, name: str, description: str, kind: str, payload: Any = None):
+    ``caution`` is set when the right answer costs something the person did not
+    ask for: a memory provider that likely needs a paid service, or a skill that
+    pulls gigabytes. The card says so instead of installing quietly.
+    """
+
+    def __init__(self, name: str, description: str, kind: str, payload: Any = None,
+                 caution: str = ""):
         self.name = str(name)
         self.description = str(description or "")
         self.title = self.description
         self.kind = kind
         self.payload = payload
+        self.caution = caution
 
     @property
     def here(self) -> bool:
@@ -182,11 +189,23 @@ def is_memory_provider(row: Any) -> bool:
     return any(marker in low for marker in MEMORY_MARKERS) or "memory" in low.split(" ", 1)[-1][:40]
 
 
-def _allowed(row: Any, ask: str) -> bool:
-    """A memory provider is opt-in, never something a sentence sweeps in."""
+def caution_for(row: Any, ask: str) -> str:
+    """Empty when the entry is safe to offer plainly.
+
+    Two things are opt-in rather than automatic: a memory provider (often a paid
+    hosted service) and a heavy skill (diffusion models, a GPU). The person may
+    still want it - they just have to say so.
+    """
     if is_memory_provider(row) and not asks_about_memory(ask):
-        return False
-    return True
+        return "memory"
+    try:
+        from . import presets
+
+        if presets.heavy(str(row.get("name") if isinstance(row, dict) else getattr(row, "name", ""))):
+            return "heavy"
+    except Exception:
+        pass
+    return ""
 
 
 def _ask_whole(ask: str, llm: Any) -> Optional[Option]:
@@ -221,9 +240,8 @@ def _ask_whole(ask: str, llm: Any) -> Optional[Option]:
         return None
     for row in rows:
         if str(row.get("name", "")).lower() == pick.lower():
-            if not _allowed(row, ask):
-                return None
-            return Option(row["name"], row.get("description", ""), row.get("kind", "plugin"), row)
+            return Option(row["name"], row.get("description", ""), row.get("kind", "plugin"),
+                          row, caution=caution_for(row, ask))
     return None
 
 

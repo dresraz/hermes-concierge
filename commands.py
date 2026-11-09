@@ -819,6 +819,17 @@ def handle_install(
 
     choice = choose.pick(query, llm=_llm(), entries=catalog)
     if choice is not None:
+        caution = getattr(choice, "caution", "")
+        if caution == "memory":
+            return (
+                "  {} is a memory provider: it usually needs a hosted service or a paid plan.\n"
+                "  I did not install it. If you want it: /concierge install {}\n"
+            ).format(choice.name, choice.name)
+        if caution == "heavy":
+            return (
+                "  {} is heavy: it downloads large models and wants a GPU.\n"
+                "  I did not install it. If you want it: /concierge install {}\n"
+            ).format(choice.name, choice.name)
         if getattr(choice, "kind", "") == "builtin":
             tool = getattr(choice, "description", "") or "its built-in tools"
             return (

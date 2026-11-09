@@ -12,17 +12,21 @@ class Memory(unittest.TestCase):
     def row(self, name, description):
         return {"kind": "plugin", "name": name, "description": description}
 
-    def test_a_memory_provider_is_refused_for_an_unrelated_ask(self):
+    def test_a_memory_provider_is_flagged_for_an_unrelated_ask(self):
         picked = self.row("mem0", "Mem0 memory provider - server-side fact extraction.")
-        self.assertFalse(choose._allowed(picked, "read pdf files"))
+        self.assertEqual(choose.caution_for(picked, "read pdf files"), "memory")
 
-    def test_a_memory_provider_is_allowed_when_memory_is_the_ask(self):
+    def test_a_memory_provider_is_offered_plainly_when_memory_is_the_ask(self):
         picked = self.row("mem0", "Mem0 memory provider - server-side fact extraction.")
-        self.assertTrue(choose._allowed(picked, "I want it to remember things across sessions"))
+        self.assertEqual(choose.caution_for(picked, "I want it to remember things across sessions"), "")
 
     def test_an_ordinary_plugin_is_unaffected(self):
         picked = self.row("stripe", "Take card payments over MCP.")
-        self.assertTrue(choose._allowed(picked, "take payments"))
+        self.assertEqual(choose.caution_for(picked, "take payments"), "")
+
+    def test_a_heavy_skill_is_flagged(self):
+        picked = self.row("comfyui", "Generate images, video and audio via diffusion workflows.")
+        self.assertEqual(choose.caution_for(picked, "make me some art"), "heavy")
 
 
 class Heavy(unittest.TestCase):
