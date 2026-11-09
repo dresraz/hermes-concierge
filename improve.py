@@ -316,5 +316,8 @@ def receipt(plan_: Plan, lines: Sequence[str]) -> str:
     # "already there" means nothing changed, so an undo line would promise a
     # reversal that has nothing to reverse.
     duplicate = any("already there" in str(line) for line in lines)
+    if duplicate:
+        # Nothing changed, so the headline may not say it improved.
+        head = "No change to {}".format(plan_.name)
     tail = [""] if duplicate else ["", "  undo     /concierge undo"]
     return "\n".join([head, ""] + list(lines) + tail)

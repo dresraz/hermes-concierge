@@ -257,6 +257,16 @@ def _hint(sentence: str) -> str:
     return words[0] if words else "plugins"
 
 
+def _has_hits(word: str) -> bool:
+    """Whether browsing for that word would show anything at all."""
+    try:
+        from . import shelf
+
+        return bool(shelf.items(word, limit=2))
+    except Exception:
+        return True
+
+
 def nothing(sentence: str, entries: Optional[list] = None) -> str:
     """The honest no: nothing in the catalog does this, and nothing was installed."""
     said = " ".join((sentence or "").split())[:80]
@@ -267,7 +277,11 @@ def nothing(sentence: str, entries: Optional[list] = None) -> str:
             "  Nothing here fits {} yet.".format('"' + said + '"' if said else "that"),
             "  Nothing was installed.",
             "",
-            "  Try the word for the tool you want: /concierge browse {}".format(_hint(sentence)),
+            "  Try the word for the tool you want: /concierge browse {}".format(_hint(sentence))
+            if _has_hits(_hint(sentence))
+            else "  No tool does this, but a bot can try: /concierge create {}".format(
+                " ".join((sentence or "").split())[:60]
+            ),
             "",
         ]
     )

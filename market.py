@@ -151,7 +151,7 @@ def render(text: str, offers: list, target: str) -> str:
     if not described or described.lower().startswith("indexed by"):
         described = _shipped_line(top.name) or ""
     if described:
-        line = " ".join(top.description.split())
+        line = " ".join(described.split())
         cut = line.find(". ")
         if 0 < cut < 96:
             line = line[: cut + 1]
@@ -164,8 +164,9 @@ def render(text: str, offers: list, target: str) -> str:
         body.append("  It goes into {}.".format(target))
     if body:
         lines += [""] + body
-    if len(offers) > 1:
-        lines += ["", "  Another option: {}.".format(offers[1].name)]
+    rival = next((offer for offer in offers[1:] if offer.name != top.name), None)
+    if rival is not None:
+        lines += ["", "  Another option: {}.".format(rival.name)]
     lines += ["", "  /concierge yes     install it", "  /concierge no      skip it", ""]
     return "\n".join(lines)
 
