@@ -58,10 +58,10 @@ class NoCopy(unittest.TestCase):
 
 
 class Surface(unittest.TestCase):
-    def test_an_unknown_surface_is_not_the_owner_session(self):
+    def test_a_messaging_chat_is_refused(self):
         self.assertNotIn("", commands._LOCAL_SURFACES)
         saved = commands._PLATFORM
-        commands._PLATFORM = ""
+        commands._PLATFORM = "telegram"
         self.addCleanup(lambda: setattr(commands, "_PLATFORM", saved))
         text = commands.handle_concierge("make me a researcher", store=None)
         self.assertIn("does not run from a shared chat", text)

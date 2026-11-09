@@ -1409,13 +1409,33 @@ def _allow_gateway() -> bool:
         return False
 
 
+def _messaging() -> bool:
+    """Core's own answer to "is this a human chat channel?".
+
+    It knows more surfaces than this plugin can: a slash command runs in a
+    worker process that strips session variables, so asking for the surface name
+    there always comes back empty and the gate refused the owner's own app.
+    """
+    try:
+        from gateway.session_context import session_is_messaging_surface
+
+        return bool(session_is_messaging_surface())
+    except Exception:
+        return False
+
+
 def _gateway_refusal(raw: Any) -> Optional[str]:
     """A shared chat may look, not change. Returns the refusal, or None."""
     # Answering a card this chat was already shown is not a new request: the
     # card only exists because the action that drew it was allowed.
     if _PLATFORM_ANSWER:
         return None
-    if _surface() in _LOCAL_SURFACES or _allow_gateway():
+    if _allow_gateway():
+        return None
+    surface = _surface()
+    if surface in _LOCAL_SURFACES:
+        return None
+    if not surface and not _messaging():
         return None
     text = _clean(raw)
     if text.lower().startswith("/concierge"):

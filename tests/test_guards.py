@@ -52,9 +52,16 @@ class Surface(unittest.TestCase):
         for source in ("desktop", "tui", "cli"):
             env["HERMES_SESSION_SOURCE"] = source
             self.assertIsNone(self.commands._gateway_refusal("make me a bot"), source)
-        for source in ("telegram", ""):
-            env["HERMES_SESSION_SOURCE"] = source
-            self.assertIsNotNone(self.commands._gateway_refusal("make me a bot"), source)
+        env["HERMES_SESSION_SOURCE"] = "telegram"
+        self.assertIsNotNone(self.commands._gateway_refusal("make me a bot"), "telegram")
+
+    def test_a_slash_worker_with_no_identity_is_the_owners_own_app(self):
+        # Slash commands run in a worker that strips session variables; asking
+        # core "is this a chat channel?" answers no, which is the truth.
+        env = __import__("os").environ
+        env.pop("HERMES_SESSION_SOURCE", None)
+        env.pop("HERMES_SESSION_PLATFORM", None)
+        self.assertIsNone(self.commands._gateway_refusal("make me a bot"))
 
 
 class Heavy(unittest.TestCase):
