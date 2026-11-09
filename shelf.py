@@ -154,11 +154,22 @@ def overview() -> str:
     return "\n".join(lines)
 
 
+def _rank(rows: list, query: str) -> list:
+    """A row named after the word beats a row that merely mentions it."""
+    word = (query or "").strip().lower()
+    if not word:
+        return rows
+    def key(row: dict) -> tuple:
+        name = str(row.get("name", "")).lower()
+        return (0 if word in name else 1, 0 if word in str(row.get("why", "")).lower() else 1)
+    return sorted(rows, key=key)
+
+
 def browse(query: str = "", session_key: str = "") -> str:
     """A numbered window. The number is the pick."""
     import time
 
-    rows = items(query)
+    rows = _rank(items(query), query)
     if len(_LAST) >= MAX_SESSIONS:
         oldest = min(_LAST, key=lambda key: _LAST[key][0])
         _LAST.pop(oldest, None)

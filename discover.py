@@ -203,7 +203,16 @@ def suggest(
     them. A word every description carries proves nothing, and a wrong
     suggestion costs more than a quiet receipt.
     """
+    from . import match as _match
+
+    # The outcome vocabulary bridges a job to a mechanism ("spreadsheets" ->
+    # sheets, excel), which is what makes a suggestion land on the right skill.
     wanted = _words(sentence) | _words(blurb) | _words(role)
+    try:
+        wanted |= {_fold(word) for word in _match.expand(sentence)}
+    except Exception:
+        pass
+    role_words = _words(blurb) | _words(role)
     if not wanted:
         return []
     items = catalogue()
@@ -228,7 +237,20 @@ def suggest(
         # Two rare words is a fit. One is a fit only when it is the skill's own
         # name and that name is rare in the catalogue: "polymarket" is the thing.
         named = [word for word in hits if word in name_words and frequency.get(word, 0) <= 2]
+        # Two rare words, or the skill's own rare name. Never a single generic
+        # word: that is how a coder bot was offered a skill about writing skills.
         if len(hits) < 2 and not named:
+            continue
+        # And at least one of those words must belong to the role itself, not
+        # only to the sentence: an extra has to fit the job the bot was made for.
+        if role_words and not (set(hits) & role_words) and len(hits) < 3:
+            continue
+        # A skill about Hermes itself is never an upgrade for a working bot.
+        if item["name"].startswith("hermes-agent"):
+            continue
+        # A role suggestion has to be more than adjacent: three rare words, or
+        # the skill's own rare name.
+        if role_words and not named and len(hits) < 4:
             continue
         weight = sum(1.0 / max(1, frequency.get(word, 1)) for word in hits)
         scored.append((weight, item["kb"], {**item, "why": sorted(hits)[:4]}))

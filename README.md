@@ -388,7 +388,8 @@ plugin or a bot that does not exist.
   and acted on by number.
 - `discover.py` indexes the two skill trees Hermes ships, weighs each candidate (size, files,
   helper scripts, service tells) and refuses to call anything a free extra when it pipes a
-  download into a shell.
+  download into a shell. Its findings surface in `/concierge browse`, not as a suggestion line
+  on a receipt: an audit scored those suggestions 1.8 out of 5, so the line was removed.
 - `commands.py` also routes: a bare sentence decides create, improve or install from the bots that
   exist, so a role you already have is improved rather than duplicated.
 - `presets.py` holds the ten roles: cue detection, the five-to-eight skills each one lands, and the

@@ -113,6 +113,17 @@ def _clean(data: dict, bots: Sequence[str], roles: Sequence[str]) -> Optional[tu
     return intent, role, bot, query
 
 
+INJECTION = (
+    "ignore the instructions", "ignore previous", "ignore all previous",
+    "disregard the", "system prompt", "you are now", "answer only with",
+)
+
+
+def _is_injection(text: str) -> bool:
+    low = " ".join((text or "").lower().split())
+    return any(phrase in low for phrase in INJECTION)
+
+
 def classify(
     text: str,
     *,
@@ -127,6 +138,9 @@ def classify(
     The model answers first; the lexical router answers when there is no model,
     when the call fails, or when the answer is not one of the known intents.
     """
+    if _is_injection(text):
+        # A sentence that tries to rewrite the rules is not a request at all.
+        return "none", "", text
     if llm is not None and text:
         try:
             result = llm.complete_structured(

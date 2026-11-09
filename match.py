@@ -190,10 +190,20 @@ def _fold(word: str) -> str:
     return word
 
 
+def _joined(query: str) -> list:
+    """Adjacent words are often one product name: home assistant -> homeassistant."""
+    words = [w for w in _TOKEN_RE.findall((query or "").lower())]
+    return [a + b for a, b in zip(words, words[1:]) if len(a) > 2 and len(b) > 2]
+
+
 def expand(query: str) -> list:
     """The query's words plus the mechanism words they translate into."""
     words = tokens(query)
     seen = dict.fromkeys(words)
+    # A product written as two words still has to reach the entry spelled as
+    # one: "home assistant" finds homeassistant.
+    for joined in _joined(query):
+        seen.setdefault(joined, None)
     for word in words:
         for extra in VOCABULARY.get(word, ()):  # ordered, so results stay stable
             seen.setdefault(extra, None)

@@ -547,6 +547,11 @@ def handle_concierge(
         return HELP
     if intent_name == "undo":
         return handle_undo(store=store, undo=undo, seams=seams)
+    if intent_name == "none":
+        return (
+            "  I only take plain requests, not instructions about how to answer.\n"
+            "  Say what you want, like /concierge install obsidian.\n"
+        )
     if intent_name == "fire":
         return (
             "  Deleting a bot needs its number, so nothing is removed by a guess.\n"
@@ -816,24 +821,14 @@ def _job_line(text: str, profile_path: Any, bots: Any) -> list[str]:
 
 
 def _suggest_extras(text: str, profile_path: Any) -> list[str]:
-    """Two more skills that fit the sentence, offered with the command to take one.
+    """Deliberately nothing.
 
-    The preset seed is a floor. This reads the skill trees on disk, weighs each
-    candidate, and names what else would help this role, never installing it.
+    An audit of the old two-pick suggestion line scored it 1.8 out of 5: a coder
+    bot was offered a skill about writing skills, an inbox bot a social calendar.
+    A quiet receipt is better than a confident wrong suggestion, so the extras
+    live in /concierge browse where the person is asking to look.
     """
-    from . import discover, presets
-
-    role = presets.detect(text)
-    if role is None:
-        return []
-    skills_dir = Path(str(profile_path)) / "skills"
-    installed = set()
-    if skills_dir.is_dir():
-        installed = {item.parent.name for item in skills_dir.glob("**/SKILL.md")}
-    picks = discover.suggest(
-        text, role.name, blurb=role.blurb, skip=installed, limit=2
-    )
-    return discover.lines(picks, Path(str(profile_path)).name)
+    return []
 
 
 def handle_improve(
