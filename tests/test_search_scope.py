@@ -8,9 +8,9 @@ from tests import harness
 search = harness.load("search")
 
 
-class Scope(unittest.TestCase):
-    def test_only_the_three_marketplace_sources_count(self):
-        payload = [
+def payload():
+    return {
+        "skills": [
             {"name": "a", "description": "built in", "source": "built-in"},
             {"name": "b", "description": "optional", "source": "optional"},
             {"name": "c", "description": "github", "source": "GitHub"},
@@ -18,13 +18,27 @@ class Scope(unittest.TestCase):
             {"name": "e", "description": "third party", "source": "skills.sh"},
             {"name": "f", "description": "third party", "source": "LobeHub"},
         ]
-        with mock.patch.object(search, "_cache_dir", lambda: "/tmp"), \
-             mock.patch("builtins.open", mock.mock_open(read_data=__import__("json").dumps(payload))), \
-             mock.patch.object(search.os.path, "exists", lambda p: True), \
-             mock.patch.object(search.os.path, "getmtime", lambda p: __import__("time").time()), \
-             mock.patch.object(search.os.path, "join", lambda a, b: b):
+    }
+
+
+class Scope(unittest.TestCase):
+    def read(self, doc):
+        with mock.patch.object(search, "_skills_meta", lambda: {}), \
+             mock.patch.object(search, "_skills_payload", lambda url, etag="": (doc, "etag")), \
+             mock.patch.object(search, "_write_skills_meta", lambda meta: None):
+            return [row["name"] for row in search._skills()]
+
+    def test_only_the_three_marketplace_sources_count(self):
+        self.assertEqual(sorted(self.read(payload())), ["a", "b", "c"])
+
+    def test_a_list_already_on_disk_is_used_without_a_download(self):
+        meta = {"checked_at": __import__("time").time(), "etag": "x", "rows": [{"name": "kept", "description": "old"}]}
+        calls = []
+        with mock.patch.object(search, "_skills_meta", lambda: meta), \
+             mock.patch.object(search, "_skills_payload", lambda *a, **k: calls.append(1) or (None, "")):
             names = [row["name"] for row in search._skills()]
-        self.assertEqual(sorted(names), ["a", "b", "c"])
+        self.assertEqual(names, ["kept"])
+        self.assertEqual(calls, [], "a fresh list must not be fetched again")
 
     def test_the_index_answers_in_milliseconds(self):
         rows = [

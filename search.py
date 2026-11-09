@@ -73,75 +73,80 @@ def _entry(kind: str, name: str, description: str, payload: Any = None) -> dict:
     return {"kind": kind, "name": str(name or ""), "description": str(description or ""), "payload": payload}
 
 
-def _document(url: str, name: str) -> Any:
-    """The list Hermes publishes, fetched once and then just read.
+def _skills_file() -> str:
+    return os.path.join(_cache_dir(), "skills.json")
 
-    No timer and no refresh cycle of our own: the file on disk is the list until
-    somebody asks for a new one (``refresh(force=True)``). A search should not
-    quietly spend a download on every run.
+
+def _skills_meta() -> dict:
+    """What we kept last time, and how to tell whether it changed."""
+    path = os.path.join(_cache_dir(), "skills-meta.json")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def _write_skills_meta(meta: dict) -> None:
+    try:
+        with open(os.path.join(_cache_dir(), "skills-meta.json"), "w", encoding="utf-8") as fh:
+            json.dump(meta, fh)
+    except Exception:
+        pass
+
+
+def _skills_payload(url: str, etag: str = "") -> tuple:
+    """The published document, gzipped, never written to disk whole.
+
+    It is 65 MB uncompressed. We read it, keep the 711 rows that matter, and
+    throw the rest away. A conditional request costs a few hundred bytes and
+    answers "unchanged" without sending the file at all.
     """
-    path = os.path.join(_cache_dir(), name)
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as fh:
-                return json.load(fh)
-        except Exception:
-            pass
+    headers = {"Accept-Encoding": "gzip"}
+    if etag:
+        headers["If-None-Match"] = etag
+    request = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:
+        with urllib.request.urlopen(request, timeout=90) as resp:
+            if resp.status == 304:
+                return None, etag or ""
             raw = resp.read()
-        with open(path, "wb") as fh:
-            fh.write(raw)
-        return json.loads(raw)
-    except Exception:
-        return None
+            if resp.headers.get("Content-Encoding") == "gzip":
+                import gzip
 
-
-def _fingerprint(path: str) -> str:
-    try:
-        stat = os.stat(path)
-        return "{}-{}".format(int(stat.st_mtime), stat.st_size)
-    except Exception:
-        return ""
+                raw = gzip.decompress(raw)
+            return json.loads(raw), resp.headers.get("ETag") or ""
+    except urllib.error.HTTPError as exc:
+        if exc.code == 304:
+            return None, etag or ""
+        raise
 
 
 def _skills() -> list:
-    """The 711 skills the marketplace's Skills tab lists.
-
-    The published document is 65 MB; the 711 rows we keep are a few hundred
-    kilobytes. The small file is keyed to the big file's fingerprint, so it is
-    rebuilt whenever the list itself changes and never on a timer.
-    """
-    source = os.path.join(_cache_dir(), "skills.json")
-    kept = os.path.join(_cache_dir(), "skills-kept.json")
-    mark = _fingerprint(source)
-    if mark and os.path.exists(kept):
+    """The 711 skills the marketplace's Skills tab lists."""
+    meta = _skills_meta()
+    rows = meta.get("rows") or []
+    checked = float(meta.get("checked_at") or 0)
+    # Ask whether it changed at most once a day; a "no" costs a few hundred
+    # bytes and the 11 MB only moves when the list really is new.
+    if not rows or (time.time() - checked) > 24 * 60 * 60:
         try:
-            with open(kept, "r", encoding="utf-8") as fh:
-                cached = json.load(fh)
-            if cached.get("of") == mark:
-                return [_entry("skill", r["name"], r.get("description", ""), r) for r in cached.get("rows", [])]
+            payload, etag = _skills_payload(INDEX_URL, meta.get("etag", ""))
         except Exception:
-            pass
-    payload = _document(INDEX_URL, "skills.json")
-    if not payload:
-        return []
-    rows = payload if isinstance(payload, list) else (
-        payload.get("skills") or payload.get("entries") or []
-    ) if isinstance(payload, dict) else []
-    out = []
-    for item in rows:
-        if not isinstance(item, dict):
-            continue
-        if str(item.get("source") or "") not in NOUS_SOURCES:
-            continue
-        out.append(_entry("skill", item.get("name", ""), item.get("description", ""), item))
-    try:
-        with open(kept, "w", encoding="utf-8") as fh:
-            json.dump({"of": mark, "rows": [{"name": r["name"], "description": r["description"], "source": ""} for r in out]}, fh)
-    except Exception:
-        pass
-    return out
+            payload, etag = None, meta.get("etag", "")
+        if payload is None and rows:
+            _write_skills_meta({**meta, "checked_at": time.time()})
+        elif payload is not None:
+            items = payload if isinstance(payload, list) else (
+                payload.get("skills") or payload.get("entries") or []
+            ) if isinstance(payload, dict) else []
+            rows = [
+                {"name": item.get("name", ""), "description": item.get("description", ""), "source": item.get("source", "")}
+                for item in items
+                if isinstance(item, dict) and str(item.get("source") or "") in NOUS_SOURCES
+            ]
+            _write_skills_meta({"checked_at": time.time(), "etag": etag, "rows": rows})
+    return [_entry("skill", r["name"], r.get("description", ""), r) for r in rows]
 
 
 def _local_skills() -> list:
