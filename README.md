@@ -144,9 +144,12 @@ instructions that make the profile behave, then find out it was the wrong six.
 
 Concierge removes that stretch. You say the job and it picks the skills that finish the job,
 writes the soul that makes the bot act like that job, then reads the disk before it calls it done.
-It copies your plugin switches and your model login too, so the bot starts from your setup and
-answers on its first message. The login copy has every messaging channel stripped, so two profiles
-never fight over one bot token.
+It copies your plugin switches, so the bot starts from your setup. It does not copy your login:
+copying `auth.json` would fork single-use OAuth grants, and the first profile to refresh would
+revoke the others. A new bot uses Hermes's own credential pool; if it needs its own credential,
+`hermes -p <bot> auth add <provider>` gives it one.
+
+That is the one manual step, and only when your provider needs a separate login per profile.
 A researcher arrives on its first sentence able to read papers, cite sources, save notes and get
 past a blocked page, without you knowing those four skills exist.
 

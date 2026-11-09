@@ -178,7 +178,12 @@ def remove_skill_dir(path: str) -> bool:
     turns the exception into "could not remove" and keeps the receipt.
     """
     target = os.path.abspath(path)
-    home = os.path.abspath(os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes"))
+    try:
+        from hermes_constants import get_hermes_home
+
+        home = os.path.abspath(str(get_hermes_home()))
+    except Exception:
+        home = os.path.abspath(os.path.expanduser("~/.hermes"))
     roots = (os.path.join(home, "profiles"), os.path.join(home, "skills"))
     if not any((target + os.sep).startswith(root + os.sep) for root in roots):
         raise ValueError("refusing to delete {}: not inside a profile".format(target))

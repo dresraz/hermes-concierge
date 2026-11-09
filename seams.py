@@ -349,225 +349,6 @@ def link_self_plugin(target_home: Any) -> bool:
     return True
 
 
-def share_credentials(target_home: Path, source_home: Optional[Path] = None) -> list:
-    """Give a bot the owner's login, and keep it current.
-
-    Copies ``.env`` and ``auth.json`` from the home that actually holds a
-    credential, then merges the provider keys out of that source so a rotated
-    key reaches bots that already exist instead of leaving them to fail auth.
-    Channel keys are stripped, values that cannot live on one line are refused,
-    and a failure is reported instead of being called a success.
-    """
-    import shutil
-    from pathlib import Path as _Path
-
-    source = _credential_source(source_home)
-    target = _Path(str(target_home))
-    notes: list = []
-
-    for name in (".env", "auth.json"):
-        origin = source / name
-        if not origin.is_file():
-            continue
-        try:
-            shutil.copy2(origin, target / name)
-            (target / name).chmod(0o600)
-            notes.append(name)
-        except OSError as exc:
-            notes.append("{} not copied ({})".format(name, exc.strerror or type(exc).__name__))
-
-    updated, problem = _merge_provider_keys(target / ".env", source / ".env")
-    if updated:
-        notes.append("{} provider key(s)".format(updated))
-    if problem:
-        notes.append(problem)
-
-    env = target / ".env"
-    if env.is_file():
-        try:
-            from hermes_cli.profile_channels import strip_channel_env_file
-
-            strip_channel_env_file(env)
-        except Exception:
-            # A silent strip is a lie: the receipt has to say the copy still
-            # carries whatever the owner's .env had in it.
-            notes.append("channel strip skipped, check .env by hand")
-    auth = target / "auth.json"
-    if auth.is_file():
-        dropped = _drop_platform_auth(auth)
-        if dropped:
-            notes.append("{} platform login(s) left out".format(dropped))
-    return notes
-
-
-PLATFORM_AUTH_KEYS = (
-    "telegram", "discord", "slack", "whatsapp", "signal", "matrix", "irc",
-    "feishu", "teams", "line", "wechat", "messenger", "twilio", "photon",
-)
-
-
-def _drop_platform_auth(path: Path) -> int:
-    """Remove messaging-platform logins from a copied auth.json.
-
-    A bot that inherits Discord's token is a second process fighting the owner
-    for the same connection, and a single-use OAuth grant is worse: the first
-    refresh revokes the other copy.
-    """
-    import json
-
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return 0
-    if not isinstance(data, dict):
-        return 0
-    dropped = 0
-    for section in ("providers", "credential_pool"):
-        block = data.get(section)
-        if not isinstance(block, dict):
-            continue
-        for key in list(block):
-            low = str(key).lower()
-            if any(name in low for name in PLATFORM_AUTH_KEYS):
-                block.pop(key, None)
-                dropped += 1
-    if dropped:
-        try:
-            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        except OSError:
-            return 0
-    return dropped
-
-
-def _env_value(value: str) -> Optional[str]:
-    """A value that survives one line of a .env, or None if it cannot."""
-    value = str(value)
-    if "\n" in value or "\r" in value or "\x00" in value:
-        return None
-    if any(ch in value for ch in ' "#\''):
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return '"{}"'.format(escaped)
-    return value
-
-
-def _merge_provider_keys(env_path: Path, source_env: Path) -> tuple:
-    """Add missing provider keys and refresh stale ones. Never leaves a lie."""
-    import os
-
-    if not source_env.is_file():
-        return 0, ""
-    known = _known_provider_keys()
-    wanted: dict = {}
-    try:
-        for line in source_env.read_text(encoding="utf-8", errors="replace").splitlines():
-            key, sep, value = line.partition("=")
-            key = key.strip()
-            if sep and key in known and value.strip():
-                cleaned = _env_value(value.strip())
-                if cleaned is not None:
-                    wanted[key] = cleaned
-    except OSError:
-        return 0, ""
-    if not wanted:
-        return 0, ""
-
-    lines: list = []
-    present: dict = {}
-    if env_path.is_file():
-        try:
-            lines = env_path.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError as exc:
-            return 0, ".env unreadable ({})".format(exc.strerror or "error")
-        for index, line in enumerate(lines):
-            key, sep, value = line.partition("=")
-            if sep and key.strip():
-                present[key.strip()] = index
-
-    changed = 0
-    for key, value in sorted(wanted.items()):
-        if key in present:
-            index = present[key]
-            if lines[index].partition("=")[2].strip() != value:
-                lines[index] = "{}={}".format(key, value)
-                changed += 1
-        else:
-            lines.append("{}={}".format(key, value))
-            changed += 1
-
-    if not changed:
-        return 0, ""
-    try:
-        env_path.write_text("\n".join(lines).rstrip("\n") + "\n", encoding="utf-8")
-        os.chmod(env_path, 0o600)
-    except OSError as exc:
-        return 0, ".env not written ({})".format(exc.strerror or type(exc).__name__)
-    return changed, ""
-
-
-def _credential_source(preferred: Any = None) -> Path:
-    """The home that actually holds the owner's login.
-
-    A routed gateway turn reports the bot's own home, which has no .env yet, so
-    the first candidate is not enough. Every plausible home is tried and the
-    first one with provider keys in its .env wins; the last candidate is the
-    default home, so there is always an answer.
-    """
-    import os as _os
-
-    candidates = []
-    if preferred is not None:
-        candidates.append(Path(str(preferred)))
-    candidates.append(Path(str(_os.environ.get("HERMES_HOME") or "")))
-    try:
-        from hermes_constants import get_hermes_home
-
-        candidates.append(Path(str(get_hermes_home())))
-    except Exception:
-        pass
-    candidates.append(Path.home() / ".hermes")
-
-    known = _known_provider_keys()
-    for candidate in candidates:
-        if not str(candidate) or not candidate.is_dir():
-            continue
-        env = candidate / ".env"
-        if not env.is_file():
-            continue
-        try:
-            text = env.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        if any(line.partition("=")[0].strip() in known and line.partition("=")[2].strip() for line in text.splitlines()):
-            return candidate
-    return candidates[-1]
-
-
-def _known_provider_keys() -> set:
-    """Every env var name Hermes treats as a provider credential."""
-    names: set = set()
-    try:
-        from providers import list_providers
-
-        for profile in list_providers():
-            for attr in ("api_key_env_vars", "key_env", "api_key_env"):
-                value = getattr(profile, attr, None)
-                if isinstance(value, str) and value:
-                    names.add(value)
-                elif isinstance(value, (list, tuple)):
-                    names.update(str(v) for v in value if v)
-    except Exception:
-        pass
-    try:
-        from hermes_cli.config_defaults import OPTIONAL_ENV_VARS
-
-        for key, spec in (OPTIONAL_ENV_VARS or {}).items():
-            if isinstance(spec, dict) and (spec.get("password") or spec.get("category") == "provider"):
-                names.add(str(key))
-    except Exception:
-        pass
-    return {name for name in names if name.isupper()}
-
-
 def _bundled_root(skills_sync=None, get_bundled_skills_dir=None) -> Path:
     """Find the directory that actually holds the bundled skill tree.
 
@@ -670,13 +451,24 @@ def remove_plugin(name: str) -> None:
         raise RuntimeError("{} (plugin {})".format(reason, name)) from None
 
 
+def _hermes_home() -> Any:
+    """The active home, profile-aware. One process can serve several profiles,
+    and the environment holds the launch profile, not the one being served."""
+    try:
+        from hermes_constants import get_hermes_home
+
+        return get_hermes_home()
+    except Exception:
+        return Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+
+
 def install_metadata(name: str) -> dict:
     """The installer-owned record for an installed plugin, read off its folder.
 
     The installer writes ``.install-metadata.json`` beside the plugin; that file
     is the record, so reading it needs no private core call.
     """
-    home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+    home = Path(str(_hermes_home()))
     for folder in _plugin_dirs(home):
         if folder.name != name:
             continue

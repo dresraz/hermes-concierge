@@ -887,10 +887,7 @@ def handle_hire(
     # The role's soul and skills must land before the receipt is computed, or the
     # card reports the generic soul the hire flow wrote a moment earlier. A preset
     # failure never costs the bot: it exists, and the receipt says what is missing.
-    try:
-        key_lines = _share_keys(plan.name, path)
-    except Exception as exc:
-        key_lines = ["  keys     not copied: {}".format(type(exc).__name__)]
+    key_lines: list[str] = []
     try:
         plugin_lines = _inherit_plugins(path)
     except Exception as exc:
@@ -959,14 +956,6 @@ def _safe_bots(store: Any) -> str:
         return "  The bot list could not be read just now. Nothing was changed.\n"
 
 
-def _share_keys(name: str, profile_path: Any) -> list[str]:
-    """A bot needs the same model login, or it cannot answer at all."""
-    from . import seams
-
-    copied = seams.share_credentials(profile_path, _HOME)
-    if not copied:
-        return ["  keys     none to copy, this profile has no credentials yet"]
-    return ["  keys     your login, {}".format(", ".join(copied))]
 
 
 def _inherit_plugins(profile_path: Any) -> list[str]:
@@ -1343,7 +1332,7 @@ def _seams() -> Any:
 # The surface this plugin is running on, captured at register. `cli`, `tui`,
 # `desktop` and `acp` are the operator's own session; anything else is a messaging
 # platform, where a stranger in a group chat could otherwise install code.
-_LOCAL_SURFACES = frozenset({"", "cli", "tui", "desktop", "acp", "webui"})
+_LOCAL_SURFACES = frozenset({"cli", "tui", "desktop", "acp", "webui"})
 _CTX: Any = None
 # The home that published this plugin. Captured at register: inside a routed
 # gateway turn get_hermes_home() is the bot's own home, so reading "the owner's
@@ -1352,7 +1341,15 @@ _HOME: Any = None
 _READ_ONLY = frozenset({"", "help", "?", "h", "commands", "-h", "--help", "bots", "browse", "shelf"})
 
 
+_PLATFORM: str = ""
+# Set while the admission hook answers a shown card, which is not a new ask.
+_PLATFORM_ANSWER: bool = False
+
+
 def _surface() -> str:
+    """The surface this call runs on: the hook's platform first, then the ctx."""
+    if _PLATFORM:
+        return _PLATFORM
     try:
         return str(_CTX.session_surface() or "").lower() if _CTX is not None else ""
     except Exception:
@@ -1373,6 +1370,10 @@ def _allow_gateway() -> bool:
 
 def _gateway_refusal(raw: Any) -> Optional[str]:
     """A shared chat may look, not change. Returns the refusal, or None."""
+    # Answering a card this chat was already shown is not a new request: the
+    # card only exists because the action that drew it was allowed.
+    if _PLATFORM_ANSWER:
+        return None
     if _surface() in _LOCAL_SURFACES or _allow_gateway():
         return None
     text = _clean(raw)

@@ -28,3 +28,19 @@ def package() -> types.ModuleType:
 def load(name: str):
     package()
     return importlib.import_module(f"{PACKAGE}.{name}")
+
+
+def mark_local() -> None:
+    """These tests run on the operator's own machine, not in a shared chat.
+
+    The plugin treats an unknown surface as a gateway on purpose, so a test that
+    never sets one would be refused every time. Declaring the surface here keeps
+    the production default strict without repeating a stub in 25 files.
+    """
+    try:
+        load("commands")._PLATFORM = "cli"
+    except Exception:
+        pass
+
+
+mark_local()

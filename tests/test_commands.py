@@ -218,7 +218,10 @@ class Gateway(unittest.TestCase):
 
     def setUp(self):
         self.saved = commands._CTX
+        self.saved_platform = commands._PLATFORM
+        commands._PLATFORM = ""  # the ctx decides the surface in this class
         self.addCleanup(lambda: setattr(commands, "_CTX", self.saved))
+        self.addCleanup(lambda: setattr(commands, "_PLATFORM", self.saved_platform))
 
     class Ctx:
         def __init__(self, surface):
