@@ -151,6 +151,14 @@ def render(text: str, offers: list, target: str) -> str:
     return "\n".join(lines)
 
 
+def _hint(text: str) -> str:
+    """A word to browse for, taken from the ask itself."""
+    from . import match
+
+    words = [w for w in match.tokens(text) if len(w) > 2]
+    return words[0] if words else "plugins"
+
+
 def nothing(text: str, target: str = "") -> str:
     where = "bot {}".format(target) if target else "this profile"
     said = " ".join((text or "").split())[:80]
@@ -160,7 +168,7 @@ def nothing(text: str, target: str = "") -> str:
         "  Nothing here fits {} yet.".format('"' + said + '"' if said else "that"),
         "  Nothing was installed in {}.".format(where),
         "",
-        "  Try the word for the tool you want: /concierge browse pdf",
+        "  Try the word for the tool you want: /concierge browse {}".format(_hint(text)),
         "",
     ])
 

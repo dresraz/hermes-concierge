@@ -108,8 +108,8 @@ def card(store: Any = None) -> str:
                 title = title[:43].rstrip() + "..."
             lines.append("  {:>2}  {:<{w}}  {}".format(index, name, title, w=width))
         lines.append("")
-        lines.append("  fire <n>    delete that bot")
-        lines.append("  reset <n>   take back what Concierge changed in it")
+        lines.append("  /concierge delete <n>   remove that bot for good")
+        lines.append("  /concierge reset <n>    keep it, take back my changes")
 
     touched = for_profile(store, DEFAULT)
     if touched:

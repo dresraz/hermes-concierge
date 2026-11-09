@@ -176,6 +176,11 @@ def _rank(rows: list, query: str) -> list:
     return sorted(rows, key=key)
 
 
+def _broad_hint(query: str) -> str:
+    words = [w for w in (query or "").split() if len(w) > 2]
+    return words[0] if words else "notes"
+
+
 def browse(query: str = "", session_key: str = "", page: int = 1) -> str:
     """A numbered window. The number is the pick. Page 2 is the next window."""
     import time
@@ -189,11 +194,21 @@ def browse(query: str = "", session_key: str = "", page: int = 1) -> str:
         _LAST.pop(oldest, None)
     _LAST[session_key or ""] = (time.time(), rows)
     head = "  LOOKING FOR  {}".format(query) if query else "  READY TO ADD"
+    pages = max(1, (len(everything) + LIMIT - 1) // LIMIT)
     if not rows:
+        if everything:
+            return (
+                head + "\n\n"
+                "  There {} only {} page{}. You asked for page {}.\n"
+                "  Back to the start: /concierge browse {}\n".format(
+                    "is" if pages == 1 else "are", pages, "" if pages == 1 else "s", page,
+                    "" if pages == 1 else " 1", query,
+                )
+            )
         return (
             head + "\n\n"
             "  Nothing on this machine matches that.\n"
-            "  Try a broader word: /concierge browse notes\n"
+            "  Try a broader word: /concierge browse {}\n".format(_broad_hint(query))
         )
     lines = [head, ""]
     for index, row in enumerate(rows, start=1):
@@ -203,9 +218,9 @@ def browse(query: str = "", session_key: str = "", page: int = 1) -> str:
                 index, row["kind"], row["name"], tag, row["why"]
             ).rstrip()
         )
-    pages = max(1, (len(everything) + LIMIT - 1) // LIMIT)
     if pages > 1:
-        lines += ["", "  page {} of {}. Next: /concierge browse {} {}".format(page, pages, query, page + 1)]
+        nxt = "  next: /concierge browse {} {}".format(query, page + 1) if page < pages else "  that is the last page"
+        lines += ["", "  page {} of {}{}".format(page, pages, nxt)]
     lines += ["", "  reply with a number to install it, or no to drop it", ""]
     return "\n".join(lines)
 

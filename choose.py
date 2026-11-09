@@ -22,6 +22,16 @@ from . import discover, match, seams
 # How much better the top score has to be before the model is skipped.
 DECISIVE = 2.0
 
+# Errands a plugin cannot run: somebody has to leave the house or sign
+# something. The model is agreeable enough to "help" with a travel search, so
+# these are refused before it is asked. Small and explicit on purpose.
+ERRANDS = (
+    "book me", "book a flight", "book the flight", "book a hotel", "reserve a table",
+    "hire a lawyer", "hire an attorney", "hire someone", "hire a person",
+    "walk my dog", "fix my car", "fix the brakes", "repair my car",
+    "write my will", "sign the contract for me", "pick up my kids",
+)
+
 SHORTLIST = 10
 
 INSTRUCTIONS = """You are choosing one item from a shortlist of Hermes skills and plugins.
@@ -153,6 +163,9 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
     which may only pick from the list. With no model available the best
     lexical row is still better than nothing, but only when it is decisive.
     """
+    low = " ".join((ask or "").lower().split())
+    if any(phrase in low for phrase in ERRANDS):
+        return None
     rows = shortlist(ask, entries)
     if not rows:
         return None

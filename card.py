@@ -249,6 +249,14 @@ def _contender(candidates: list):
     return second
 
 
+def _hint(sentence: str) -> str:
+    """A word to browse for, taken from the ask itself rather than a canned one."""
+    from . import match
+
+    words = [w for w in match.tokens(sentence) if len(w) > 2]
+    return words[0] if words else "plugins"
+
+
 def nothing(sentence: str, entries: Optional[list] = None) -> str:
     """The honest no: nothing in the catalog does this, and nothing was installed."""
     said = " ".join((sentence or "").split())[:80]
@@ -259,7 +267,7 @@ def nothing(sentence: str, entries: Optional[list] = None) -> str:
             "  Nothing here fits {} yet.".format('"' + said + '"' if said else "that"),
             "  Nothing was installed.",
             "",
-            "  Try the word for the tool you want: /concierge browse pdf",
+            "  Try the word for the tool you want: /concierge browse {}".format(_hint(sentence)),
             "",
         ]
     )
@@ -427,8 +435,7 @@ def receipt(outcome, record, *, saved: bool = True) -> str:
     )
     lines = [head, ""]
     if present:
-        files = sum(1 for item in target.rglob("*") if item.is_file())
-        lines.append(f"  on disk     {target} ({files} files)")
+        lines.append("  on disk     yes, the files are there")
     else:
         lines.append("  on disk     nothing there yet")
     lines.append(f"  enabled     {'yes' if record.enabled else 'no'}")

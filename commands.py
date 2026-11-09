@@ -53,10 +53,12 @@ HELP = (
     "\n"
     "  /concierge                     the shelf: what can be added\n"
     "  /concierge browse <word>       look through the shelf\n"
+    "  /concierge browse <word> 2     the next page\n"
     "  /concierge <sentence>          install a plugin or skill, this profile\n"
     "  /concierge create <sentence>   make a new bot\n"
     "  /concierge improve <bot>: <what>  add what that bot is missing\n"
     "  /concierge bots                list the bots Concierge made\n"
+    "  /concierge skills <bot>        what that bot has installed\n"
     "  /concierge fire <n>            delete bot number n\n"
     "  /concierge reset <n>           take back what Concierge changed in bot n\n"
     "  /concierge undo                take back the last thing Concierge did\n"
@@ -503,6 +505,20 @@ def handle_concierge(
     if head in ("skills", "show"):
         from . import improve, lifecycle, state
 
+        if not rest and not _is_bot_profile():
+            # No name in the owner's profile: a fleet summary, not 200 lines.
+            bots = _safe_bots(store)
+            if not bots:
+                return "  No bots yet. Make one: /concierge create a researcher\n"
+            lines = ["  Skills per bot", ""]
+            for bot in bots:
+                home = improve.resolve(bot)
+                count = len(improve.installed(home)) if home is not None else 0
+                lines.append("  {:<26} {}".format(bot, "{} skills".format(count) if count else "none yet"))
+            lines.append("")
+            lines.append("  One bot in detail: /concierge skills <bot>")
+            lines.append("")
+            return "\n".join(lines)
         name = rest.split()[0] if rest else _self_name()
         try:
             home = improve.resolve(name)

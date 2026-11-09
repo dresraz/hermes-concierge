@@ -172,7 +172,7 @@ class Confirm(unittest.TestCase):
             text = card.handle("yes", store=store, install=fake_install)
         self.assertEqual(calls, ["hermes-themes-pack"])
         self.assertIn("Installed hermes-themes-pack", text)
-        self.assertIn("1 files", text)
+        self.assertIn("the files are there", text)
         self.assertIn("enabled     yes", text)
         self.assertIn("/concierge undo", text)
         self.assertEqual(store.records[0].name, "hermes-themes-pack")
