@@ -99,6 +99,8 @@ VOCABULARY = {
     "notifications": ["notify", "alert"],
     "alert": ["notification"],
     "finish": ["notification", "complete", "done"],
+    "finishe": ["notification", "complete", "done"],
+    "send": ["notification", "message", "alert", "telegram"],
     "finished": ["notification", "complete", "done"],
     "done": ["notification", "remind"],
     "push": ["notification", "reminder"],
@@ -114,6 +116,15 @@ VOCABULARY = {
     "cluster": ["kubernetes"],
     "fetch": ["page", "web"],
     "extract": ["page", "web"],
+    "loud": ["aloud", "speech", "tts", "voice"],
+    "aloud": ["speech", "tts", "voice"],
+    "cost": ["overhead", "token", "cheap"],
+    "payments": ["payment", "pay", "checkout", "billing", "stripe", "invoice"],
+    "payment": ["pay", "checkout", "billing", "stripe"],
+    "card": ["payment", "checkout", "stripe"],
+    "cheaper": ["overhead", "token"],
+    "schemas": ["schema", "tool"],
+    "schema": ["tool"],
 }
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -121,8 +132,15 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # Weights. A capability that does the job beats a name that merely mentions the
 # word: an entry whose tools do X should win over one whose name contains X.
 W_NAME = 3.0
+# A name match is the strongest signal a catalog can give: somebody called the
+# thing what you are asking for. Rarity still matters, but never enough to sink
+# a literal name behind a description that happens to use three generic words.
+W_NAME_RARITY = 1.5
+# A whole word of the ask sitting in the entry's name is evidence no
+# description can fake: somebody already named the thing after the ask.
+W_NAME_HIT = 6.0
 W_DESCRIPTION = 1.0
-W_CAPABILITY = 4.0
+W_CAPABILITY = 6.0
 W_PHRASE = 5.0
 W_EXACT_NAME = 20.0
 W_TIER = 1.0
@@ -304,14 +322,33 @@ def score(query: str, entry: Any, weights: Optional[dict] = None) -> Candidate:
         # a plugin that names everything must not beat one that names the ask.
         worth = worth if len(seen) < 12 else worth * 0.6
         hit = False
-        if key in name_words or key in title_words:
-            total += W_NAME * worth
+        if key in name_words:
+            total += W_NAME * (1.0 + W_NAME_RARITY * worth)
+            # A short ask is usually a product name: "github", "read pdf
+            # files", "track my workouts". There a name match is the strongest
+            # evidence there is. A long ask describes a job, and then a name
+            # that merely mentions one of its words ("telegram-stickers" for
+            # "send me a telegram when a job finishes") must not outrank an
+            # entry whose tools do the work.
+            # Only a one-word name is the ask's own name ("github", "pdf",
+            # "obsidian"). "telegram-stickers" is a product called stickers
+            # that happens to run on telegram, so it still has to win on what
+            # it does, not on the word it shares.
+            raw_name_words = _TOKEN_RE.findall(str(getattr(entry, "name", "")).lower())
+            if len(raw_name_words) == 1 and len(tokens(query)) <= 3:
+                total += W_NAME_HIT
+            hit = True
+        elif key in title_words:
+            total += W_NAME * (1.0 + W_NAME_RARITY * worth)
             hit = True
         if key in cap_words:
             total += W_CAPABILITY * worth
             hit = True
         if key in description_words:
-            total += W_DESCRIPTION * worth
+            # Long descriptions collect words by accident. Twenty words is a
+            # sentence; two hundred is a keyword dump and earns less per word.
+            dump = 0.6 if len(description_words) > 40 else 1.0
+            total += W_DESCRIPTION * worth * dump
             hit = True
         if key in category_words:
             total += W_CAPABILITY * worth

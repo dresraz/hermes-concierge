@@ -759,8 +759,16 @@ def handle_install(
             catalog = seams.catalog()
         except Exception:
             catalog = []
-    if match.rank(query, catalog, limit=1):
-        return card.handle(query, entries=catalog, store=store,
+    # The matcher builds a shortlist; the model picks from it. A decisive
+    # lexical lead skips the model, so obvious asks stay instant.
+    from . import choose
+
+    choice = choose.pick(query, llm=_llm(), entries=catalog)
+    if choice is not None:
+        if getattr(choice, "kind", "") == "skill":
+            return market.handle(choice.name, target=target, session_key=session_key,
+                                 store=store, search_fn=search)
+        return card.handle(choice.name, entries=catalog, store=store,
                            session_key=session_key, target=target)
     return market.handle(query, target=target, session_key=session_key,
                          store=store, search_fn=search)
@@ -977,6 +985,17 @@ def handle_improve(
         names = ", ".join(_bot_names()) or "none"
         return "  No bot called {}. Bots here: {}\n".format(bot, names)
     return improve.receipt(plan, improve.apply(plan, store=store))
+
+
+def _llm() -> Any:
+    """The plugin's model handle, or None when it is not available."""
+    ctx = _CTX
+    if ctx is None:
+        return None
+    try:
+        return ctx.llm
+    except Exception:
+        return None
 
 
 def _classify(text: str, store: Any = None) -> tuple:

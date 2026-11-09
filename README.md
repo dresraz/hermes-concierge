@@ -81,6 +81,13 @@ Concierge
 Below a confidence floor a match only counts when the ask's own words appear in the
 entry's name or title, so the whole junk set (8 of 8 absurd asks) returns nothing.
 
+The matcher does not have the last word. It builds a shortlist of ten and one
+model call picks the one that does the job, reading names, descriptions and
+capabilities together, and it is allowed to answer nothing. A clear lexical
+winner skips the model, so the obvious asks stay instant. The model may reorder
+the leaders but it cannot drag in a straggler: a pick far below the top of the
+list is dropped for the leader.
+
 ## One command
 
 Everything is a word after `/concierge`: `create`, `improve`, `browse`, `bots`, `fire`, `reset`, `undo`.
