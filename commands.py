@@ -622,6 +622,30 @@ def handle_concierge(
         return handle_hire(text, store=store, hire=hire, known=known)
 
     answer = card.handle(text, session_key=session_key)
+    if "Nothing here fits" in answer:
+        # A job with no package is still a job: offer the bot instead of dead-ending.
+        from . import presets as _presets
+
+        low_text = " ".join(text.lower().split())
+        finance = any(
+            word in low_text
+            for word in ("tax", "taxes", "invoice", "invoices", "bookkeeping",
+                         "payroll", "accountant", "accounting", "vat", "irs",
+                         "impuestos", "factura", "contabilidad")
+        )
+        role = _presets.detect(text)
+        named = role is not None and role.name in low_text.split()
+        if finance:
+            subject = "an analyst for this (it can build the workbook)"
+        elif named:
+            subject = "a {} for this".format(role.name)
+        else:
+            subject = "a bot that does that"
+        answer += (
+            "  Nothing in the marketplace handles that. A bot can still try:\n"
+            "  /concierge create {}\n".format(subject)
+        )
+        return answer
     if "best match  none" in answer:
         plan = improve.plan(here, text)
         if plan is not None and plan.items:
