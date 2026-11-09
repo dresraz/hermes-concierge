@@ -528,7 +528,7 @@ def handle_concierge(
         if waiting and text != "1":
             return "  One card at a time. /concierge yes takes it, /concierge no drops it.\n"
 
-    if head in ("skills", "show"):
+    if head in ("skills", "show") and _names_a_bot(rest, store):
         from . import improve, lifecycle, state
 
         if not rest and not _is_bot_profile():
@@ -1359,7 +1359,17 @@ def _seams() -> Any:
 # The surface this plugin is running on, captured at register. `cli`, `tui`,
 # `desktop` and `acp` are the operator's own session; anything else is a messaging
 # platform, where a stranger in a group chat could otherwise install code.
-_LOCAL_SURFACES = frozenset({"cli", "tui", "desktop", "acp", "webui"})
+_LOCAL_SURFACES = frozenset({"cli", "tui", "desktop", "acp", "webui", "app", "mobile"})
+
+# Refusing on "not in the local list" refused the phone and desktop apps, whose
+# identity strings this plugin cannot enumerate. Name the chats that really are
+# shared instead: everything else has to be one of Hermes's own surfaces, because
+# that is the only place a /concierge command exists at all.
+_MESSAGING = frozenset({
+    "telegram", "discord", "slack", "whatsapp", "signal", "matrix", "irc",
+    "feishu", "teams", "line", "wechat", "messenger", "twilio", "photon",
+    "email", "sms", "ntfy", "raft", "a2a", "google_chat", "mattermost",
+})
 _CTX: Any = None
 # The home that published this plugin. Captured at register: inside a routed
 # gateway turn get_hermes_home() is the bot's own home, so reading "the owner's
@@ -1424,6 +1434,21 @@ def _messaging() -> bool:
         return False
 
 
+def _names_a_bot(rest: str, store: Any) -> bool:
+    """'show me skills that clean up drives' is a search, not a bot called me."""
+    name = (rest.split() or [""])[0].lower()
+    if not name or name in ("me", "self", "my"):
+        return False
+    try:
+        from . import lifecycle
+
+        return any(
+            str(lifecycle.name_of(record)).lower() == name for record in lifecycle.bots(store)
+        )
+    except Exception:
+        return False
+
+
 def _gateway_refusal(raw: Any) -> Optional[str]:
     """A shared chat may look, not change. Returns the refusal, or None."""
     # Answering a card this chat was already shown is not a new request: the
@@ -1434,6 +1459,8 @@ def _gateway_refusal(raw: Any) -> Optional[str]:
         return None
     surface = _surface()
     if surface in _LOCAL_SURFACES:
+        return None
+    if surface and surface not in _MESSAGING:
         return None
     if not surface and not _messaging():
         return None
