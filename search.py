@@ -25,7 +25,7 @@ from . import seams
 
 INDEX_VERSION = 3
 INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills.json"
-REFRESH_SECONDS = 24 * 60 * 60
+
 # The Nous marketplace, not the wider skill internet. The published index also
 # carries ClawHub, LobeHub and skills.sh; those are 100k third-party skills and
 # offering them is how "find recent papers" once answered with a Chinese paper
@@ -73,23 +73,58 @@ def _entry(kind: str, name: str, description: str, payload: Any = None) -> dict:
     return {"kind": kind, "name": str(name or ""), "description": str(description or ""), "payload": payload}
 
 
-def _skills() -> list:
-    """The 711 skills the marketplace's Skills tab lists."""
-    cache = os.path.join(_cache_dir(), "skills.json")
-    fresh = os.path.exists(cache) and (time.time() - os.path.getmtime(cache)) < REFRESH_SECONDS
-    if not fresh:
+def _document(url: str, name: str) -> Any:
+    """The list Hermes publishes, fetched once and then just read.
+
+    No timer and no refresh cycle of our own: the file on disk is the list until
+    somebody asks for a new one (``refresh(force=True)``). A search should not
+    quietly spend a download on every run.
+    """
+    path = os.path.join(_cache_dir(), name)
+    if os.path.exists(path):
         try:
-            with urllib.request.urlopen(INDEX_URL, timeout=30) as resp:
-                raw = resp.read()
-            with open(cache, "wb") as fh:
-                fh.write(raw)
+            with open(path, "r", encoding="utf-8") as fh:
+                return json.load(fh)
         except Exception:
-            if not os.path.exists(cache):
-                return []
+            pass
     try:
-        with open(cache, "r", encoding="utf-8") as fh:
-            payload = json.load(fh)
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            raw = resp.read()
+        with open(path, "wb") as fh:
+            fh.write(raw)
+        return json.loads(raw)
     except Exception:
+        return None
+
+
+def _fingerprint(path: str) -> str:
+    try:
+        stat = os.stat(path)
+        return "{}-{}".format(int(stat.st_mtime), stat.st_size)
+    except Exception:
+        return ""
+
+
+def _skills() -> list:
+    """The 711 skills the marketplace's Skills tab lists.
+
+    The published document is 65 MB; the 711 rows we keep are a few hundred
+    kilobytes. The small file is keyed to the big file's fingerprint, so it is
+    rebuilt whenever the list itself changes and never on a timer.
+    """
+    source = os.path.join(_cache_dir(), "skills.json")
+    kept = os.path.join(_cache_dir(), "skills-kept.json")
+    mark = _fingerprint(source)
+    if mark and os.path.exists(kept):
+        try:
+            with open(kept, "r", encoding="utf-8") as fh:
+                cached = json.load(fh)
+            if cached.get("of") == mark:
+                return [_entry("skill", r["name"], r.get("description", ""), r) for r in cached.get("rows", [])]
+        except Exception:
+            pass
+    payload = _document(INDEX_URL, "skills.json")
+    if not payload:
         return []
     rows = payload if isinstance(payload, list) else (
         payload.get("skills") or payload.get("entries") or []
@@ -101,6 +136,11 @@ def _skills() -> list:
         if str(item.get("source") or "") not in NOUS_SOURCES:
             continue
         out.append(_entry("skill", item.get("name", ""), item.get("description", ""), item))
+    try:
+        with open(kept, "w", encoding="utf-8") as fh:
+            json.dump({"of": mark, "rows": [{"name": r["name"], "description": r["description"], "source": ""} for r in out]}, fh)
+    except Exception:
+        pass
     return out
 
 
@@ -203,18 +243,14 @@ class Index:
 _INDEX: Optional[Index] = None
 
 
-def _fresh(path: str) -> bool:
-    return os.path.exists(path) and (time.time() - os.path.getmtime(path)) < REFRESH_SECONDS
-
-
 def stale() -> bool:
-    """True when the lists on disk are older than a day, or missing."""
-    if not _fresh(os.path.join(_cache_dir(), "skills.json")):
+    """True when a list is missing. Age is not staleness: the file is the list."""
+    if not os.path.exists(os.path.join(_cache_dir(), "skills.json")):
         return True
     try:
         from . import seams
 
-        return not _fresh(str(seams._own_catalog_cache()))
+        return not seams._own_catalog_cache().exists()
     except Exception:
         return False
 
