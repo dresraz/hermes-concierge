@@ -1,4 +1,4 @@
-"""The picker: the list stays lexical, the model only chooses from it."""
+"""The picker: a wide menu for the model, an exact name taken without one."""
 
 import unittest
 from unittest import mock
@@ -18,15 +18,17 @@ class Row:
 class FakeLlm:
     """Answers as the model would, and remembers what it was shown."""
 
-    def __init__(self, pick):
+    def __init__(self, pick, tool=""):
         self.pick = pick
+        self.tool = tool
         self.seen = ""
 
     def complete_structured(self, **kwargs):
         self.seen = kwargs["instructions"]
+        pick, tool = self.pick, self.tool
 
         class Answer:
-            text = '{"pick": "%s", "why": "test"}' % self.pick
+            text = '{"pick": "%s", "tool": "%s", "why": "test"}' % (pick, tool)
 
         return Answer()
 
@@ -40,8 +42,9 @@ def options():
 
 
 class Choice(unittest.TestCase):
-    def pick(self, ask, llm, rows):
-        with mock.patch.object(choose, "shortlist", lambda *a, **k: rows):
+    def pick(self, ask, llm, rows, skills=None):
+        with mock.patch.object(choose, "shortlist", lambda *a, **k: rows), \
+             mock.patch.object(choose, "_skills", lambda: [] if skills is None else skills):
             return choose.pick(ask, llm=llm, entries=[])
 
     def test_a_name_asked_by_name_is_taken_without_a_model_call(self):
@@ -51,27 +54,31 @@ class Choice(unittest.TestCase):
         self.assertEqual(picked.name, "pdf")
         self.assertEqual(llm.seen, "")
 
-    def test_a_tie_goes_to_the_model(self):
+    def test_the_model_sees_the_list_with_kinds(self):
         llm = FakeLlm("pdf-surgeon")
         picked = self.pick("read pdf files", llm, options())
         self.assertEqual(picked.name, "pdf-surgeon")
-        self.assertIn("pdf-surgeon [get]", llm.seen)
+        self.assertIn("pdf-surgeon - Rewrite text inside a PDF.", llm.seen)
+        self.assertIn("Skills (here)", llm.seen)
+
+    def test_the_model_may_pick_a_skill_that_was_not_on_the_shortlist(self):
+        skills = [Row("arxiv", "Search arXiv papers.", "skill", 0.0)]
+        picked = self.pick("find recent papers on rag", FakeLlm("arxiv"), [], skills=skills)
+        self.assertEqual(picked.name, "arxiv")
 
     def test_a_name_the_model_invented_is_refused(self):
-        picked = self.pick("read pdf files", FakeLlm("super-pdf-pro"), options())
-        self.assertIsNone(picked)
+        self.assertIsNone(self.pick("read pdf files", FakeLlm("super-pdf-pro"), options()))
 
     def test_nothing_is_an_answer(self):
         self.assertIsNone(self.pick("teleport my dog to mars", FakeLlm("NOTHING"), options()))
 
-    def test_the_prompt_shows_every_candidate_with_its_kind(self):
-        llm = FakeLlm("pdf")
-        self.pick("read pdf files", llm, options())
-        self.assertIn("pdf [here]", llm.seen)
-        self.assertIn("pdf-surgeon [get]", llm.seen)
+    def test_built_in_is_an_answer(self):
+        picked = self.pick("what is the weather", FakeLlm("BUILT_IN", "web search"), [])
+        self.assertEqual(picked.kind, "builtin")
+        self.assertEqual(picked.description, "web search")
 
     def test_no_model_and_no_decisive_lead_is_no_fit(self):
         self.assertIsNone(self.pick("read pdf files", None, options()))
 
-    def test_an_empty_shortlist_is_no_fit(self):
-        self.assertIsNone(self.pick("anything", FakeLlm("pdf"), []))
+    def test_an_empty_shortlist_without_a_model_is_no_fit(self):
+        self.assertIsNone(self.pick("anything", None, []))

@@ -48,6 +48,49 @@ job. A loose fit is worse than an honest nothing: the person will install it and
 it will not work. An item marked here is already installed on this machine."""
 
 
+EXPAND_PROMPT = """A person wants something from their AI assistant. Write the search phrases
+that would find it in a catalogue of plugins and skills.
+
+Ask: {ask}
+
+Answer JSON only: {{"phrases": ["<phrase>", "<phrase>", "<phrase>"]}}
+
+Use the plain product words a catalogue entry would use, not sentences.
+"Is it going to rain" -> "weather forecast". "Remind me tomorrow" ->
+"reminder schedule". Never invent product names."""
+
+WIDE_PROMPT = """You are Concierge for a Hermes install. Choose what answers the ask.
+
+The skills are already on this machine (here). The plugins have to be fetched (get).
+Hermes itself already does, with no plugin: web search, page fetch, shell and file
+tools, cron jobs, subagents, memory notes, image understanding. If one of those
+covers the ask, answer BUILT_IN and name the tool.
+
+Skills (here):
+{skills}
+
+Plugins that might fit (get):
+{plugins}
+
+Ask: {ask}
+
+Answer JSON only:
+{{"pick": "<exact skill name, exact plugin name, BUILT_IN, or NOTHING>",
+  "tool": "<if BUILT_IN, six words naming the built-in tool>",
+  "why": "<six words>"}}
+
+Pick an item only if it does the job the ask describes. A shared word is not a fit.
+These are not plugin jobs: booking travel, hiring a person, writing legal documents,
+repairs in the physical world. Anything a plugin cannot do is NOTHING."""
+
+BUILT_IN_PROMPT = """Hermes already ships, without any plugin: web search, page fetch, shell and
+file tools, scheduled jobs (cron), subagents, memory notes, image understanding.
+A person asked: {ask}
+
+Does Hermes already do this with what ships in the box?
+Answer JSON only: {{"built_in": true or false, "tool": "<six words naming what does it>"}}"""
+
+
 class Option:
     """One shortlist row, whichever shelf it came from."""
 
@@ -96,7 +139,82 @@ def _live() -> list:
         return []
 
 
-def shortlist(ask: str, entries: Optional[Iterable[Any]] = None, limit: int = SHORTLIST) -> list:
+def _wide_prompt(ask: str, plugin_rows: list) -> str:
+    skill_lines = "\n".join(
+        "  {} - {}".format(row.name, (row.description or "")[:60]) for row in _skills()
+    )
+    plugin_lines = "\n".join(
+        "  {} - {}".format(row.name, (row.description or "")[:70]) for row in plugin_rows
+    )
+    return WIDE_PROMPT.format(
+        skills=skill_lines or "  (none)", plugins=plugin_lines or "  (none)", ask=ask
+    )
+
+
+def _ask_wide(ask: str, plugin_rows: list, llm: Any) -> Optional[Option]:
+    """One call, the whole skill shelf plus the lexical plugins."""
+    try:
+        answer = llm.complete_structured(
+            instructions=_wide_prompt(ask, plugin_rows),
+            input=[{"type": "text", "text": ask}],
+            json_mode=True, max_tokens=140, temperature=0, timeout=45,
+        )
+    except Exception:
+        return None
+    raw = (getattr(answer, "text") or "").strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        data = json.loads(raw[start : end + 1])
+    except Exception:
+        return None
+    pick = str(data.get("pick") or "").strip()
+    if not pick:
+        return None
+    if pick.upper() == "BUILT_IN":
+        tool = str(data.get("tool") or "").strip()
+        return Option("Hermes itself", tool, "builtin")
+    if pick.upper() == "NOTHING":
+        return None
+    for row in _skills() + plugin_rows:
+        if row.name.lower() == pick.lower():
+            return row
+    return None
+
+
+def _phrases(ask: str, llm: Any) -> list:
+    """The catalogue's words for what the person said, from the model."""
+    try:
+        answer = llm.complete_structured(
+            instructions=EXPAND_PROMPT.format(ask=ask),
+            input=[{"type": "text", "text": ask}],
+            json_mode=True, max_tokens=140, temperature=0, timeout=20,
+        )
+        raw = (getattr(answer, "text", "") or "").strip()
+        data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+        return [str(p).strip() for p in (data.get("phrases") or []) if str(p).strip()][:4]
+    except Exception:
+        return []
+
+
+def _built_in(ask: str, llm: Any) -> str:
+    """The tool Hermes already has for this, or empty."""
+    try:
+        answer = llm.complete_structured(
+            instructions=BUILT_IN_PROMPT.format(ask=ask),
+            input=[{"type": "text", "text": ask}],
+            json_mode=True, max_tokens=90, temperature=0, timeout=15,
+        )
+        raw = (getattr(answer, "text", "") or "").strip()
+        data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+        return str(data.get("tool") or "") if data.get("built_in") else ""
+    except Exception:
+        return ""
+
+
+def shortlist(ask: str, entries: Optional[Iterable[Any]] = None, limit: int = SHORTLIST,
+              llm: Any = None) -> list:
     """The best rows for `ask`, across both shelves, best first.
 
     Two ways in, because one is not enough: the ranking for what does the job,
@@ -107,7 +225,18 @@ def shortlist(ask: str, entries: Optional[Iterable[Any]] = None, limit: int = SH
     rows = pool(entries)
     if not rows:
         return []
-    return match.rank(ask, rows, limit=limit)
+    found = match.rank(ask, rows, limit=limit)
+    # People describe jobs; catalogues name mechanisms. "Is it going to rain"
+    # shares no word with "weather", so the list is filled from the model's own
+    # words for the ask as well as the ask itself.
+    if llm is not None and len(found) < limit:
+        seen = {row.name.lower() for row in found}
+        for phrase in _phrases(ask, llm):
+            for row in match.rank(phrase, rows, limit=6):
+                if row.name.lower() not in seen:
+                    seen.add(row.name.lower())
+                    found.append(row)
+    return found[: max(limit, SHORTLIST)]
 
 
 def _fmt(rows: list) -> str:
@@ -200,19 +329,32 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
     if any(phrase in low for phrase in ERRANDS):
         return None
     rows = shortlist(ask, entries)
-    if not rows:
-        return None
     for row in rows:
         row._ask = ask
     if _decisive(rows):
         return rows[0]
+    if llm is not None:
+        # People describe jobs; catalogues name mechanisms. The model reads the
+        # whole skill shelf plus the lexical plugins, which is what carries an
+        # unseen phrasing; the shortlist alone carries only shared words.
+        wide = _ask_wide(ask, rows[:30], llm)
+        if wide is not None:
+            return wide
+    if not rows:
+        # Nothing shares a word with the ask. Ask the model whether Hermes
+        # already does it before promising that nothing exists.
+        tool = _built_in(ask, llm) if llm is not None else ""
+        return Option("Hermes itself", tool, "builtin") if tool else None
     if llm is None:
         # No model: fall back to the old lexical rule. Weaker, but the plugin
         # still works offline and in tests instead of answering nothing.
         return rows[0] if _confident(rows) else None
     chosen = _ask_model(ask, rows, llm)
     if not chosen or chosen.upper() == "NOTHING":
-        return None
+        # The catalogue has no fit. Before saying nothing exists, check whether
+        # Hermes already does it: reminders, weather and scores are built in.
+        tool = _built_in(ask, llm)
+        return Option("Hermes itself", tool, "builtin") if tool else None
     for row in rows:
         if row.name.lower() == chosen.lower():
             # A pick that sits far below the lexical top would be the model

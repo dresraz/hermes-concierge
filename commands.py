@@ -819,6 +819,13 @@ def handle_install(
 
     choice = choose.pick(query, llm=_llm(), entries=catalog)
     if choice is not None:
+        if getattr(choice, "kind", "") == "builtin":
+            tool = getattr(choice, "description", "") or "its built-in tools"
+            return (
+                "  Nothing to install: Hermes already does this with {} \n"
+                "  No plugin needed, and nothing was added.\n"
+                "  If you want a bot that does it for you: /concierge create {}\n"
+            ).format(tool, query[:60])
         if getattr(choice, "kind", "") == "skill":
             return market.handle(choice.name, target=target, session_key=session_key,
                                  store=store, search_fn=search)
