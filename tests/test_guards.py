@@ -29,6 +29,34 @@ class Memory(unittest.TestCase):
         self.assertEqual(choose.caution_for(picked, "make me some art"), "heavy")
 
 
+class Surface(unittest.TestCase):
+    """The desktop app and the TUI bind a session source, not a platform."""
+
+    def setUp(self):
+        commands = harness.load("commands")
+        self.commands = commands
+        self.saved_platform = commands._PLATFORM
+        self.saved_env = __import__("os").environ.get("HERMES_SESSION_SOURCE")
+        commands._PLATFORM = ""
+
+    def tearDown(self):
+        self.commands._PLATFORM = self.saved_platform
+        env = __import__("os").environ
+        if self.saved_env is None:
+            env.pop("HERMES_SESSION_SOURCE", None)
+        else:
+            env["HERMES_SESSION_SOURCE"] = self.saved_env
+
+    def test_each_surface_is_read_from_the_session_source(self):
+        env = __import__("os").environ
+        for source in ("desktop", "tui", "cli"):
+            env["HERMES_SESSION_SOURCE"] = source
+            self.assertIsNone(self.commands._gateway_refusal("make me a bot"), source)
+        for source in ("telegram", ""):
+            env["HERMES_SESSION_SOURCE"] = source
+            self.assertIsNotNone(self.commands._gateway_refusal("make me a bot"), source)
+
+
 class Heavy(unittest.TestCase):
     def test_no_role_carries_a_heavy_skill(self):
         for role in presets.ROLES:

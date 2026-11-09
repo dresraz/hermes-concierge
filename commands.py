@@ -1374,11 +1374,25 @@ _PLATFORM_ANSWER: bool = False
 
 
 def _surface() -> str:
-    """The surface this call runs on: the hook's platform first, then the ctx."""
+    """Where this call runs: the hook's platform, the plugin context, then core.
+
+    A messaging turn binds HERMES_SESSION_PLATFORM; the CLI, the TUI and the
+    desktop app bind HERMES_SESSION_SOURCE instead. Reading only the first is why
+    /concierge refused itself inside the desktop app. Still fail-closed: an
+    identity nothing recognises is treated as a shared chat.
+    """
     if _PLATFORM:
         return _PLATFORM
     try:
-        return str(_CTX.session_surface() or "").lower() if _CTX is not None else ""
+        surface = str(_CTX.session_surface() or "").lower() if _CTX is not None else ""
+    except Exception:
+        surface = ""
+    if surface:
+        return surface
+    try:
+        from gateway.session_context import get_session_env
+
+        return str(get_session_env("HERMES_SESSION_SOURCE", "") or "").lower()
     except Exception:
         return ""
 
