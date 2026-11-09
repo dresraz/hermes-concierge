@@ -104,8 +104,11 @@ _BOTS_PHRASES = (
     r"^(?:what|how many) bots (?:do i have|have i got|are there)\b",
     r"^bots\b",
 )
+_UNDO_PHRASES = (
+    r"^(?:undo|revert|roll ?back)\b",
+)
 _FIRE_PHRASES = (
-    r"^(?:delete|remove|fire|reset|get rid of|kill|drop)\b",
+    r"^(?:delete|remove|fire|reset|get rid of|kill|drop|uninstall)\b",
 )
 _BROWSE_PHRASES = (
     r"^(?:what|which) (?:can|should) i (?:install|add|get)\b",
@@ -115,7 +118,15 @@ _BROWSE_PHRASES = (
 
 
 def _natural_verb(low: str) -> str:
-    """The read-only command a plain sentence is asking for, or ""."""
+    """The command a plain sentence is asking for, or "".
+
+    Politeness is stripped first: "please list my bots" is the same sentence as
+    "list my bots", and "can you remove the old coder bot" is a fire.
+    """
+    low = _strip_polite(low)
+    for pattern in _UNDO_PHRASES:
+        if re.match(pattern, low):
+            return "undo"
     for pattern in _BOTS_PHRASES:
         if re.match(pattern, low):
             return "bots"
@@ -286,6 +297,13 @@ def _route(text: str) -> tuple:
                         break
 
     # "my researcher" is the one you have, unless the sentence asks for another.
+    # "install a weather plugin for my assistant" is an install, not an improve:
+    # the verb says what to do, the possessive only says where it goes.
+    install_verb = _has_phrase(stripped, ("install", "add", "enable"))
+    capability = bool(words & CAPABILITY_WORDS)
+    if install_verb and (capability or role is not None) and ":" not in text:
+        return "install", "", text
+
     # "my coder" and "the coder" both point at the one you have.
     mine = re.search(r"\b(?:my|the|our)\s+([a-z0-9][a-z0-9-]*)", stripped)
     if mine and not second:
@@ -1023,8 +1041,23 @@ def _undo_in(record: Any, profile: str, seams: Any) -> list:
             left = seams.plugin_dir_in(home, (plugin,))
             lines.append("removed: plugin {} from {}".format(plugin, profile)
                          if left is None else "still there: {}".format(left))
+    from . import effects
+
     for path in list(getattr(record, "skills", None) or []):
         leaf = str(path).rstrip("/").rsplit("/", 1)[-1]
+        exact = Path(str(path))
+        # The receipt holds the exact folder that was written. Removing that is
+        # the only removal that cannot miss a nested category directory.
+        if exact.is_dir() and str(exact).startswith(str(home)):
+            try:
+                gone = effects.remove_skill_dir(str(exact))
+            except Exception as exc:
+                lines.append("could not remove skill {}: {}: {}".format(
+                    leaf, type(exc).__name__, exc))
+                continue
+            lines.append("removed: skill {} from {}".format(leaf, profile)
+                         if gone else "still there: skill {} in {}".format(leaf, profile))
+            continue
         if seams.skill_dir_in(home, leaf) is None:
             lines.append("already gone: skill {} in {}".format(leaf, profile))
             continue

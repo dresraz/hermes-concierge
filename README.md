@@ -2,7 +2,7 @@
 
 [![version](https://img.shields.io/github/v/tag/dresraz/hermes-concierge?color=E8C15A)](https://github.com/dresraz/hermes-concierge/tags)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
-[![tests](https://img.shields.io/badge/tests-201%20passing-3fb950)](tests)
+[![tests](https://img.shields.io/badge/tests-223%20passing-3fb950)](tests)
 [![hermes](https://img.shields.io/badge/hermes-%3E%3D0.22.7-4B5563)](plugin.yaml)
 
 **The front door to the Hermes marketplace.**
@@ -35,20 +35,21 @@ you learn the catalog, read a manifest, or guess which of the a thousand-odd ent
 ```
 
 ```
-Concierge
-
-  you said    remember what I told you across sessions
-  best match  cognee  (community, memory)
-  why         remember, across, sessions
-  what        Knowledge-graph memory for Hermes, shared with Cognee's Claude Code, Codex and OpenClaw plugins: automatic recall, remember, forget, recaps and code search
-  adds        6 tools, 4 hooks
-  cost        6 tools, sent on every request like every other tool
-  install     https://github.com/topoteretes/cognee-integrations v1.4.1 @ b13274096018
-
-  also        entropicmem  (community)
-
-Install it?  /concierge yes   or   /concierge no
+/concierge remember what I told you across sessions
 ```
+
+```
+Install cognee?
+
+  Knowledge-graph memory for Hermes: automatic recall, remember, forget.
+
+  Also installs httpx, tenacity.
+  
+  /concierge yes     install it
+  /concierge no      skip it
+```
+
+That is the whole card. A name, one sentence, what else comes with it, and two words.
 
 The runner-up is named, never numbered. `/concierge more` describes it and `/concierge entropicmem` installs it by name. No single key installs something the card did not describe.
 
@@ -59,7 +60,7 @@ Installed cognee
 
   on disk     $HERMES_HOME/plugins/cognee (76 files)
   enabled     yes
-  scan        safe, 80 notes
+  scan        safe, no findings
 
 Undo it with /concierge undo
 ```
@@ -69,14 +70,16 @@ The `notes` count is core's own advisory list from its isolation report, not a f
 When nothing fits, it installs nothing:
 
 ```
-  best match  none
+Concierge
 
-Nothing in the catalog does that yet. Nothing was installed.
+  Nothing here fits "teach fish philosophy at midnight" yet.
+  Nothing was installed.
+
+  Try the word for the tool you want: /concierge browse pdf
 ```
 
-The matcher is keyword-based, so a nonsense sentence can still surface one weak card
-(it never installs anything without your yes). On our junk set, 7 of 8 absurd asks
-return nothing at all.
+Below a confidence floor a match only counts when the ask's own words appear in the
+entry's name or title, so the whole junk set (8 of 8 absurd asks) returns nothing.
 
 ## One command
 
@@ -113,13 +116,13 @@ A sentence is fast when you know the word. When you do not, the shelf is a windo
 that exists, read at the moment you look:
 
 ```
-  /concierge browse notes
-  LOOKING FOR  notes
+  /concierge browse pdf
+  LOOKING FOR  pdf
 
-  1  bot     assistant       6 skills  own inbox, calendar, files and notes
-  2  bot     tutor           5 skills  cards, diagrams, explainers, search over your own notes
-  3  skill   obsidian        3 KB      Read, search, create and edit notes in the Obsidian vault
-  4  plugin  sticky-notes              Floating notes on your desktop
+  1  skill   pdf                      here    PDF files: create, read, merge, fill, OCR, edit
+  2  plugin  pdf-surgeon                      pdf
+
+  pick a number, or no to drop it
 ```
 
 A number acts on that row: a skill installs here, a plugin opens its card, a bot gets made. The
@@ -196,13 +199,13 @@ conversation you have. Install those by hand, one at a time, after reading what 
 ```
 
 ```
-Hired bp-test-zero
+Created bp-test-zero
 
-    home     /home/andres/.hermes/profiles/bp-test-zero
-    soul     SOUL.md, 265 chars
-    skills   0 installed
-    profile  listed by hermes profile list
-  plugins  your setup, 46 switches, 5 not available here
+  home     $HERMES_HOME/profiles/bp-test-zero
+  soul     SOUL.md, 816 chars
+  skills   7 installed
+  profile  listed by hermes profile list
+  self     /concierge inside this bot, for itself only
 
   next     /concierge improve bp-test-zero: <habit>
   undo     /concierge undo
@@ -213,24 +216,25 @@ The word before the colon is the name. Without a colon the name is the last mean
 Ten roles also bring their skills, so the bot arrives able to work:
 
 ```text
-/concierge create a researcher for papers
+/concierge create a researcher that reads papers
 
-Hired researcher-bot
+Created researcher-bot
 
-    home     /home/andres/.hermes/profiles/researcher-bot
-    soul     SOUL.md, 1084 chars
-    skills   9 installed
-    profile  listed by hermes profile list
-  plugins  your setup, 46 switches, 5 not available here
-  skills   researcher 8/8 installed: parallel-cli, qmd, llm-wiki, rss-feeds, arxiv, grounded-citations, blocked-page-recovery, pdf
+  home     $HERMES_HOME/profiles/researcher-bot
+  soul     SOUL.md, 1,204 chars
+  skills   8 installed
+  profile  listed by hermes profile list
+  self     /concierge inside this bot, for itself only
+  skills   researcher 7/7 installed: arxiv, grounded-citations, blocked-page-recovery,
+           pdf, parallel-cli, llm-wiki, rss-feeds
 
   next     /concierge improve researcher-bot: <habit>
   undo     /concierge undo
 ```
 
 The roles are `researcher`, `writer`, `coder`, `assistant`, `marketer`,
-`watcher`, `designer`, `analyst`, `tutor`, `planner`. Each role lands seven to
-nine catalog skills: optional skills installed through core's own `hermes -p
+`watcher`, `designer`, `analyst`, `tutor`, `planner`. Each role lands five to
+eight catalog skills: optional skills installed through core's own `hermes -p
 <profile> skills install`, plus bundled-tree skills copied in after that pool,
 then the disk is read before the receipt says anything. The receipt counts every
 real `SKILL.md` in the profile, including the `hermes-agent` skill every profile
@@ -367,8 +371,11 @@ plugin or a bot that does not exist.
 ## How it works
 
 - `commands.py` is the whole command surface: one verb table, one card protocol, one record store.
-- `match.py` ranks the live catalog against your sentence. Pure and deterministic: no model call, no
-  network. It tokenizes, folds plurals, and bridges an outcome to a mechanism with a small
+- `intent.py` asks the model what the sentence means (create, improve, install, list, browse, help,
+  undo) with the bots on this machine and the ten roles in the prompt, then validates the answer
+  against what actually exists. Validation failures fall back to the rules; so does the no-model case.
+- `match.py` ranks the live catalog against your sentence once the intent is known. Pure and
+  deterministic: no model call, no network. It tokenizes, folds plurals, and bridges an outcome to a mechanism with a small
   hand-written vocabulary, so *"remember this forever"* reaches memory providers instead of scoring
   zero. Each candidate carries the words that earned it, which is what `why` prints.
 - `card.py` renders the catalog card, takes the yes or no, and prints the receipt once an install lands.
@@ -399,8 +406,8 @@ plugin or a bot that does not exist.
 
 | | result |
 |---|---|
-| correct entry in the top 3 | **32/32** |
-| correct entry ranked first | 25/32 |
+| correct entry in the top 3 | **31/32** |
+| correct entry ranked first | 26/32 |
 | nonsense installs nothing | 8/8 |
 
 No LLM call is involved, so those numbers are the same on every run. They are also my own set, written while tuning the matcher, so read them as an upper bound. On a second, smaller set I did not tune on (12 everyday asks): 7 put the fitting entry first and 9 put it in the top three. The vocabulary pass and the keyword-dump penalty moved that from 2 and 5. The card says what it would add before anything happens, so a near miss costs one no.
@@ -453,7 +460,7 @@ python tests/eval_match.py
 hermes plugins validate . --install-deps
 ```
 
-189 tests, `unittest`, stdlib only, deterministic, no LLM calls. They never touch a real profile, a real SOUL file, or a real plugins directory: every seam is injected.
+223 tests, `unittest`, stdlib only, deterministic, no network and no model calls. They never touch a real profile, a real SOUL file, or a real plugins directory: every seam is injected.
 
 ## License
 
