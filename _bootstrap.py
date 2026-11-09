@@ -55,8 +55,14 @@ def _current():
     return module
 
 
+_PASSED = ("store", "session_key", "seams", "hire", "train", "known", "undo")
+
+
 def handle(text, **kwargs):
-    return _current().handle_concierge(text, **kwargs)
+    """Core hands the command whatever that surface knows; keep what we accept."""
+    return _current().handle_concierge(
+        text, **{key: value for key, value in kwargs.items() if key in _PASSED}
+    )
 
 
 def on_admission(*args, **kwargs):

@@ -809,8 +809,13 @@ def handle_concierge(
     train: Optional[Callable[..., Any]] = None,
     known: Optional[Sequence[str]] = None,
     undo: Optional[Callable[..., Any]] = None,
+    **_: Any,
 ) -> str:
-    """The whole surface behind one command."""
+    """The whole surface behind one command.
+
+    Core passes the surface's own keywords (``source`` and friends). They are not
+    this command's business, and a signature that refuses them crashes the reply.
+    """
     from . import card, lifecycle, market
 
     if store is None:
