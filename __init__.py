@@ -18,8 +18,12 @@ from __future__ import annotations
 
 
 def register(ctx) -> None:
-    """Wire ``/concierge`` into Hermes. It is the only command to learn."""
+    """Wire ``/concierge`` into Hermes. It is the only command to learn.
 
-    from . import commands
+    Registration goes through ``_bootstrap`` so a chat that lives for days picks
+    up a fixed package without being restarted.
+    """
 
-    commands.register(ctx)
+    from . import _bootstrap
+
+    _bootstrap.register(ctx)

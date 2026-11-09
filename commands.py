@@ -1476,17 +1476,22 @@ def _gateway_refusal(raw: Any) -> Optional[str]:
     )
 
 
-def register(ctx: Any) -> None:
-    """Wire one slash command, plus the one bare word a shown catalog card accepts."""
+def bind(ctx: Any) -> None:
+    """Hold the context, without registering anything (the reload seam needs it)."""
     global _CTX, _HOME
-
-    from . import reply
 
     _CTX = ctx
     try:
         _HOME = Path(str(ctx.home_path)) if getattr(ctx, "home_path", None) else None
     except Exception:
         _HOME = None
+
+
+def register(ctx: Any) -> None:
+    """Wire one slash command, plus the one bare word a shown catalog card accepts."""
+    from . import reply
+
+    bind(ctx)
 
     ctx.register_command(
         "concierge",
