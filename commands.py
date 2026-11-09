@@ -820,16 +820,6 @@ def handle_install(
     choice = choose.pick(query, llm=_llm(), entries=catalog)
     if choice is not None:
         caution = getattr(choice, "caution", "")
-        if caution == "memory":
-            return (
-                "  {} is a memory provider: it usually needs a hosted service or a paid plan.\n"
-                "  I did not install it. If you want it: /concierge install {}\n"
-            ).format(choice.name, choice.name)
-        if caution == "heavy":
-            return (
-                "  {} is heavy: it downloads large models and wants a GPU.\n"
-                "  I did not install it. If you want it: /concierge install {}\n"
-            ).format(choice.name, choice.name)
         if getattr(choice, "kind", "") == "builtin":
             tool = getattr(choice, "description", "") or "its built-in tools"
             return (
@@ -839,9 +829,9 @@ def handle_install(
             ).format(tool, query[:60])
         if getattr(choice, "kind", "") == "skill":
             return market.handle(choice.name, target=target, session_key=session_key,
-                                 store=store, search_fn=search)
+                                 store=store, search_fn=search, caution=caution)
         return card.handle(choice.name, entries=catalog, store=store,
-                           session_key=session_key, target=target)
+                           session_key=session_key, target=target, caution=caution)
     if _llm() is None:
         # No model at all: the old two-shelf search still beats a dead end.
         return market.handle(text, target=target, session_key=session_key,

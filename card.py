@@ -193,7 +193,7 @@ def _plain_adds(entry) -> str:
 
 
 def render(sentence: str, candidates: list, deps: Optional[list] = None,
-           target: str = "") -> str:
+           target: str = "", caution: str = "") -> str:
     """The card for one sentence and the candidates that earned a place on it.
 
     Written for someone who has never installed a plugin: the first line is the
@@ -232,6 +232,11 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
     if locked and locked.split(" (")[0].lower() not in sentence.lower():
         # Only when the ask did not name that country itself.
         lines.append("  Only for {}. Not your country? Say no.".format(locked))
+
+    if caution == "memory":
+        lines.append("  Memory provider: usually needs a paid plan.")
+    elif caution == "heavy":
+        lines.append("  Heavy: downloads models and wants a GPU.")
 
     rival = _contender(candidates)
     if rival is not None:
@@ -288,7 +293,7 @@ def nothing(sentence: str, entries: Optional[list] = None) -> str:
 
 
 def handle(sentence: str, *, entries=None, store=None, install=None,
-           session_key: str = "", target: str = "") -> str:
+           session_key: str = "", target: str = "", caution: str = "") -> str:
     """One sentence in, one card or one receipt out."""
     from . import match, seams
 
@@ -340,7 +345,7 @@ def handle(sentence: str, *, entries=None, store=None, install=None,
         deps = seams.declared_deps_remote(candidates[0].entry)
     except Exception:
         deps = []
-    return render(text, candidates, deps=deps, target=target)
+    return render(text, candidates, deps=deps, target=target, caution=caution)
 
 
 def _answer(*, store=None, install=None, session_key: str = "") -> str:

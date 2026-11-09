@@ -139,7 +139,7 @@ def _shipped_line(name: str) -> str:
     return ""
 
 
-def render(text: str, offers: list, target: str) -> str:
+def render(text: str, offers: list, target: str, caution: str = "") -> str:
     """The skill card: a name, one line, two words."""
     top = offers[0]
     lines = ["", "Install {}?".format(top.name)]
@@ -164,6 +164,11 @@ def render(text: str, offers: list, target: str) -> str:
         body.append("  It goes into {}.".format(target))
     if body:
         lines += [""] + body
+    if caution == "memory":
+        lines.append("  Memory provider: usually needs a paid plan.")
+    elif caution == "heavy":
+        lines.append("  Heavy: downloads models and wants a GPU.")
+
     rival = next((offer for offer in offers[1:] if offer.name != top.name), None)
     if rival is not None:
         lines += ["", "  Another option: {}.".format(rival.name)]
@@ -195,7 +200,7 @@ def nothing(text: str, target: str = "") -> str:
 
 def handle(text: str, *, target: str = "", session_key: str = "",
            search_fn: Optional[Callable[[str, int], list]] = None,
-           install: Optional[Callable] = None, store=None) -> str:
+           install: Optional[Callable] = None, store=None, caution: str = "") -> str:
     """One request in, one skill card or one receipt out."""
     text = (text or "").strip()
     if not text:
@@ -231,7 +236,7 @@ def handle(text: str, *, target: str = "", session_key: str = "",
         _STAMP.pop(oldest, None)
     _STAMP[session_key] = now
     _PENDING[session_key] = {"query": query, "offers": offers, "target": target}
-    return render(query, offers, target)
+    return render(query, offers, target, caution=caution)
 
 
 def _answer(*, session_key: str = "", install=None, store=None) -> str:
