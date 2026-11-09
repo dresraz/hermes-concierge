@@ -10,6 +10,8 @@ number, and the install path you already know runs.
 
 from __future__ import annotations
 
+import pathlib
+
 from typing import Any, Optional
 
 from . import discover, match, seams
@@ -118,6 +120,34 @@ def items(query: str = "", limit: int = LIMIT) -> list:
     return _bot_rows(query, 3) + _skills(query, limit) + _plugins(query, max(2, limit // 2))
 
 
+def _build() -> str:
+    """The commit answering this card, so a stale session is obvious at a glance."""
+    try:
+        import subprocess
+
+        here = pathlib.Path(__file__).resolve().parent
+        sha = subprocess.run(
+            ["git", "-C", str(here), "rev-parse", "--short=7", "HEAD"],
+            capture_output=True, text=True, timeout=2,
+        ).stdout.strip()
+        if sha:
+            return "{} {}".format(_version(), sha)
+    except Exception:
+        pass
+    return _version()
+
+
+def _version() -> str:
+    try:
+        import re
+
+        text = (pathlib.Path(__file__).resolve().parent / "plugin.yaml").read_text()
+        found = re.search(r"^version:\s*(\S+)", text, re.M)
+        return found.group(1) if found else "?"
+    except Exception:
+        return "?"
+
+
 def overview() -> str:
     """One screen: what is here, and how to look further."""
     here = _installed()
@@ -164,6 +194,8 @@ def overview() -> str:
         "  ready    {}, {}, {}".format(
             _n(available, "skill"), _n(total_plugins, "plugin"), _n(total_connectors, "connector")
         ),
+        "",
+        "  build    {}".format(_build()),
         "",
         "  say what you need in one sentence, or look first:",
         "  /concierge browse pdf        look through what is available",
