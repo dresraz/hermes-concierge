@@ -37,10 +37,85 @@ class Outcome:
     notes: list = field(default_factory=list)
 
 
-def catalog() -> list:
-    """Every plugin the live catalog advertises, at the pin it advertises."""
-    from hermes_cli.plugin_catalog import load_catalog_live
+LIVE_URL = "https://hermes-agent.nousresearch.com/docs/api/plugin-catalog.json"
+_CATALOG_TTL = 6 * 60 * 60
+_CATALOG_MAX = 8 * 1024 * 1024
 
+
+def _own_catalog_cache() -> Path:
+    from hermes_constants import get_hermes_home
+
+    return Path(str(get_hermes_home())) / "cache" / "concierge-catalog.json"
+
+
+def _fetch_own_catalog() -> Optional[list]:
+    """The published catalogue, fetched by us.
+
+    Core caps its copy at two megabytes and the published file is already
+    larger, so its live fetch is rejected and every caller silently ranks
+    against the bundled snapshot. Concierge promises to check the marketplace,
+    so it fetches the same document itself, caches it for six hours, and falls
+    back to core when the network is really down.
+    """
+    import json
+    import time
+
+    cache = _own_catalog_cache()
+    try:
+        if cache.is_file() and time.time() - cache.stat().st_mtime < _CATALOG_TTL:
+            raw = json.loads(cache.read_text(encoding="utf-8-sig"))
+            if isinstance(raw, dict) and raw.get("entries"):
+                return raw["entries"]
+    except Exception:
+        pass
+    try:
+        import httpx
+
+        response = httpx.get(LIVE_URL, timeout=20, follow_redirects=True)
+        response.raise_for_status()
+        if len(response.content) > _CATALOG_MAX:
+            return None
+        data = response.json()
+        if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
+            return None
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(json.dumps(data), encoding="utf-8")
+        except OSError:
+            pass
+        return data["entries"]
+    except Exception:
+        return None
+
+
+def catalog_source() -> str:
+    """"marketplace" when the published catalogue answered, "bundled" when not.
+
+    The difference matters for honesty: with no network the plugin still ranks
+    against its bundled snapshot, but "nothing fits" would then be a claim about
+    an old copy, not about the marketplace.
+    """
+    try:
+        if _fetch_own_catalog():
+            return "marketplace"
+    except Exception:
+        pass
+    return "bundled"
+
+
+def catalog() -> list:
+    """Every plugin the marketplace advertises, at the pin it advertises."""
+    from hermes_cli.plugin_catalog import entry_from_mapping, load_catalog_live
+
+    raw = _fetch_own_catalog()
+    if raw:
+        parsed = [
+            entry
+            for index, item in enumerate(raw)
+            if (entry := entry_from_mapping(item, "{}#{}".format(LIVE_URL, index))) is not None
+        ]
+        if parsed:
+            return parsed
     return load_catalog_live()
 
 

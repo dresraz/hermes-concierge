@@ -623,6 +623,16 @@ def handle_concierge(
 
     answer = card.handle(text, session_key=session_key)
     if "Nothing here fits" in answer:
+        try:
+            from . import seams as _seams
+
+            if _seams.catalog_source() != "marketplace":
+                return (
+                    "  I could not reach the marketplace just now, so I will not claim\n"
+                    "  that nothing exists. Nothing was installed. Try again in a moment.\n"
+                )
+        except Exception:
+            pass
         # A job with no package is still a job: offer the bot instead of dead-ending.
         from . import presets as _presets
 
