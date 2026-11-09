@@ -1,5 +1,5 @@
 name: concierge
-version: 0.8.2
+version: 0.9.0
 description: "A marketplace concierge: one sentence upgrades your default profile or any bot you have, or adds a new one. Installs a plugin or skill the same way. A card, one yes, a receipt read off the disk, and an undo that restores exactly what changed."
 author: "@dresraz"
 requires_hermes: ">=0.22.7"

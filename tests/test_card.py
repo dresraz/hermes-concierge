@@ -102,24 +102,6 @@ class Ask(unittest.TestCase):
         self.assertIn("Drive a browser", text)
         self.assertIn("browser", text)
 
-    def test_cost_line_is_honest_when_no_tools_are_added(self):
-        line = card.cost_line(CATALOG[1])
-        self.assertIn("no tools", line)
-        # No price and no token figure: nothing about this entry can be measured.
-        self.assertNotIn("$", line)
-        self.assertNotIn("token", line.lower())
-
-    def test_cost_line_labels_where_the_cost_lands_when_tools_are_added(self):
-        line = card.cost_line(CATALOG[2])
-        self.assertIn("2 tools", line)
-        # It may say the tools ride on every request; it may not claim a charge
-        # that was never measured.
-        self.assertIn("every request", line)
-        self.assertNotIn("charge", line.lower())
-        # No number is invented: the catalog carries no schemas, so any token
-        # figure here would be a guess.
-        self.assertNotIn("token", line.lower())
-
     def test_runner_up_is_named_but_never_numbered(self):
         text = card.handle("themes memory browser", entries=CATALOG)
         # The rival is named so it can be asked for by name...

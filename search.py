@@ -83,10 +83,6 @@ def _entry(kind: str, name: str, description: str, payload: Any = None) -> dict:
     return {"kind": kind, "name": str(name or ""), "description": _clip(description), "payload": payload}
 
 
-def _skills_file() -> str:
-    return os.path.join(_cache_dir(), "skills.json")
-
-
 def _read_meta(name: str) -> dict:
     try:
         with open(os.path.join(_cache_dir(), name), "r", encoding="utf-8") as fh:
@@ -154,8 +150,6 @@ def _skills_payload(url: str, etag: str = "") -> tuple:
     request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=90) as resp:
-            if resp.status == 304:
-                return None, etag or ""
             raw = resp.read()
             if resp.headers.get("Content-Encoding") == "gzip":
                 import gzip

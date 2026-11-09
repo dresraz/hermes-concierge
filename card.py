@@ -69,46 +69,6 @@ def _count(n: int, label: str) -> str:
     return f"{n} {label}" if n != 1 else f"1 {label.rstrip('s')}"
 
 
-def _adds(entry) -> str:
-    """What the plugin registers, in the catalog's own words."""
-    caps = _caps(entry)
-    parts = []
-    for key, label in (
-        ("provides_tools", "tools"),
-        ("provides_hooks", "hooks"),
-        ("provides_middleware", "middleware"),
-    ):
-        value = caps.get(key) or []
-        if value:
-            count = len(value) if isinstance(value, (list, tuple)) else 1
-            parts.append(_count(count, label))
-    requires = caps.get("requires_env") or []
-    if requires:
-        parts.append(f"needs {', '.join(str(r) for r in requires)}")
-    return ", ".join(parts) if parts else "no tools, no hooks, no middleware"
-
-
-def cost_line(entry) -> str:
-    """One honest line about what the plugin adds to every request."""
-    caps = _caps(entry)
-    tools = caps.get("provides_tools") or []
-    if not tools:
-        return "adds no tools, so nothing is added to the request"
-    count = len(tools) if isinstance(tools, (list, tuple)) else 1
-    # The catalog declares tool names, not schemas, so the only thing that can
-    # be said without inventing a number is that they ride along on each call.
-    return f"{_count(count, 'tools')}, sent on every request like every other tool"
-
-
-def _pin(entry) -> str:
-    sha = str(getattr(entry, "sha", "") or "")
-    version = str(getattr(entry, "version", "") or "")
-    repo = str(getattr(entry, "repo", "") or "")
-    short = sha[:12] if sha else "unpinned"
-    tail = f"v{version} " if version else ""
-    return f"{repo} {tail}@ {short}".strip()
-
-
 def _fit(text: str, limit: int) -> str:
     """Cut at a word boundary so the card never ends mid-word.
 
@@ -131,17 +91,6 @@ def _dep_name(spec: str) -> str:
     head = str(spec).strip().split(";")[0]
     match = re.match(r"[A-Za-z0-9_.\-]+", head)
     return match.group(0) if match else head
-
-
-def deps_line(deps) -> str:
-    """What the plugin brings with it, in the person's words, before the yes."""
-    from . import seams
-
-    names = [_dep_name(str(d)) for d in deps]
-    shown = ", ".join(names[:4]) + (f" (+{len(names) - 4} more)" if len(names) > 4 else "")
-    if seams.risky_deps(deps):
-        return f"  deps        {shown}  installs code from git or a url, not PyPI"
-    return f"  deps        {shown}  installed with it, no extra question"
 
 
 JURISDICTIONS = (

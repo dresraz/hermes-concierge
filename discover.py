@@ -112,15 +112,6 @@ def _roots() -> list[Path]:
     return seen
 
 
-def _skill_file(folder: Path) -> Optional[Path]:
-    direct = folder / "SKILL.md"
-    if direct.is_file():
-        return direct
-    for candidate in folder.glob("*/SKILL.md"):
-        return candidate
-    return None
-
-
 def _head(text: str, limit: int = 1200) -> tuple[str, str]:
     """Name and description from the frontmatter, plus the opening prose."""
     name = ""

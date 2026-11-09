@@ -17,19 +17,6 @@ state = harness.load("state")
 undo = harness.load("undo")
 
 
-class MemoryBackend:
-    """Stands in for core's PluginState: a dict with get/set."""
-
-    def __init__(self):
-        self.data = {}
-
-    def get(self, key, default=None):
-        return self.data.get(key, default)
-
-    def set(self, key, value):
-        self.data[key] = value
-
-
 class AlreadyGone(unittest.TestCase):
     def test_plugin_that_is_not_there_is_reported_not_restored(self):
         """A receipt for something already absent must not fail or lie.
@@ -107,18 +94,6 @@ class Undo(unittest.TestCase):
             **kwargs,
         )
 
-    def test_nothing_installed_has_nothing_to_undo(self):
-        store = state.Store(MemoryBackend())
-        self.assertEqual(store.latest(), None)
-        self.assertEqual(undo.undo_latest(store), ["nothing to undo"])
-
-    def test_empty_store_has_nothing_to_undo(self):
-        class EmptyStore:
-            def latest(self):
-                return None
-
-        self.assertEqual(undo.undo_latest(EmptyStore()), ["nothing to undo"])
-
     def test_full_record_runs_every_step_in_order(self):
         lines = self.run_undo()
         self.assertEqual(
@@ -191,18 +166,6 @@ class Undo(unittest.TestCase):
         self.run_undo(record=record)
         removed = [call[1] for call in self.rec.calls if call[0] == "remove_skill"]
         self.assertEqual(removed, ["third", "second", "first"])
-
-    def test_undo_latest_uses_the_latest_record(self):
-        store = state.Store(MemoryBackend())
-        store.add(state.Installed(name="older"))
-        store.add(state.Installed(name="newer"))
-        lines = undo.undo_latest(
-            store,
-            uninstall=self.rec.uninstall,
-            remove_skill=self.rec.remove_skill,
-            restore=self.rec.restore,
-        )
-        self.assertTrue(any(call[0] == "uninstall" for call in self.rec.calls))
 
 
 if __name__ == "__main__":

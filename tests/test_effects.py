@@ -196,36 +196,6 @@ class RestoreSoul(unittest.TestCase):
         self.assertFalse(path.exists())
 
 
-class InstallSkills(unittest.TestCase):
-    def test_installer_runs_once_per_name_in_order(self):
-        calls = []
-
-        def installer(name):
-            calls.append(name)
-            return "installed:" + name
-
-        records = effects.install_skills(["alpha", "beta", "gamma"], installer)
-        self.assertEqual(calls, ["alpha", "beta", "gamma"])
-        self.assertEqual(
-            records,
-            [
-                {"name": "alpha", "result": "installed:alpha"},
-                {"name": "beta", "result": "installed:beta"},
-                {"name": "gamma", "result": "installed:gamma"},
-            ],
-        )
-
-    def test_no_names_means_no_calls(self):
-        calls = []
-        records = effects.install_skills([], lambda name: calls.append(name))
-        self.assertEqual(records, [])
-        self.assertEqual(calls, [])
-
-    def test_falsy_results_are_kept(self):
-        records = effects.install_skills(["alpha"], lambda name: None)
-        self.assertEqual(records, [{"name": "alpha", "result": None}])
-
-
 class ImportPurity(unittest.TestCase):
     def test_module_level_imports_are_stdlib_only(self):
         tree = ast.parse(SOURCE.read_text())

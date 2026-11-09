@@ -15,7 +15,7 @@ import os
 import re
 import shutil
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any, Sequence
 
 BACKUP_SUFFIX = ".concierge-backup"
 MAX_SOUL_CHARS = 1200
@@ -154,15 +154,6 @@ def restore_soul(snapshot: Snapshot) -> None:
         os.remove(snapshot.path)
     except FileNotFoundError:
         pass
-
-
-def install_skills(names: Sequence[str], installer: Callable[[str], Any]) -> list:
-    """Install each skill through the injected installer, in order."""
-    records = []
-    for name in names:
-        result = installer(name)
-        records.append({"name": name, "result": result})
-    return records
 
 
 def remove_skill_dir(path: str) -> bool:

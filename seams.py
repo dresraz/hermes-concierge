@@ -719,19 +719,6 @@ def install_skill_in(profile: str, identifier: str, *, name: str = "") -> tuple[
     return True, str(found), ""
 
 
-def bundled_skill(name: str) -> bool:
-    """True when *name* is a skill Hermes ships with, so it can be copied offline."""
-    try:
-        from tools import skills_sync
-    except Exception:
-        skills_sync = None
-    root = _bundled_root(skills_sync)
-    for folder in root.glob("*/" + name):
-        if ".archive" not in folder.relative_to(root).parts and (folder / "SKILL.md").is_file():
-            return True
-    return (root / name / "SKILL.md").is_file()
-
-
 def remove_plugin_in(profile: str, name: str) -> bool:
     """Remove *name* from *profile* and report whether it is really gone."""
     _run_core(["-p", profile, "plugins", "remove", name])

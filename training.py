@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from .bots import slugify
 
-DEFAULT_HINT = "usage: /concierge improve <bot>: <what it should always do>"
-
 
 def guess_bot(text: str) -> tuple[str, str]:
     """Accept ``bot: sentence`` and ``bot sentence``."""
@@ -23,4 +21,4 @@ def guess_bot(text: str) -> tuple[str, str]:
     return slugify(head), tail.strip()
 
 
-__all__ = ["DEFAULT_HINT", "guess_bot"]
+__all__ = ["guess_bot"]

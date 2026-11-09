@@ -12,9 +12,9 @@ import importlib
 import os
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Optional
 
-__all__ = ["undo", "undo_latest"]
+__all__ = ["undo"]
 
 
 @dataclass(frozen=True)
@@ -177,11 +177,3 @@ def undo(
         _run(lines, "SOUL {}".format(soul_path), _do_restore)
 
     return lines
-
-
-def undo_latest(store: Any, **kwargs: Any) -> list:
-    """Undo the most recent install the store knows about."""
-    record = store.latest()
-    if record is None:
-        return ["nothing to undo"]
-    return undo(record, **kwargs)

@@ -41,20 +41,6 @@ def heavy(name: str) -> bool:
     return False
 
 
-def weight(path: Any) -> int:
-    """Kilobytes of a skill folder, so "is this heavy" is a number, not a vibe."""
-    from pathlib import Path as _Path
-
-    total = 0
-    for item in _Path(str(path)).rglob("*"):
-        if item.is_file():
-            try:
-                total += item.stat().st_size
-            except OSError:
-                pass
-    return total // 1024
-
-
 @dataclass(frozen=True)
 class Role:
     name: str

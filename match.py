@@ -189,10 +189,6 @@ class Candidate:
     def category(self) -> str:
         return str(getattr(self.entry, "category", "") or "")
 
-    @property
-    def tier(self) -> str:
-        return str(getattr(self.entry, "tier", "") or "")
-
     def why(self, limit: int = 3) -> str:
         """The words that earned this candidate its place, in the query's order."""
         if not self.matched:
