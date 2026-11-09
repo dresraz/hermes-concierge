@@ -141,32 +141,10 @@ def _plain_adds(entry) -> str:
     return "Adds {}.".format(_count(count, "tool")).format(_count(count, "extra tool"))
 
 
-def _caution_for(name: str, description: str = "") -> str:
-    """What a card should say before you say yes, worked out from the entry.
-
-    It lives here, at the card, because the card is the last place every path
-    passes through: the model pick, the offline fallback and a direct install by
-    name all end up rendering it. A warning that only some paths reach is a
-    warning that will be missing one day.
-    """
-    from . import presets
-
-    if presets.heavy(name):
-        return "heavy"
-    low = "{} {}".format(name, description or "").lower()
-    for marker in ("memory provider", "long-term memory", "long term memory",
-                   "memory plugin", "memory layer", "memory backend"):
-        if marker in low:
-            return "memory"
-    return ""
-
-
 def _caution_line(caution: str) -> str:
-    if caution == "memory":
-        return "  Memory provider: usually needs a paid plan."
-    if caution == "heavy":
-        return "  Heavy: downloads models and wants a GPU."
-    return ""
+    from . import choose
+
+    return choose.CAUTION_LINES.get(caution, "")
 
 
 def render(sentence: str, candidates: list, deps: Optional[list] = None,
@@ -185,7 +163,9 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
         if target
         else ""
     )
-    caution = caution or _caution_for(top.name, top.description)
+    from . import choose
+
+    caution = caution or choose.caution_for(top, sentence)
     lines = ["", "Install {}?".format(top.name), ""]
     sentence = _one_line(top.description)
     if sentence:
@@ -280,6 +260,11 @@ def handle(sentence: str, *, entries=None, store=None, install=None,
             return "Install what? Name the thing you want and the bot after it.\n"
 
     lowered = text.lower()
+
+    if lowered not in NO and lowered not in YES and lowered not in ("more", "2"):
+        from . import market
+
+        market.forget(session_key)
 
     if lowered in NO:
         forgotten = slot.get("sentence", "") or ""

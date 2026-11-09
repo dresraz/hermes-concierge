@@ -10,7 +10,7 @@ number, and the install path you already know runs.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
 
 from . import discover, match, seams
 

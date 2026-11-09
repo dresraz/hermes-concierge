@@ -220,6 +220,14 @@ def _self_name() -> str:
         return ""
 
 
+def _drop_cards(session_key: str) -> None:
+    """Forget every waiting card in this conversation, on both shelves."""
+    from . import card, market
+
+    card.forget(session_key)
+    market.forget(session_key)
+
+
 def _inside(path: "Path", home: "Path") -> bool:
     """True when path really lives under home, not beside a name that shares a prefix."""
     try:
@@ -427,7 +435,7 @@ def handle_concierge(
 
         return shelf.overview()
     if low in CANCEL_WORDS:
-        card.forget(session_key)
+        _drop_cards(session_key)
         market.forget(session_key)
         return "  Dropped. Nothing was installed.\n"
 
@@ -439,24 +447,24 @@ def handle_concierge(
     ):
         return "  Nothing is waiting. Start with: /concierge install <what you want>\n"
     if low in ("help all", "help -a", "help --all"):
-        card.forget(session_key)
+        _drop_cards(session_key)
         return HELP
     if low in HELP_WORDS:
-        card.forget(session_key)
+        _drop_cards(session_key)
         return HELP_SHORT
     what_is_in = re.match(r"^(what(?:'s| is)? (?:in|inside|installed in))\s+(?:my\s+|the\s+)?([a-z0-9_-]+)", low)
     if what_is_in:
-        card.forget(session_key)
+        _drop_cards(session_key)
         return handle_concierge("skills " + what_is_in.group(2), store=store,
                                 session_key=session_key, known=known, hire=hire)
 
     natural = _natural_verb(low)
     if natural == "bots":
-        card.forget(session_key)
+        _drop_cards(session_key)
         return _safe_bots(store)
     first_word = low.split(" ", 1)[0]
     if natural == "fire" and first_word not in ("fire", "reset", "delete", "remove", "rm"):
-        card.forget(session_key)
+        _drop_cards(session_key)
         return (
             "  Deleting a bot needs its number, so nothing is removed by a guess.\n"
             "  /concierge bots, then /concierge fire <number>\n"
@@ -464,7 +472,7 @@ def handle_concierge(
     if natural == "browse":
         from . import shelf
 
-        card.forget(session_key)
+        _drop_cards(session_key)
         return shelf.overview()
     # A card this conversation was shown owns yes, no, more and 1. Checked before
     # anything forgets it, or the flagship loop dies on its own receipt.
@@ -481,7 +489,7 @@ def handle_concierge(
             return card_mod.handle(text, session_key=session_key, store=store)
         # Any other sentence is a new request: the old card is dropped below.
     if low in UNDO_WORDS or re.match(r"^undo\b", low) or re.match(r"^roll ?back\b", low):
-        card.forget(session_key)
+        _drop_cards(session_key)
         return handle_undo(store=store, undo=undo, seams=seams)
 
     if low.replace(" ", "").isdigit() and len(low.replace(" ", "")) > 4:
@@ -496,7 +504,7 @@ def handle_concierge(
     if head in ("browse", "shelf"):
         from . import shelf
 
-        card.forget(session_key)
+        _drop_cards(session_key)
         words = rest.split()
         page = 1
         if len(words) > 1 and words[-1].isdigit() and len(words[-1]) <= 3:
@@ -554,7 +562,7 @@ def handle_concierge(
         )
 
     if head == "bots":
-        card.forget(session_key)
+        _drop_cards(session_key)
         return _safe_bots(store)
 
     if head in ("fire", "delete", "remove", "rm", "reset"):
@@ -566,7 +574,7 @@ def handle_concierge(
         confirm = " ".join(parts[1:])
         if not lifecycle.is_selector(store, selector):
             return card.handle(text, session_key=session_key)
-        card.forget(session_key)
+        _drop_cards(session_key)
         try:
             if head in ("fire", "delete", "remove", "rm"):
                 return lifecycle.fire(store, selector, confirm=confirm, seams=seams)
@@ -575,11 +583,11 @@ def handle_concierge(
             return "  {}\n".format(exc)
 
     if head == "create":
-        card.forget(session_key)
+        _drop_cards(session_key)
         return handle_hire(rest, store=store, hire=hire, known=known)
 
     if head == "improve":
-        card.forget(session_key)
+        _drop_cards(session_key)
         return handle_improve(rest, store=store, known=known)
 
     # "install <what> into <bot>" is the same sentence as a plain request, with
@@ -588,7 +596,7 @@ def handle_concierge(
     if head == "install":
         from . import market as market_mod
 
-        card.forget(session_key)
+        _drop_cards(session_key)
         market_mod.forget(session_key)
         # "install a research bot" is a hire: the sentence names the thing to
         # make, not a package to fetch. A destination still wins.
@@ -610,10 +618,10 @@ def handle_concierge(
 
     spanish = re.match(r"^(?:mejora|mejorar|ens[eñ]a|entrena)\s+(.+)", low)
     if spanish:
-        card.forget(session_key)
+        _drop_cards(session_key)
         return handle_improve(spanish.group(1), store=store, known=known)
     if _improve_shape(text):
-        card.forget(session_key)
+        _drop_cards(session_key)
         return handle_improve(text, store=store, known=known)
 
     intent_name, bot, sentence = _classify(text, store=store)
@@ -623,7 +631,7 @@ def handle_concierge(
     if intent_name != "create" and not (intent_name == "improve" and already):
         if _asks_for_bot(text) or _wants_a_bot(text):
             intent_name, bot, sentence = "create", "", text
-    card.forget(session_key)
+    _drop_cards(session_key)
     if intent_name == "create":
         return handle_hire(sentence or text, store=store, hire=hire, known=known)
     if intent_name == "improve":

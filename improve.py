@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from . import discover, presets, seams
+from . import discover, presets
 from .bots import slugify
 
 # "Whatever is necessary" still has a ceiling: three things, each of which has to
@@ -219,6 +219,21 @@ def _append_locked(soul: Path, plan_: Plan, uuid) -> Optional[dict]:
     except OSError:
         return None
     return {"path": str(soul), "backup": backup, "existed": existed}
+
+
+def _run_home(home: Any) -> str:
+    """The HERMES_HOME a child must be given for this profile.
+
+    A bot lives at <home>/profiles/<name>, so the root is two levels up. The
+    default profile lives at the root itself, where two levels up is a parent
+    directory that holds no profiles at all.
+    """
+    path = Path(str(home))
+    if path.name == "profiles":
+        return str(path.parent)
+    if path.parent.name == "profiles":
+        return str(path.parent.parent)
+    return str(path)
 
 
 def _install_one(bot: str, item: Item, *, home: Path, runner=None) -> bool:

@@ -5,7 +5,6 @@ revokes every other copy. Core's own route is the credential pool, and a bot
 that needs its own credential gets one with `hermes -p <bot> auth add`.
 """
 
-import os
 import pathlib
 import tempfile
 import unittest

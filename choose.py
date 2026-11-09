@@ -160,6 +160,12 @@ def _live() -> list:
         return []
 
 
+CAUTION_LINES = {
+    "memory": "  Memory provider: usually needs a paid plan.",
+    "heavy": "  Heavy: downloads models and wants a GPU.",
+}
+
+
 MEMORY_WORDS = (
     "memory", "remember", "recall", "forget", "long term", "long-term",
     "memorize", "remembers", "context across", "across sessions",
@@ -182,9 +188,12 @@ def _field(row: Any, name: str) -> str:
 
 
 def is_memory_provider(row: Any) -> bool:
-    """A plugin that replaces how Hermes remembers things."""
-    if _field(row, "kind") != "plugin":
-        return False
+    """A thing that replaces how Hermes remembers.
+
+    Kind is deliberately not consulted: a skill that swaps memory has the same
+    cost as a plugin that does, and requiring kind == plugin is how "knowledge
+    graph memory" slipped through without a warning.
+    """
     blob = "{} {}".format(_field(row, "name"), _field(row, "description"))
     low = blob.lower()
     return any(marker in low for marker in MEMORY_MARKERS) or "memory" in low.split(" ", 1)[-1][:40]
@@ -473,6 +482,7 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
         return Option("Hermes itself", tool, "builtin") if tool else None
     for row in rows:
         if row.name.lower() == chosen.lower():
+            row.caution = caution_for(row, ask)
             # A pick that sits far below the lexical top would be the model
             # ignoring the evidence, which is how a "pdf" ask turns into a
             # workspace plugin. It may reorder the leaders; it may not drag in

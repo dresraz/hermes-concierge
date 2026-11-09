@@ -139,38 +139,18 @@ def _shipped_line(name: str) -> str:
     return ""
 
 
-def _caution_for(name: str, description: str = "") -> str:
-    """What a card should say before you say yes, worked out from the entry.
-
-    It lives here, at the card, because the card is the last place every path
-    passes through: the model pick, the offline fallback and a direct install by
-    name all end up rendering it. A warning that only some paths reach is a
-    warning that will be missing one day.
-    """
-    from . import presets
-
-    if presets.heavy(name):
-        return "heavy"
-    low = "{} {}".format(name, description or "").lower()
-    for marker in ("memory provider", "long-term memory", "long term memory",
-                   "memory plugin", "memory layer", "memory backend"):
-        if marker in low:
-            return "memory"
-    return ""
-
-
 def _caution_line(caution: str) -> str:
-    if caution == "memory":
-        return "  Memory provider: usually needs a paid plan."
-    if caution == "heavy":
-        return "  Heavy: downloads models and wants a GPU."
-    return ""
+    from . import choose
+
+    return choose.CAUTION_LINES.get(caution, "")
 
 
 def render(text: str, offers: list, target: str, caution: str = "") -> str:
     """The skill card: a name, one line, two words."""
     top = offers[0]
-    caution = caution or _caution_for(top.name, top.description)
+    from . import choose
+
+    caution = caution or choose.caution_for(top, text)
     lines = ["", "Install {}?".format(top.name)]
     body = []
     # A registry blurb ("Indexed by skills.sh · 225,675 installs") tells a
@@ -246,6 +226,10 @@ def handle(text: str, *, target: str = "", session_key: str = "",
         # The card describes one offer and may name a runner-up; a number is not
         # a choice between two cards. Refuse it without dropping the offer.
         return "One install at a time. Say yes for the top match, or name the other one.\n"
+
+    from . import card as _card
+
+    _card.forget(session_key)
 
     query, named = split_target(text)
     if named and not target:

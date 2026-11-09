@@ -15,7 +15,7 @@ import os
 import re
 import shutil
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Sequence
 
 BACKUP_SUFFIX = ".concierge-backup"
 MAX_SOUL_CHARS = 1200

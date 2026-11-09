@@ -27,7 +27,6 @@ INSTALL_TIMEOUT = 90  # one skill, not a whole role, has to finish in this
 
 # A preset is a sentence long. A skill this heavy is a decision the person makes
 # on purpose ("install comfyui"), never something a role drags in.
-HEAVY_KB = 150
 
 # Not about kilobytes alone: comfyui drags in diffusion models and wants a GPU,
 # and popular-web-designs is 855 KB of reference images. A role never installs

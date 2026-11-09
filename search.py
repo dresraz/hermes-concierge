@@ -23,7 +23,6 @@ from typing import Any, Optional
 
 from . import seams
 
-INDEX_VERSION = 3
 INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills.json"
 
 # The Nous marketplace, not the wider skill internet. The published index also
