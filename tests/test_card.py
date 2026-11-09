@@ -94,11 +94,11 @@ class Ask(unittest.TestCase):
         text = card.handle("change the colors of my terminal", entries=CATALOG)
         self.assertIn("hermes-themes-pack", text)
         self.assertIn("/concierge yes", text)
-        self.assertIn("github.com/example/hermes-themes-pack", text)
+        self.assertIn("Install hermes-themes-pack?", text)
 
     def test_card_explains_why(self):
         text = card.handle("drive a real browser", entries=CATALOG)
-        self.assertIn("What it is", text)
+        self.assertIn("Drive a browser", text)
         self.assertIn("browser", text)
 
     def test_cost_line_is_honest_when_no_tools_are_added(self):
@@ -122,7 +122,7 @@ class Ask(unittest.TestCase):
     def test_runner_up_is_named_but_never_numbered(self):
         text = card.handle("themes memory browser", entries=CATALOG)
         # The rival is named so it can be asked for by name...
-        self.assertIn("also hermes-memory-locus", text)
+        self.assertIn("Another option: hermes-memory-locus", text)
         # ...but there is no second number: a number installs what the card did not
         # describe, which is a decision made blind.
         self.assertNotIn("1 or 2", text)
@@ -132,9 +132,8 @@ class Ask(unittest.TestCase):
         card.handle("themes memory browser", entries=CATALOG)
         text = card.handle("more", entries=CATALOG)
         self.assertIn("hermes-memory-locus", text)
-        self.assertIn("What it is", text)
-        self.assertIn("adds", text)
-        self.assertIn("What it adds", text)
+        self.assertIn("Memory provider", text)
+        self.assertIn("/concierge yes", text)
 
         picked = []
 

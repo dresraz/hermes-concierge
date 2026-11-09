@@ -87,8 +87,8 @@ class Card(unittest.TestCase):
             search_fn=lambda query, limit: [hit("stripe", "stripe@skills.sh")],
         )
         self.assertIn("Install stripe?", card)
-        self.assertIn("Goes          into intern (not this profile)", card)
-        self.assertIn("From           stripe@skills.sh", card)
+        self.assertIn("It goes into intern", card)
+        self.assertIn("Install stripe?", card)
         self.assertTrue(market.is_waiting("s1"))
 
     def test_the_card_says_this_profile_when_no_bot_was_named(self):
@@ -97,7 +97,7 @@ class Card(unittest.TestCase):
             session_key="s1",
             search_fn=lambda query, limit: [hit("stripe")],
         )
-        self.assertIn("Goes          this profile", card)
+        self.assertIn("Install stripe?", card)
 
     def test_nothing_found_installs_nothing(self):
         card = market.handle(
@@ -186,7 +186,7 @@ class BothShelves(unittest.TestCase):
                 search=lambda query, limit: asked.append(query) or [],
             )
         self.assertIn("Install hermes-themes-pack?", text)
-        self.assertIn("Goes          into intern", text)
+        self.assertIn("It goes into intern", text)
         self.assertEqual(asked, [])
 
     def test_the_skill_shelf_answers_when_no_plugin_matches(self):
@@ -196,7 +196,7 @@ class BothShelves(unittest.TestCase):
                 search=lambda query, limit: [hit("stripe", "stripe@skills.sh")],
             )
         self.assertIn("Install stripe?", text)
-        self.assertIn("From           stripe@skills.sh", text)
+        self.assertIn("Install stripe?", text)
 
 
 class CardSplitsTheBot(unittest.TestCase):

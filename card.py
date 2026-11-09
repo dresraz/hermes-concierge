@@ -144,13 +144,26 @@ def deps_line(deps) -> str:
     return f"  deps        {shown}  installed with it, no extra question"
 
 
+def _one_line(description: str, limit: int = 96) -> str:
+    """One sentence a stranger reads without scrolling."""
+    text = " ".join((description or "").split())
+    if not text:
+        return ""
+    cut = text.find(". ")
+    if 0 < cut < limit:
+        return text[: cut + 1]
+    if len(text) > limit:
+        return _fit(text, limit)
+    return text if text.endswith(".") else text + "."
+
+
 def _plain_adds(entry) -> str:
     """What the plugin does to the agent, in words a new person parses once."""
     tools = _caps(entry).get("tools") or []
     if not tools:
-        return "Nothing new. It just works when you ask."
+        return ""
     count = len(tools) if isinstance(tools, (list, tuple)) else 1
-    return "{} the agent can use on every message.".format(_count(count, "extra tool"))
+    return "Adds {}.".format(_count(count, "tool")).format(_count(count, "extra tool"))
 
 
 def render(sentence: str, candidates: list, deps: Optional[list] = None,
@@ -164,35 +177,36 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
     from . import seams
 
     top = candidates[0]
-    where = "into {} (not this profile)".format(target) if target else "this profile"
+    where = (
+        "It goes into {}.".format(target)
+        if target
+        else ""
+    )
     lines = ["", "Install {}?".format(top.name), ""]
-    description = " ".join(top.description.split())
-    if description:
-        lines.append("  What it is    {}".format(_fit(description, 150)))
-    lines.append("  What it adds  {}".format(_plain_adds(top.entry)))
+    sentence = _one_line(top.description)
+    if sentence:
+        lines.append("  " + sentence)
+    adds = _plain_adds(top.entry)
     if deps:
-        names = ", ".join(_dep_name(str(d)) for d in deps[:4])
-        if len(deps) > 4:
-            names += " (+{} more)".format(len(deps) - 4)
-        risky = seams.risky_deps(deps)
-        lines.append(
-            "  It also needs {}{}".format(names, " (from git, not PyPI)" if risky else "")
-        )
-    lines.append("  Goes          {}".format(where))
+        names = ", ".join(_dep_name(str(d)) for d in deps[:3])
+        if len(deps) > 3:
+            names += " +{}".format(len(deps) - 3)
+        risky = ""
+        try:
+            from . import seams as _seams
+
+            risky = " (from git)" if _seams.risky_deps(deps) else ""
+        except Exception:
+            risky = ""
+        adds = " ".join(part for part in (adds, "Also installs {}{}.".format(names, risky)) if part)
+    tail = " ".join(part for part in (adds, where) if part)
+    if tail:
+        lines.append("  " + tail)
 
     rival = _contender(candidates)
     if rival is not None:
-        lines += ["", "  Not what you meant? There is also {}.".format(rival.name)]
-        lines.append("  Say its name to see it instead.")
-    repo = str(getattr(top.entry, "repo", "") or "")
-    if repo:
-        lines += ["", "  From           {}".format(repo.replace("https://", "").replace("http://", ""))]
-    lines += [
-        "",
-        "  /concierge yes     install it",
-        "  /concierge no      skip it",
-        "",
-    ]
+        lines += ["", "  Another option: {}.".format(rival.name)]
+    lines += ["", "  /concierge yes     install it", "  /concierge no      skip it", ""]
     return "\n".join(lines)
 
 
@@ -296,10 +310,8 @@ def more(session_key: str = "") -> str:
 
     rival = picked[1]
     lines = ["", "{}".format(rival.name), ""]
-    description = " ".join(rival.description.split())
-    if description:
-        lines.append("  What it is    {}".format(_fit(description, 150)))
-    lines.append("  What it adds  {}".format(_plain_adds(rival.entry)))
+    if rival.description:
+        lines.append("  " + _one_line(rival.description))
     lines += [
         "",
         "The card still holds {}. /concierge yes installs that.".format(picked[0].name),

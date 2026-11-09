@@ -127,28 +127,27 @@ def _hub_search(query: str, limit: int) -> list:
 
 
 def render(text: str, offers: list, target: str) -> str:
-    """The skill card, in the same plain words as the plugin card."""
-    from . import seams
-
+    """The skill card: a name, one line, two words."""
     top = offers[0]
-    profile = target or seams.current_profile()
-    where = "into {} (not this profile)".format(target) if target else "this profile"
-    lines = ["", "Install {}?".format(top.name), ""]
+    lines = ["", "Install {}?".format(top.name)]
+    body = []
     if top.description:
-        lines.append("  What it is    {}".format(_fit(top.description, 150)))
-    lines.append("  What it adds  a skill: instructions the agent can follow.")
-    lines.append("  Goes          {}".format(where))
-    if getattr(top, "identifier", ""):
-        lines += ["", "  From           {}".format(top.identifier)]
+        line = " ".join(top.description.split())
+        cut = line.find(". ")
+        if 0 < cut < 96:
+            line = line[: cut + 1]
+        elif len(line) > 96:
+            line = _fit(line, 96)
+        elif not line.endswith("."):
+            line += "."
+        body.append("  " + line)
+    if target:
+        body.append("  It goes into {}.".format(target))
+    if body:
+        lines += [""] + body
     if len(offers) > 1:
-        lines += ["", "  Not what you meant? There is also {}.".format(offers[1].name)]
-        lines.append("  Say its name to see it instead.")
-    lines += [
-        "",
-        "  /concierge yes     install it",
-        "  /concierge no      skip it",
-        "",
-    ]
+        lines += ["", "  Another option: {}.".format(offers[1].name)]
+    lines += ["", "  /concierge yes     install it", "  /concierge no      skip it", ""]
     return "\n".join(lines)
 
 
