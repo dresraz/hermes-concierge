@@ -1178,6 +1178,38 @@ def handle_concierge(
     return answer
 
 
+def _exact_entry(query: str, catalog: list) -> str:
+    """The entry whose own name is exactly what was asked for, if any."""
+    wanted = "".join(char for char in (query or "").lower() if char.isalnum())
+    if not wanted:
+        return ""
+    for entry in catalog or []:
+        name = getattr(entry, "name", "") or (
+            entry.get("name", "") if isinstance(entry, dict) else ""
+        )
+        flat = "".join(char for char in str(name).lower() if char.isalnum())
+        if flat and flat == wanted:
+            return str(name)
+    return ""
+
+
+def _exact_skill(query: str) -> str:
+    """A skill asked for by its own name installs the way a named plugin does."""
+    wanted = "".join(char for char in (query or "").lower() if char.isalnum())
+    if not wanted:
+        return ""
+    try:
+        from . import discover
+
+        for item in discover.catalogue():
+            flat = "".join(char for char in item["name"].lower() if char.isalnum())
+            if flat and flat == wanted:
+                return item["name"]
+    except Exception:
+        return ""
+    return ""
+
+
 def handle_install(
     raw: Any,
     *,
@@ -1233,6 +1265,21 @@ def handle_install(
     ):
         return card.handle(text, entries=catalog, store=store,
                            session_key=session_key, target=target)
+
+    # Asked for by name, with nothing to choose: install and print the receipt.
+    # The card exists to ask a question; when the sentence already answered it,
+    # the question is friction.
+    exact = _exact_entry(query, catalog)
+    if exact:
+        card.handle(exact, entries=catalog, store=store, session_key=session_key, target=target)
+        return card.handle("yes", entries=catalog, store=store, session_key=session_key,
+                           target=target)
+    exact_skill = _exact_skill(query)
+    if exact_skill:
+        market.handle(exact_skill, target=target, session_key=session_key,
+                      store=store, search_fn=search)
+        return market.handle("yes", target=target, session_key=session_key,
+                             store=store, search_fn=search)
 
     # The matcher builds a shortlist; the model picks from it. A name asked for
     # by name skips the model, so obvious asks stay instant.
