@@ -126,12 +126,31 @@ def _hub_search(query: str, limit: int) -> list:
     ]
 
 
+def _shipped_line(name: str) -> str:
+    """What the skill does, from the skill itself, not the registry's blurb."""
+    try:
+        from . import discover
+
+        for item in discover.catalogue():
+            if item["name"] == name:
+                return str(item.get("why") or item.get("description") or "")
+    except Exception:
+        pass
+    return ""
+
+
 def render(text: str, offers: list, target: str) -> str:
     """The skill card: a name, one line, two words."""
     top = offers[0]
     lines = ["", "Install {}?".format(top.name)]
     body = []
-    if top.description:
+    # A registry blurb ("Indexed by skills.sh · 225,675 installs") tells a
+    # stranger nothing about what the thing does. The skill's own one-liner
+    # is already on this machine.
+    described = top.description
+    if not described or described.lower().startswith("indexed by"):
+        described = _shipped_line(top.name) or ""
+    if described:
         line = " ".join(top.description.split())
         cut = line.find(". ")
         if 0 < cut < 96:

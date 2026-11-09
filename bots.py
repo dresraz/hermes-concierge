@@ -187,6 +187,15 @@ def _skills_on_disk(home) -> int:
     return found
 
 
+def _soul_gist(soul_text: str) -> str:
+    """The first real sentence of the soul: what the bot says about itself."""
+    for line in soul_text.splitlines():
+        clean = " ".join(line.strip().lstrip("#").split())
+        if len(clean) > 12 and not clean.endswith(":") and clean.lower() != "learned rules":
+            return clean[:72]
+    return "a personality"
+
+
 def receipt(plan: Spec, path: object, known: Sequence[str] | None = None,
             count_skills: bool = True) -> tuple[list[str], bool]:
     """Read the new profile off the disk and report what is really there."""
@@ -206,7 +215,7 @@ def receipt(plan: Spec, path: object, known: Sequence[str] | None = None,
     except Exception:
         listed = plan.name in (list(known) if known is not None else names())
     ok = home.is_dir() and bool(soul_text.strip()) and listed
-    lines = ["  soul     " + ("a personality, {} chars".format(len(soul_text)) if soul_text else "MISSING")]
+    lines = ["  soul     " + (_soul_gist(soul_text) if soul_text else "MISSING")]
     # One count only: when the role line below names the skills, a second
     # number above it reads as a mismatch to anyone who is not the author.
     if count_skills and skills:

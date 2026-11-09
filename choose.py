@@ -32,7 +32,7 @@ ERRANDS = (
     "write my will", "sign the contract for me", "pick up my kids",
 )
 
-SHORTLIST = 10
+SHORTLIST = 14
 
 INSTRUCTIONS = """You are choosing one item from a shortlist of Hermes skills and plugins.
 
