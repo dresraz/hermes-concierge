@@ -69,12 +69,58 @@ def fold(word: str) -> str:
     return word
 
 
+# Enough of a description to know what a thing is; the long tail is the
+# difference between 1.6 MB and half that, and nobody picks from paragraph nine.
+KEEP = 220
+
+
+def _clip(text: Any) -> str:
+    clean = " ".join(str(text or "").split())
+    return clean[:KEEP]
+
+
 def _entry(kind: str, name: str, description: str, payload: Any = None) -> dict:
-    return {"kind": kind, "name": str(name or ""), "description": str(description or ""), "payload": payload}
+    return {"kind": kind, "name": str(name or ""), "description": _clip(description), "payload": payload}
 
 
 def _skills_file() -> str:
     return os.path.join(_cache_dir(), "skills.json")
+
+
+def _read_meta(name: str) -> dict:
+    try:
+        with open(os.path.join(_cache_dir(), name), "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def _write_meta(name: str, meta: dict) -> None:
+    try:
+        with open(os.path.join(_cache_dir(), name), "w", encoding="utf-8") as fh:
+            json.dump(meta, fh)
+    except Exception:
+        pass
+
+
+def _json_payload(url: str, etag: str = "") -> tuple:
+    """Fetch a published list gzipped, honouring an ETag. None means unchanged."""
+    headers = {"Accept-Encoding": "gzip"}
+    if etag:
+        headers["If-None-Match"] = etag
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=90) as resp:
+            raw = resp.read()
+            if resp.headers.get("Content-Encoding") == "gzip":
+                import gzip
+
+                raw = gzip.decompress(raw)
+            return json.loads(raw), resp.headers.get("ETag") or ""
+    except urllib.error.HTTPError as exc:
+        if exc.code == 304:
+            return None, etag
+        raise
 
 
 def _skills_meta() -> dict:
@@ -141,7 +187,7 @@ def _skills() -> list:
                 payload.get("skills") or payload.get("entries") or []
             ) if isinstance(payload, dict) else []
             rows = [
-                {"name": item.get("name", ""), "description": item.get("description", ""), "source": item.get("source", "")}
+                {"name": item.get("name", ""), "description": _clip(item.get("description")), "source": item.get("source", "")}
                 for item in items
                 if isinstance(item, dict) and str(item.get("source") or "") in NOUS_SOURCES
             ]
@@ -162,11 +208,36 @@ def _local_skills() -> list:
     return out
 
 
+PLUGIN_URL = "https://hermes-agent.nousresearch.com/docs/api/plugin-catalog.json"
+
+
 def _plugins() -> list:
-    try:
-        return [_entry("plugin", e.name, getattr(e, "description", ""), e) for e in seams.catalog()]
-    except Exception:
-        return []
+    """Name and one line per plugin. The 2.4 MB document is read and dropped."""
+    meta = _plugins_meta()
+    rows = meta.get("rows") or []
+    checked = float(meta.get("checked_at") or 0)
+    if not rows or (time.time() - checked) > 24 * 60 * 60:
+        try:
+            payload, etag = _json_payload(PLUGIN_URL, meta.get("etag", ""))
+        except Exception:
+            payload, etag = None, meta.get("etag", "")
+        if payload is not None:
+            items = payload if isinstance(payload, list) else (
+                payload.get("entries") or payload.get("plugins") or []
+            ) if isinstance(payload, dict) else []
+            rows = [
+                {"name": str(item.get("name") or ""), "description": _clip(item.get("description"))}
+                for item in items
+                if isinstance(item, dict) and item.get("name")
+            ]
+            _write_meta("plugins-meta.json", {"checked_at": time.time(), "etag": etag, "rows": rows})
+        elif rows:
+            _write_meta("plugins-meta.json", {**meta, "checked_at": time.time()})
+    return [_entry("plugin", r["name"], r.get("description", ""), r) for r in rows]
+
+
+def _plugins_meta() -> dict:
+    return _read_meta("plugins-meta.json")
 
 
 def _connectors() -> list:
