@@ -144,6 +144,35 @@ def deps_line(deps) -> str:
     return f"  deps        {shown}  installed with it, no extra question"
 
 
+JURISDICTIONS = {
+    "mexic": "Mexico (CFDI / SAT)",
+    "cfdi": "Mexico (CFDI / SAT)",
+    "sat taxes": "Mexico (CFDI / SAT)",
+    "irs": "the United States (IRS)",
+    "w-2": "the United States (IRS)",
+    "hmrc": "the United Kingdom (HMRC)",
+    "nfe": "Brazil (NF-e)",
+    "nf-e": "Brazil (NF-e)",
+    "australian tax": "Australia (ATO)",
+    "gst": "Australia / India (GST)",
+}
+
+
+def jurisdiction(entry) -> str:
+    """The country a plug-in is locked to, when it says so about itself.
+
+    Mexican invoicing is useless in Peru, and a new person should not have to
+    work that out from the description: the card says it, and the answer is no.
+    """
+    blob = " ".join(
+        str(getattr(entry, key, "") or "") for key in ("name", "title", "description")
+    ).lower()
+    for marker, label in JURISDICTIONS.items():
+        if marker in blob:
+            return label
+    return ""
+
+
 def _one_line(description: str, limit: int = 96) -> str:
     """One sentence a stranger reads without scrolling."""
     text = " ".join((description or "").split())
@@ -202,6 +231,10 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
     tail = " ".join(part for part in (adds, where) if part)
     if tail:
         lines.append("  " + tail)
+    locked = jurisdiction(top.entry)
+    if locked and locked.split(" (")[0].lower() not in sentence.lower():
+        # Only when the ask did not name that country itself.
+        lines.append("  Only for {}. Not your country? Say no.".format(locked))
 
     rival = _contender(candidates)
     if rival is not None:

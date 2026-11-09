@@ -647,6 +647,10 @@ def handle_concierge(
         named = role is not None and role.name in low_text.split()
         if finance:
             subject = "an analyst for this (it can build the workbook)"
+            answer += (
+                "  Tax and invoicing tools are country-specific: say which country\n"
+                "  and I will look for one that fits.\n"
+            )
         elif named:
             subject = "a {} for this".format(role.name)
         else:
