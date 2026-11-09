@@ -38,17 +38,17 @@ class Admission(unittest.TestCase):
         self.assertIsNone(reply.on_admission(text="yes", session_key="chat-a"))
 
     def test_the_chat_that_was_shown_the_card_gets_the_answer(self):
-        card._PENDING["chat-a"] = {"entry": object(), "entries": []}
+        card._PENDING["chat-a"] = {"sentence": "install pdf", "entry": object(), "entries": [object()]}
         result = reply.on_admission(text="no", session_key="chat-a")
         self.assertEqual(result["action"], "handled")
         self.assertIn("Nothing installed", result["reply"])
 
     def test_another_chat_cannot_answer_it(self):
-        card._PENDING["chat-a"] = {"entry": object(), "entries": []}
+        card._PENDING["chat-a"] = {"sentence": "install pdf", "entry": object(), "entries": [object()]}
         self.assertIsNone(reply.on_admission(text="yes", session_key="chat-b"))
 
     def test_a_sentence_is_not_consumed(self):
-        card._PENDING["chat-a"] = {"entry": object(), "entries": []}
+        card._PENDING["chat-a"] = {"sentence": "install pdf", "entry": object(), "entries": [object()]}
         self.assertIsNone(reply.on_admission(text="yes, and also make it blue", session_key="chat-a"))
 
     def test_no_session_key_means_no_answer(self):

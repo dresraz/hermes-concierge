@@ -268,7 +268,8 @@ def _remember(record, store) -> bool:
 
 
 def is_waiting(session_key: str = "") -> bool:
-    return bool(_PENDING.get(session_key))
+    slot = _PENDING.get(session_key) or {}
+    return bool(slot.get("offers"))
 
 
 def forget(session_key: str = "") -> None:

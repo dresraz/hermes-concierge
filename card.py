@@ -329,13 +329,19 @@ def _install(entry, *, store=None, install=None, session_key: str = "",
         shown.append(report)
         return False
 
-    if target:
-        # A named bot is a profile, and core binds HERMES_HOME at import, so this
-        # runs core's own command line as a child with -p. The child runs the
-        # same scan and admission; Concierge only reports what it wrote.
-        outcome = seams.install_in(entry, target)
-    else:
-        outcome = install_fn(entry, approve=approve)
+    try:
+        if target:
+            # A named bot is a profile, and core binds HERMES_HOME at import, so
+            # this runs core's own command line as a child with -p. The child
+            # runs the same scan and admission; we only report what it wrote.
+            outcome = seams.install_in(entry, target)
+        else:
+            outcome = install_fn(entry, approve=approve)
+    except Exception as exc:
+        # An installer that cannot run is a failure to report, never a traceback
+        # in the middle of someone's conversation.
+        _reset(session_key)
+        return "Not installed: {}: {}\n".format(type(exc).__name__, exc)
 
     if not outcome.ok:
         if not target and outcome.verdict == "caution" and not slot.get("caution_accepted"):
@@ -445,4 +451,5 @@ def forget(session_key: str = "") -> None:
 
 def is_waiting(session_key: str = "") -> bool:
     """True when this conversation has a card standing open."""
-    return bool(_PENDING.get(session_key or ""))
+    slot = _PENDING.get(session_key or "") or {}
+    return bool(slot.get("entries"))

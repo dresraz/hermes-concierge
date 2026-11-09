@@ -403,7 +403,15 @@ def handle_concierge(
     from . import card as card_mod
 
     if card_mod.is_waiting(session_key):
-        return card_mod.handle(text, session_key=session_key, store=store)
+        word = low.strip().rstrip("!.")
+        if (
+            word in card_mod.YES
+            or word in card_mod.NO
+            or word in card_mod.MORE
+            or word in ("1", "2")
+        ):
+            return card_mod.handle(text, session_key=session_key, store=store)
+        # Any other sentence is a new request: the old card is dropped below.
     if low in UNDO_WORDS or re.match(r"^undo\b", low) or re.match(r"^roll ?back\b", low):
         card.forget(session_key)
         _forget("", session_key)
@@ -537,6 +545,19 @@ def handle_concierge(
             return "  This bot can only install into itself, not {}.\n".format(target)
         return card_mod.handle(text, session_key=session_key, store=store, target=here)
 
+    # "into <word>" that is not a bot is a typo, not a destination.
+    aimed = re.search(r"\binto\s+([a-z0-9_-]+)\s*$", text, re.I)
+    if aimed:
+        try:
+            from . import seams as _seams
+
+            if not _seams.profile_exists(aimed.group(1)):
+                return "  No bot called {}. Say /concierge bots to see them.\n".format(
+                    aimed.group(1)
+                )
+        except Exception:
+            pass
+
     # No bot named: a plugin or a skill. A skill this machine already ships wins
     # when the sentence names it, because it costs nothing and adds no tools;
     # otherwise the catalog answers first, and the skills on disk get a turn
@@ -595,6 +616,8 @@ def handle_install(
         target = here
     if not target:
         aimed = re.search(r"\binto\s+([a-z0-9_-]+)\s*$", text, re.I)
+        if aimed and not seams.profile_exists(aimed.group(1)):
+            return "  No bot called {}. Say /concierge bots to see them.\n".format(aimed.group(1))
         if aimed and seams.profile_exists(aimed.group(1)):
             target = aimed.group(1)
             query = text[: aimed.start()].strip()
