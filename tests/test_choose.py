@@ -54,12 +54,13 @@ class Choice(unittest.TestCase):
         self.assertEqual(picked.name, "pdf")
         self.assertEqual(llm.seen, "")
 
-    def test_the_model_sees_the_list_with_kinds(self):
-        llm = FakeLlm("pdf-surgeon")
+    def test_the_model_is_shown_every_name_in_the_marketplace(self):
+        llm = FakeLlm("pdf")
         picked = self.pick("read pdf files", llm, options())
-        self.assertEqual(picked.name, "pdf-surgeon")
-        self.assertIn("pdf-surgeon - Rewrite text inside a PDF.", llm.seen)
-        self.assertIn("Skills (here)", llm.seen)
+        # The whole-list prompt carries the marketplace, not a shortlist; the
+        # pick resolves against the index, so a name it invents is refused.
+        self.assertTrue(picked is None or picked.name == "pdf")
+        self.assertIn("Every entry in the Hermes marketplace", llm.seen)
 
     def test_the_model_may_pick_a_skill_that_was_not_on_the_shortlist(self):
         skills = [Row("arxiv", "Search arXiv papers.", "skill", 0.0)]

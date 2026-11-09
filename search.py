@@ -363,6 +363,15 @@ def search(query: str, limit: int = 20) -> list:
     return index().search(query, limit)
 
 
+def menu() -> str:
+    """Every entry as one line: kind and name. 43k characters for 2,131.
+
+    Small enough to hand a model the whole marketplace, which beats any keyword
+    gate: the gate is what hides "weather" from "is it going to rain".
+    """
+    return "\n".join("{} {}".format(row["kind"], row["name"]) for row in index().rows)
+
+
 def find(kind: str, name: str) -> Optional[dict]:
     for row in index().rows:
         if row["kind"] == kind and row["name"].lower() == str(name or "").lower():
