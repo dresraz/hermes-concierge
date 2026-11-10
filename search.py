@@ -1,372 +1,178 @@
-"""Search the whole marketplace: every plugin and skill, ranked locally.
+"""The marketplace lists, read as published, never invented.
 
-The old matcher scored a hand-picked catalog with hand-written weights. This is a
-real index over everything Hermes can install — about 105,000 entries — built once,
-cached on disk, and asked in milliseconds. No model, no downloads, no network at
-question time.
-
-Ranking is BM25: term frequency, document length, and how rare a word is. That is
-the boring, correct answer for "find entries that talk about this", and it does not
-need a synonym table to work.
+Two published files: the skills list and the plugin catalog. One small cache
+each under the active home, rebuilt only when the source changes or a day has
+passed. Queries are plain token overlap. The model orders and names; this file
+only counts and ranks lexically for the offline fallback.
 """
 
 from __future__ import annotations
 
 import json
-import math
-import os
 import time
 import urllib.request
-from collections import Counter
-from typing import Any, Optional
+from pathlib import Path
 
-from . import seams
-from . import text as _text
+SKILLS_URL = "https://hermes-agent.nousresearch.com/docs/api/skills.json"
+PLUGINS_URL = "https://hermes-agent.nousresearch.com/docs/api/plugin-catalog.json"
 
-INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills.json"
-
-# The Nous marketplace, not the wider skill internet. The published index also
-# carries ClawHub, LobeHub and skills.sh; those are 100k third-party skills and
-# offering them is how "find recent papers" once answered with a Chinese paper
-# site. Only the first-party rows are in scope.
-# The sources the marketplace's Skills tab shows. The published index also
-# carries ClawHub, LobeHub, skills.sh and browse.sh — 100k third-party skills
-# the screen does not list, and a model cannot read. 44 built-in + 141 optional
-# + 526 GitHub is the 711 the marketplace shows.
-NOUS_SOURCES = frozenset({"built-in", "optional", "GitHub"})
+DAY = 24 * 60 * 60
 
 
-
-def _cache_dir() -> str:
+def _home() -> Path:
     try:
         from hermes_constants import get_hermes_home
 
-        home = get_hermes_home()
+        return Path(str(get_hermes_home()))
     except Exception:
-        home = os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes")
-    path = os.path.join(str(home), "cache", "concierge")
-    os.makedirs(path, exist_ok=True)
-    return path
+        import os
+
+        return Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
 
 
-def words(text: str) -> list:
-    """The text's own tokens: lower-cased alphanumerics longer than one char."""
-    return [w for w in _text.words(text) if len(w) > 1]
-
-
-def fold(word: str) -> str:
-    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
-        return word[:-1]
-    return word
-
-
-# Enough of a description to know what a thing is; the long tail is the
-# difference between 1.6 MB and half that, and nobody picks from paragraph nine.
-KEEP = 220
-
-
-def _clip(text: Any) -> str:
-    clean = " ".join(str(text or "").split())
-    return clean[:KEEP]
-
-
-def _entry(kind: str, name: str, description: str, payload: Any = None) -> dict:
-    return {"kind": kind, "name": str(name or ""), "description": _clip(description), "payload": payload}
-
-
-def _read_meta(name: str) -> dict:
+def _cache_dir() -> Path:
+    directory = _home() / "cache" / "concierge"
     try:
-        with open(os.path.join(_cache_dir(), name), "r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
-
-
-def _write_meta(name: str, meta: dict) -> None:
-    try:
-        with open(os.path.join(_cache_dir(), name), "w", encoding="utf-8") as fh:
-            json.dump(meta, fh)
+        directory.mkdir(parents=True, exist_ok=True)
     except Exception:
         pass
+    return directory
 
 
-def _json_payload(url: str, etag: str = "") -> tuple:
-    """Fetch a published list gzipped, honouring an ETag. None means unchanged."""
-    headers = {"Accept-Encoding": "gzip"}
-    if etag:
-        headers["If-None-Match"] = etag
-    request = urllib.request.Request(url, headers=headers)
+def _load(url: str, filename: str) -> list:
+    cache = _cache_dir() / filename
+    rows: list = []
+    checked = 0.0
     try:
-        with urllib.request.urlopen(request, timeout=90) as resp:
-            raw = resp.read()
-            if resp.headers.get("Content-Encoding") == "gzip":
+        meta = json.loads(cache.read_text()) if cache.exists() else {}
+        rows = meta.get("rows") or []
+        checked = float(meta.get("checked_at") or 0)
+    except Exception:
+        rows = []
+    if rows and (time.time() - checked) < DAY:
+        return rows
+    try:
+        request = urllib.request.Request(url, headers={"Accept-Encoding": "gzip", "User-Agent": "hermes-concierge"})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            raw = response.read()
+            try:
                 import gzip
 
-                raw = gzip.decompress(raw)
-            return json.loads(raw), resp.headers.get("ETag") or ""
-    except urllib.error.HTTPError as exc:
-        if exc.code == 304:
-            return None, etag
-        raise
-
-
-def _skills_meta() -> dict:
-    """What we kept last time, and how to tell whether it changed."""
-    path = os.path.join(_cache_dir(), "skills-meta.json")
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            return json.load(fh)
+                if response.headers.get("Content-Encoding") == "gzip":
+                    raw = gzip.decompress(raw)
+            except Exception:
+                pass
+            payload = json.loads(raw.decode("utf-8", "replace"))
     except Exception:
-        return {}
-
-
-def _write_skills_meta(meta: dict) -> None:
-    try:
-        with open(os.path.join(_cache_dir(), "skills-meta.json"), "w", encoding="utf-8") as fh:
-            json.dump(meta, fh)
-    except Exception:
-        pass
-
-
-def _skills_payload(url: str, etag: str = "") -> tuple:
-    """The published document, gzipped, never written to disk whole.
-
-    It is 65 MB uncompressed. We read it, keep the 711 rows that matter, and
-    throw the rest away. A conditional request costs a few hundred bytes and
-    answers "unchanged" without sending the file at all.
-    """
-    headers = {"Accept-Encoding": "gzip"}
-    if etag:
-        headers["If-None-Match"] = etag
-    request = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(request, timeout=90) as resp:
-            raw = resp.read()
-            if resp.headers.get("Content-Encoding") == "gzip":
-                import gzip
-
-                raw = gzip.decompress(raw)
-            return json.loads(raw), resp.headers.get("ETag") or ""
-    except urllib.error.HTTPError as exc:
-        if exc.code == 304:
-            return None, etag or ""
-        raise
-
-
-def _skills() -> list:
-    """The 711 skills the marketplace's Skills tab lists."""
-    meta = _skills_meta()
-    rows = meta.get("rows") or []
-    checked = float(meta.get("checked_at") or 0)
-    # Ask whether it changed at most once a day; a "no" costs a few hundred
-    # bytes and the 11 MB only moves when the list really is new.
-    if not rows or (time.time() - checked) > 24 * 60 * 60:
+        return rows
+    items = payload if isinstance(payload, list) else (
+        payload.get("skills") or payload.get("entries") or payload.get("plugins") or []
+    ) if isinstance(payload, dict) else []
+    fresh: list = []
+    keep_official = filename == "skills-meta.json"
+    seen: set = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name or len(name) > 100:
+            continue
+        source = str(item.get("source") or "marketplace")
+        if keep_official and source not in ("built-in", "optional", "GitHub"):
+            continue
+        if name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        fresh.append({
+            "name": name,
+            "description": str(item.get("description") or item.get("overview") or "")[:300],
+            "source": source,
+        })
+    if fresh:
         try:
-            payload, etag = _skills_payload(INDEX_URL, meta.get("etag", ""))
+            cache.write_text(json.dumps({"checked_at": time.time(), "rows": fresh}))
         except Exception:
-            payload, etag = None, meta.get("etag", "")
-        if payload is None and rows:
-            _write_skills_meta({**meta, "checked_at": time.time()})
-        elif payload is not None:
-            items = payload if isinstance(payload, list) else (
-                payload.get("skills") or payload.get("entries") or []
-            ) if isinstance(payload, dict) else []
-            rows = [
-                {"name": item.get("name", ""), "description": _clip(item.get("description")), "source": item.get("source", "")}
-                for item in items
-                if isinstance(item, dict) and str(item.get("source") or "") in NOUS_SOURCES
-            ]
-            _write_skills_meta({"checked_at": time.time(), "etag": etag, "rows": rows})
-    return [_entry("skill", r["name"], r.get("description", ""), r) for r in rows]
+            pass
+        return fresh
+    return rows
 
 
-def _local_skills() -> list:
-    """Skills already on this machine: they are part of what can be turned on."""
-    out = []
-    try:
-        from . import discover
-
-        for item in discover.catalogue():
-            out.append(_entry("skill", item["name"], item.get("why") or item.get("description") or "", item))
-    except Exception:
-        pass
-    return out
+def skills() -> list:
+    rows = _load(SKILLS_URL, "skills-meta.json")
+    for row in rows:
+        row.setdefault("kind", "skill")
+    return rows
 
 
-PLUGIN_URL = "https://hermes-agent.nousresearch.com/docs/api/plugin-catalog.json"
+def plugins() -> list:
+    rows = _load(PLUGINS_URL, "plugins-meta.json")
+    for row in rows:
+        row.setdefault("kind", "plugin")
+    return rows
 
 
-def _plugins() -> list:
-    """Name and one line per plugin. The 2.4 MB document is read and dropped."""
-    meta = _plugins_meta()
-    rows = meta.get("rows") or []
-    checked = float(meta.get("checked_at") or 0)
-    if not rows or (time.time() - checked) > 24 * 60 * 60:
-        try:
-            payload, etag = _json_payload(PLUGIN_URL, meta.get("etag", ""))
-        except Exception:
-            payload, etag = None, meta.get("etag", "")
-        if payload is not None:
-            items = payload if isinstance(payload, list) else (
-                payload.get("entries") or payload.get("plugins") or []
-            ) if isinstance(payload, dict) else []
-            rows = [
-                {"name": str(item.get("name") or ""), "description": _clip(item.get("description"))}
-                for item in items
-                if isinstance(item, dict) and item.get("name")
-            ]
-            _write_meta("plugins-meta.json", {"checked_at": time.time(), "etag": etag, "rows": rows})
-        elif rows:
-            _write_meta("plugins-meta.json", {**meta, "checked_at": time.time()})
-    return [_entry("plugin", r["name"], r.get("description", ""), r) for r in rows]
-
-
-def _plugins_meta() -> dict:
-    return _read_meta("plugins-meta.json")
-
-
-def _connectors() -> list:
-    """The hosted connectors the marketplace lists, kept only to name them honestly.
-
-    Concierge does not install connectors: they are accounts you sign in to,
-    not code that lands in a profile. This list never enters the install
-    index; it only lets an ask for one answer plainly instead of falling
-    into the plugin installer.
-    """
-    out = []
-    seen = set()
+def connectors() -> list:
     try:
         from tools.connectors.targets import hosted_names
 
-        for name in sorted(hosted_names() or ()):
-            seen.add(str(name).lower())
-            out.append(_entry("connector", name, "hosted connector, needs a login", name))
+        names = hosted_names() or set()
     except Exception:
-        pass
-    # MCP servers are their own tab in the marketplace, so they are not
-    # connectors here: the screen shows 54, and so do we.
-    return out
+        names = set()
+    return [{"name": name, "description": "", "source": "connector", "kind": "connector"} for name in sorted(names)]
 
 
-def build() -> list:
-    """Every installable thing, from both registries. Connectors are not installable."""
-    hub = _skills()
-    local = _local_skills()
-    seen = {row["name"].lower() for row in local}
-    # Local skills first (already installed), then the marketplace the screen shows.
-    # Connectors are named honestly on ask, never installed, so they stay out.
-    return local + [row for row in hub if row["name"].lower() not in seen] + _plugins()
+def counts() -> tuple:
+    return (len(skills()), len(plugins()), len(connectors()))
 
 
-class Index:
-    """BM25 over the merged marketplace."""
+def _tokens(text: str) -> set:
+    from . import text as text_mod
 
-    def __init__(self, rows: list, k1: float = 1.4, b: float = 0.72):
-        self.rows = rows
-        self.k1, self.b = k1, b
-        self.counts: list = []
-        self.lengths: list = []
-        df: Counter = Counter()
-        for row in rows:
-            name_words = [fold(w) for w in words(row["name"].replace("-", " "))]
-            body = [fold(w) for w in words(row["description"])][:60]
-            # A name is what a person is most likely to say, so it counts thrice.
-            counts = Counter(name_words * 3 + body)
-            self.counts.append(counts)
-            self.lengths.append(sum(counts.values()))
-            df.update(counts.keys())
-        self.df = df
-        self.n = max(len(rows), 1)
-        self.avg = sum(self.lengths) / self.n
-
-    def idf(self, term: str) -> float:
-        df = self.df.get(term, 0)
-        return math.log(1 + (self.n - df + 0.5) / (df + 0.5))
-
-    def search(self, query: str, limit: int = 20) -> list:
-        terms = [fold(w) for w in words(query)]
-        if not terms:
-            return []
-        scored = []
-        for idx, counts in enumerate(self.counts):
-            score = 0.0
-            for term in terms:
-                freq = counts.get(term, 0)
-                if not freq:
-                    continue
-                score += self.idf(term) * (freq * (self.k1 + 1)) / (
-                    freq + self.k1 * (1 - self.b + self.b * self.lengths[idx] / self.avg)
-                )
-            if score > 0:
-                scored.append((score, idx))
-        scored.sort(reverse=True)
-        out = []
-        for score, idx in scored[:limit]:
-            row = dict(self.rows[idx])
-            row["score"] = score
-            out.append(row)
-        return out
+    folded = set()
+    for word in text_mod.words(text):
+        folded.add(word)
+        if len(word) > 4 and word.endswith("es"):
+            folded.add(word[:-2])
+        elif len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+            folded.add(word[:-1])
+        if len(word) >= 6:
+            folded.add(word[:5])
+    return folded
 
 
-_INDEX: Optional[Index] = None
-
-
-def stale() -> bool:
-    """True when a list is missing. Age is not staleness: the file is the list."""
-    if not os.path.exists(os.path.join(_cache_dir(), "skills.json")):
-        return True
-    try:
-        from . import seams
-
-        return not seams._own_catalog_cache().exists()
-    except Exception:
-        return False
-
-
-def refresh(force: bool = False) -> bool:
-    """Rebuild from the live lists when they are a day old. True if it rebuilt.
-
-    Concierge has three lists and no memory of its own: whatever the marketplace
-    publishes is what it can offer. This is the only place that is enforced.
-    """
-    global _INDEX
-    if not force and _INDEX is not None and not stale():
-        return False
-    if force:
-        for name in ("skills.json", "marketplace-skills.json"):
-            path = os.path.join(_cache_dir(), name)
-            if os.path.exists(path):
-                os.remove(path)
-    _INDEX = None
-    rows = build()
-    _INDEX = Index(rows) if rows else Index([])
-    return True
-
-
-def index() -> Index:
-    global _INDEX
-    if _INDEX is None:
-        refresh()
-    return _INDEX
-
-
-def candidates(query: str, limit: int = 8) -> list:
-    """The one ranked list browse shows and install offers.
-
-    Both shelves read this, so the same words give the same names. Empty
-    when the index cannot answer; callers keep their own offline answer.
-    """
-    try:
-        rows = index().search(query, limit=limit)
-    except Exception:
+def candidates(query: str, limit: int = 200) -> list:
+    wanted = _tokens(query)
+    if not wanted:
         return []
-    return rows or []
+    scored: list = []
+    seen: set = set()
+    for row in skills() + plugins() + connectors():
+        key = row["name"].lower()
+        if key in seen or len(key) > 100:
+            continue
+        seen.add(key)
+        name_words = _tokens(row["name"].replace("-", " "))
+        hay = name_words | _tokens(row.get("description", ""))
+        shared = wanted & hay
+        if not shared:
+            continue
+        weight = sum(len(term) for term in shared)
+        name_hits = len(shared & name_words)
+        for term in wanted:
+            if len(term) >= 4 and any(term in word or word in term for word in name_words):
+                name_hits += 1
+                break
+        scored.append((weight, len(shared), name_hits, row["name"], row))
+    scored.sort(key=lambda entry: (-entry[0], -entry[1], -entry[2], entry[3]))
+    return [entry[4] for entry in scored[:limit]]
 
 
-def menu() -> str:
-    """Every entry as one line: kind and name. 43k characters for 2,131.
-
-    Small enough to hand a model the whole marketplace, which beats any keyword
-    gate: the gate is what hides "weather" from "is it going to rain".
-    """
-    return "\n".join("{} {}".format(row["kind"], row["name"]) for row in index().rows)
+def names_for_model(query: str, limit: int = 200) -> list:
+    lines = []
+    for row in candidates(query, limit=limit):
+        desc = " ".join(str(row.get("description", "") or "").split()[:10])
+        if desc:
+            lines.append("{} -- {}".format(row["name"], desc))
+        else:
+            lines.append(row["name"])
+    return lines

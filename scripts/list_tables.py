@@ -1,10 +1,6 @@
-"""Every hand-written string table in the plugin, with file, line and entries.
+"""Every hand-written string table in the plugin, with file and entries.
 
-Run it any time:  python3 scripts/list_tables.py
-
-It finds module-level constants assigned a tuple/list/set of string literals (any
-size, including pairs), plus dicts whose keys are strings. If a decision in this
-plugin is made by a list of words, it shows up here.
+Run it any time: python3 scripts/list_tables.py
 """
 
 from __future__ import annotations
@@ -16,37 +12,50 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent.parent
 
 
-def _strings(node) -> list:
-    if isinstance(node, ast.Call) and getattr(node.func, "id", "") in ("frozenset", "set", "tuple"):
-        node = node.args[0] if node.args else None
-    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
-        if all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in node.elts):
-            return [e.value for e in node.elts]
-    if isinstance(node, ast.Dict):
-        keys = node.keys
-        if keys and all(isinstance(k, ast.Constant) and isinstance(k.value, str) for k in keys):
-            return [k.value for k in keys]
+def _entries(node) -> list:
+    value = node
+    if isinstance(node, ast.Call):
+        func = node.func
+        name = ""
+        if isinstance(func, ast.Name):
+            name = func.id
+        if name in ("frozenset", "set", "tuple") and node.args:
+            value = node.args[0]
+        else:
+            return []
+    if isinstance(value, (ast.Tuple, ast.List, ast.Set)):
+        parts = value.elts
+    elif isinstance(value, ast.Dict):
+        parts = [k for k in value.keys if k is not None]
+    else:
+        return []
+    if parts and all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in parts):
+        return [str(e.value) for e in parts]
     return []
 
 
 def main() -> int:
     total = 0
     for path in sorted(HERE.glob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
         for node in tree.body:
             if not isinstance(node, ast.Assign) or len(node.targets) != 1:
                 continue
-            name = getattr(node.targets[0], "id", "")
+            target = node.targets[0]
+            name = target.id if isinstance(target, ast.Name) else ""
             if not name.isupper():
                 continue
-            entries = _strings(node.value)
-            if not entries:
-                continue
-            total += len(entries)
-            head = ", ".join(entries[:6])
-            more = "" if len(entries) <= 6 else ", … {} more".format(len(entries) - 6)
-            print("{:16} {:22} {:3}  {}".format(path.name, name, len(entries), head + more))
-    print("\n{} entries across the tables above.".format(total))
+            found = _entries(node.value)
+            if len(found) >= 2:
+                total += len(found)
+                head = ", ".join(found[:6])
+                more = "" if len(found) <= 6 else ", ... {} more".format(len(found) - 6)
+                print("{} {} {} {}".format(path.name, name, len(found), head + more))
+    print("")
+    print("{} entries across the tables above.".format(total))
     return 0
 
 

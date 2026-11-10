@@ -1,28 +1,33 @@
-"""Words, without a regular expression.
+"""Words, without decisions.
 
-Every routing rule that used a pattern was a guess about phrasing. What is left
-here is only mechanics: splitting a sentence into tokens, folding case, dropping
-a plural. The model decides meaning; this file never does.
+Splitting a sentence into tokens is mechanics. Meaning lives in the model.
+This file never decides anything.
 """
 
 from __future__ import annotations
 
 
 def words(text: str) -> list:
-    """Lower-case alphanumeric tokens: 'read PDFs!' -> ['read', 'pdfs']."""
-    out = []
-    token = []
-    for char in (text or "").lower():
+    out: list = []
+    token: list = []
+    prev_lower = False
+    for char in text or "":
         if char.isalnum():
-            token.append(char)
+            if char.isupper() and prev_lower and token:
+                out.append("".join(token))
+                token = []
+            token.append(char.lower())
+            prev_lower = char.islower()
         elif token:
             out.append("".join(token))
             token = []
+            prev_lower = False
+        else:
+            prev_lower = False
     if token:
         out.append("".join(token))
     return out
 
 
 def slug(text: str) -> str:
-    """A profile-safe name: 'Research Bot!' -> 'research-bot'."""
     return "-".join(words(text))

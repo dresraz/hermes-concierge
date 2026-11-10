@@ -1,6 +1,6 @@
 name: concierge
 version: 0.9.3
-description: "A marketplace concierge: one sentence upgrades your default profile or any bot you have, or adds a new one. Installs a plugin or skill the same way. A card, one yes, a receipt read off the disk, and an undo that restores exactly what changed."
+description: "One sentence in, one thing installed, one undo. Skills and plugins from the marketplace, bots you can make and remove."
 author: "@dresraz"
 requires_hermes: ">=0.22.7"
 provides_hooks:
