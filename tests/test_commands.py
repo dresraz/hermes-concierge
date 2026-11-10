@@ -103,7 +103,7 @@ class Help(unittest.TestCase):
     def test_bare_command_is_the_shelf(self):
         text = commands.handle_concierge("")
         self.assertIn("Concierge", text)
-        self.assertIn("here", text)
+        self.assertIn("On the shelf", text)
         self.assertIn("browse", text)
 
     def test_the_menu_is_still_one_word_away(self):
