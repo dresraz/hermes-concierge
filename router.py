@@ -52,7 +52,7 @@ inside_bot: the name of the bot this message is being sent to, or empty.
 Rules:
 - "you", "yourself", "me", "your own" mean inside_bot when inside_bot is set.
 - Words that ask to LOOK are browse, never improve: "show me", "look for",
-  "look at", "what can", "which skills", "what are my options", "is there
+  "search for", "search", "look up", "look at", "what can", "which skills", "what are my options", "is there
   anything that", "find me", "anything for you". "look for X for you" is still a
   look: only an explicit install/add/give/teach changes a bot.
   Browse changes nothing; improve changes a bot.
