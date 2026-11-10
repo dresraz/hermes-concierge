@@ -24,8 +24,6 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
-from . import text as _text
-
 HELP_SHORT = (
     ""
     "Concierge\n"
@@ -76,8 +74,6 @@ HELP = (
     "Example: /concierge create keeps my inbox at zero\n"
     "Name it: /concierge create inbox-zero: keeps my inbox at zero\n"
 )
-
-USAGE = HELP
 
 def _clean(raw: Any) -> str:
     return " ".join(str(raw or "").split())
@@ -246,7 +242,6 @@ def handle_concierge(
     session_key: str = "",
     seams: Any = None,
     hire: Optional[Callable[..., Any]] = None,
-    train: Optional[Callable[..., Any]] = None,
     known: Optional[Sequence[str]] = None,
     undo: Optional[Callable[..., Any]] = None,
     **_: Any,
@@ -339,19 +334,21 @@ def handle_concierge(
             rest = " ".join(words[:-1])
         return shelf.browse(rest, session_key=session_key, page=page)
 
-    # A number picks from the last shelf this conversation was shown, unless a
-    # card is waiting: on a card "1" means yes.
+    # A number picks from the last shelf this conversation was shown, but a
+    # waiting card owns every bare digit: the digit answers the card, and only
+    # when no card is waiting may it pick a shelf row.
     if text.isascii() and text.isdigit() and len(text) <= 3:
+        from . import market as market_mod
         from . import shelf
 
-        waiting = bool((card._slot(session_key) or {}).get("entries"))
-        # A listing the user is looking at owns the number; a card owns yes/no.
+        if card_mod.is_waiting(session_key):
+            return card_mod.handle(text, session_key=session_key, store=store)
+        if market_mod.is_waiting(session_key):
+            return market_mod.handle(text, session_key=session_key, store=store)
         if shelf.pending(session_key):
             picked = shelf.pick(int(text), session_key=session_key, store=store)
             if picked:
                 return picked
-        if waiting and text != "1":
-            return "One card at a time. /concierge yes takes it, /concierge no drops it.\n"
 
     if head in ("skills", "show") and _names_a_bot(rest, store):
         from . import improve, lifecycle, state
@@ -436,12 +433,6 @@ def handle_concierge(
 
     if market_mod.is_waiting(session_key):
         return market_mod.handle(text, session_key=session_key, store=store)
-    # Old words are gone, but a stale habit should get a pointer, not a mystery.
-    first, _, after = text.partition(" ")
-    if first.lower() == "hire":
-        return "hire is gone. Same thing: /concierge create {}\n".format(after.strip() or "<sentence>")
-    if first.lower() == "train":
-        return "train is gone. Same thing: /concierge improve {}\n".format(after.strip() or "<bot>: <what>")
 
     # Free text goes to the model router. With no model there is no second
     # search and no guessing: one plain sentence says what to do instead.
@@ -663,10 +654,6 @@ def handle_hire(
         preset_lines = _apply_preset(text, plan.name, path)
     except Exception:
         preset_lines = []
-    try:
-        extra_lines = _suggest_extras(text, path)
-    except Exception:
-        extra_lines = []
     # Last, after every other writer has touched config.yaml: linking earlier
     # let the credential copy rewrite the file and drop the switch.
     try:
@@ -703,7 +690,6 @@ def handle_hire(
         + self_lines
         + plugin_lines
         + preset_lines
-        + extra_lines
         + [
             "",
             "Next: /concierge improve {}: <habit>".format(plan.name),
@@ -766,17 +752,6 @@ def _job_line(text: str, profile_path: Any, bots: Any) -> list[str]:
         return []
     except Exception:
         return []
-
-
-def _suggest_extras(text: str, profile_path: Any) -> list[str]:
-    """Deliberately nothing.
-
-    An audit of the old two-pick suggestion line scored it 1.8 out of 5: a coder
-    bot was offered a skill about writing skills, an inbox bot a social calendar.
-    A quiet receipt is better than a confident wrong suggestion, so the extras
-    live in /concierge browse where the person is asking to look.
-    """
-    return []
 
 
 def handle_improve(
@@ -1115,8 +1090,8 @@ def _surface() -> str:
 
     A messaging turn binds HERMES_SESSION_PLATFORM; the CLI, the TUI and the
     desktop app bind HERMES_SESSION_SOURCE instead. Reading only the first is why
-    /concierge refused itself inside the desktop app. Still fail-closed: an
-    identity nothing recognises is treated as a shared chat.
+    /concierge refused itself inside the desktop app. Core has the last word on
+    whether a surface is a shared chat (see _gateway_refusal).
     """
     if _PLATFORM:
         return _PLATFORM
@@ -1177,7 +1152,14 @@ def _names_a_bot(rest: str, store: Any) -> bool:
 
 
 def _gateway_refusal(raw: Any) -> Optional[str]:
-    """A shared chat may look, not change. Returns the refusal, or None."""
+    """A shared chat may look, not change. Returns the refusal, or None.
+
+    The decision comes from core: a surface core calls messaging, or one named
+    in _MESSAGING, is a shared chat. A surface in _LOCAL_SURFACES, or one core
+    does not call messaging, is the owner's own session. An unknown surface
+    with no core answer is therefore allowed: the command only exists on
+    Hermes's own surfaces.
+    """
     # Answering a card this chat was already shown is not a new request: the
     # card only exists because the action that drew it was allowed.
     if _PLATFORM_ANSWER:
@@ -1187,9 +1169,7 @@ def _gateway_refusal(raw: Any) -> Optional[str]:
     surface = _surface()
     if surface in _LOCAL_SURFACES:
         return None
-    if surface and surface not in _MESSAGING:
-        return None
-    if not surface and not _messaging():
+    if not _messaging() and surface not in _MESSAGING:
         return None
     text = _clean(raw)
     if text.lower().startswith("/concierge"):
@@ -1235,7 +1215,6 @@ def register(ctx: Any) -> None:
 
 __all__ = [
     "HELP",
-    "USAGE",
     "handle_concierge",
     "handle_hire",
     "handle_undo",

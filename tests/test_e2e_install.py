@@ -23,6 +23,13 @@ PLUGIN_NAME = "hermes-themes-pack"
 MISSING_NAME = "no-such-plugin-xyz"
 
 
+def _find(name: str, entries) -> object:
+    for entry in entries:
+        if getattr(entry, "name", "") == name:
+            return entry
+    return None
+
+
 def _under(child: Path, parent: Path) -> bool:
     # Symlink resolution keeps the containment check honest on any host.
     child_real = Path(os.path.realpath(child))
@@ -66,7 +73,7 @@ class InstallEndToEnd(unittest.TestCase):
     def test_real_catalog_entry_installs_into_the_temp_home(self):
         entries = seams.catalog()
         self.assertTrue(entries, "live catalog returned no entries")
-        entry = seams.find(PLUGIN_NAME, entries)
+        entry = _find(PLUGIN_NAME, entries)
         self.assertIsNotNone(entry, f"{PLUGIN_NAME} is no longer in the live catalog")
 
         outcome = seams.install(entry)
@@ -88,7 +95,7 @@ class InstallEndToEnd(unittest.TestCase):
 
     def test_find_reports_none_for_a_name_that_does_not_exist(self):
         entries = seams.catalog()
-        self.assertIsNone(seams.find(MISSING_NAME, entries))
+        self.assertIsNone(_find(MISSING_NAME, entries))
 
 
 if __name__ == "__main__":

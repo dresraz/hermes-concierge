@@ -309,19 +309,33 @@ class Gateway(unittest.TestCase):
         commands._CTX = self.Ctx("cli")
         self.assertNotIn("shared chat", commands.handle_concierge("help"))
 
+    def test_a_named_messaging_surface_is_refused_even_when_core_is_quiet(self):
+        commands._PLATFORM = "telegram"
+        saved = commands._messaging
+        commands._messaging = lambda: False
+        try:
+            text = commands.handle_concierge("make me a researcher", store=store())
+        finally:
+            commands._messaging = saved
+        self.assertIn("does not run from a shared chat", text)
 
-class OldWords(unittest.TestCase):
-    """hire and train are gone, and a stale habit gets a pointer, not a bot."""
+    def test_the_app_surface_is_allowed(self):
+        commands._PLATFORM = "app"
+        text = commands.handle_concierge("make me a researcher", store=store())
+        self.assertNotIn("shared chat", text)
 
-    def test_hire_points_at_create(self):
-        text = commands.handle_concierge("hire a researcher for papers", store=store())
-        self.assertIn("hire is gone", text)
-        self.assertIn("/concierge create", text)
-
-    def test_train_points_at_improve(self):
-        text = commands.handle_concierge("train inbox-bot: always cite", store=store())
-        self.assertIn("train is gone", text)
-        self.assertIn("/concierge improve", text)
+    def test_an_unknown_surface_follows_core(self):
+        commands._PLATFORM = "foo"
+        saved = commands._messaging
+        try:
+            commands._messaging = lambda: False
+            text = commands.handle_concierge("make me a researcher", store=store())
+            self.assertNotIn("shared chat", text)
+            commands._messaging = lambda: True
+            text = commands.handle_concierge("make me a researcher", store=store())
+            self.assertIn("does not run from a shared chat", text)
+        finally:
+            commands._messaging = saved
 
 
 class Bots(unittest.TestCase):
@@ -559,6 +573,32 @@ class TheCardStillWorks(unittest.TestCase):
                     word,
                 )
 
+    def test_a_waiting_card_owns_every_digit_not_just_one(self):
+        from unittest import mock
+
+        import time
+
+        card = harness.load("card")
+        shelf = harness.load("shelf")
+
+        card._PENDING["chat-z"] = {"sentence": "install pdf", "entries": ["one"], "target": ""}
+        self.addCleanup(card._PENDING.pop, "chat-z", None)
+        shelf._LAST["chat-z"] = (
+            time.time(),
+            [
+                {"kind": "skill", "name": "a", "weight": "", "why": "a"},
+                {"kind": "skill", "name": "b", "weight": "", "why": "b"},
+                {"kind": "skill", "name": "c", "weight": "", "why": "c"},
+            ],
+        )
+        self.addCleanup(shelf._LAST.pop, "chat-z", None)
+        with mock.patch.object(card, "handle", return_value="CARD ANSWER") as sent:
+            text = commands.handle_concierge("3", store=store(), session_key="chat-z")
+        self.assertEqual(text, "CARD ANSWER")
+        self.assertEqual(sent.call_count, 1)
+        # The shelf was not touched: the digit never picked a row.
+        self.assertEqual(len(shelf._LAST["chat-z"][1]), 3)
+
 
 class RoundTwo(unittest.TestCase):
     """The failures the second review found, pinned."""
@@ -570,25 +610,6 @@ class RoundTwo(unittest.TestCase):
 
         text = commands.handle_concierge("bots", store=Broken())
         self.assertIn("could not be read", text)
-
-    def test_a_model_that_says_install_cannot_override_a_bot_request(self):
-        from concierge import intent
-
-        class Llm:
-            def complete_structured(self, **kwargs):
-                class Result:
-                    parsed = {"intent": "install", "query": "obsidian"}
-
-                return Result()
-
-        got = intent.classify(
-            "I want to make a general assistant bot",
-            llm=Llm(),
-            bots=["default"],
-            roles=["assistant"],
-            fallback=lambda text: ("install", "", text),
-        )
-        self.assertEqual(got[0], "install")  # the module alone trusts the model
 
     def test_the_command_layer_obeys_the_router_answer(self):
         # No guard overrides the model: the router is the only decision maker.

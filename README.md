@@ -2,7 +2,7 @@
 
 [![version](https://img.shields.io/github/v/tag/dresraz/hermes-concierge?color=E8C15A)](https://github.com/dresraz/hermes-concierge/tags)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
-[![tests](https://img.shields.io/badge/tests-234%20passing-3fb950)](tests)
+[![tests](https://img.shields.io/badge/tests-232%20passing-3fb950)](tests)
 [![hermes](https://img.shields.io/badge/hermes-%3E%3D0.22.7-4B5563)](plugin.yaml)
 
 **The front door to the Hermes marketplace.**
@@ -381,8 +381,8 @@ plugin or a bot that does not exist.
 ## How it works
 
 - `commands.py` is the whole command surface: one verb table, one card protocol, one record store.
-- `intent.py` asks the model what the sentence means (create, improve, install, list, browse, help,
-  undo) with the bots on this machine and the ten roles in the prompt, then validates the answer
+- `router.py` asks the model what the sentence means (create, improve, install, list, browse, help,
+  undo) with the bots on this machine in the prompt, then validates the answer
   against what actually exists. Validation failures fall back to the rules; so does the no-model case.
 - `match.py` ranks the live catalog against your sentence once the intent is known. Pure and
   deterministic: no model call, no network. It tokenizes, folds plurals, and bridges an outcome to a mechanism with a small
@@ -471,7 +471,7 @@ python tests/eval_match.py
 hermes plugins validate . --install-deps
 ```
 
-234 tests, `unittest`, stdlib only, deterministic, no network and no model calls. They never touch a real profile, a real SOUL file, or a real plugins directory: every seam is injected.
+232 tests, `unittest`, stdlib only, deterministic, no network and no model calls. They never touch a real profile, a real SOUL file, or a real plugins directory: every seam is injected.
 
 ## License
 

@@ -55,7 +55,6 @@ VOCABULARY = {
     "scrape": ["browser", "fetch", "web", "extract"],
     "scraping": ["browser", "fetch", "web"],
     "browse": ["browser"],
-    "website": ["web", "browser", "fetch"],
     "speak": ["voice", "tts", "speech"],
     "talk": ["voice", "tts"],
     "audio": ["voice", "tts"],
@@ -77,7 +76,6 @@ VOCABULARY = {
     "prices": ["price", "monitor", "stock"],
     "stocks": ["stock", "market"],
     "inbox": ["email", "mail", "gmail"],
-    "calendar": ["calendar", "event", "schedule"],
     "song": ["music"],
     "songs": ["music"],
     "picture": ["image", "vision", "generate"],
@@ -100,7 +98,6 @@ VOCABULARY = {
     "notifications": ["notify", "alert"],
     "alert": ["notification"],
     "finish": ["notification", "complete", "done"],
-    "finishe": ["notification", "complete", "done"],
     "send": ["notification", "message", "alert", "telegram"],
     "dashboard": ["board", "panel", "chart", "kpi"],
     "boards": ["board", "panel", "chart"],
@@ -466,12 +463,3 @@ def rank(query: str, entries: Iterable[Any], limit: int = 3) -> list:
             return bool(asked & {_fold(word) for word in tokens(candidate.name + " " + candidate.title)})
         keep = [c for c in keep if c.score >= STRONG_SCORE or named(c)]
     return keep[:limit]
-
-
-def best(query: str, entries: Optional[Iterable[Any]] = None) -> Optional[Candidate]:
-    if entries is None:
-        from . import seams
-
-        entries = seams.catalog()
-    ranked = rank(query, entries, limit=1)
-    return ranked[0] if ranked else None

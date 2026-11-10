@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness  # noqa: E402
 
 shelf = harness.load("shelf")
+market = harness.load("market")
 
 
 class Shelf(unittest.TestCase):
@@ -50,6 +51,38 @@ class Shelf(unittest.TestCase):
     def test_a_pick_out_of_range_is_nothing(self):
         shelf.browse("notes", session_key="t")
         self.assertIsNone(shelf.pick(99, session_key="t"))
+
+    def test_picking_a_skill_row_asks_first_instead_of_installing(self):
+        import time
+
+        shelf._LAST["t"] = (
+            time.time(),
+            [
+                {
+                    "kind": "skill",
+                    "name": "pdf-reader",
+                    "weight": "12 KB",
+                    "why": "reads pdfs",
+                    "path": "/none",
+                    "source": "optional",
+                    "category": "docs",
+                    "installed": False,
+                }
+            ],
+        )
+        hit = market.Offer(
+            name="pdf-reader",
+            identifier="official/docs/pdf-reader",
+            description="Reads PDF files.",
+            source="GitHub",
+            trust="",
+        )
+        with mock.patch.object(market, "search", lambda query, limit=2, search=None: [hit]):
+            text = shelf.pick(1, session_key="t")
+        self.assertIn("Install pdf-reader?", text)
+        self.assertIn("Reply yes to install it", text)
+        self.assertTrue(market.is_waiting("t"))
+        self.assertFalse(shelf.pending("t"))
 
 
 if __name__ == "__main__":

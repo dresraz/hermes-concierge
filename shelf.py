@@ -309,7 +309,11 @@ def forget(session_key: str = "") -> None:
 
 
 def pick(number: int, *, session_key: str = "", store: Any = None) -> Optional[str]:
-    """Act on one row. A skill installs here; a plugin opens its card."""
+    """Act on one row. A bot row creates that bot; anything else opens its card.
+
+    A skill row asks first through the market card, the same yes/no as an
+    install, instead of installing on the number.
+    """
     rows = _rows(session_key)
     if number < 1 or number > len(rows):
         return None
@@ -329,22 +333,7 @@ def pick(number: int, *, session_key: str = "", store: Any = None) -> Optional[s
 
         forget(session_key)
         return card.handle(row["name"], session_key=session_key)
-    from . import improve
+    from . import market as market_mod
 
-    here = _here()
-    home = improve.resolve(here)
-    if home is None:
-        return None
-    plan = improve.Plan(bot=here, home=home, sentence=row["name"])
-    plan.items.append(
-        improve.Item(
-            kind="skill",
-            name=row["name"],
-            kb=0.0,
-            path=row.get("path"),
-            identifier="official/{}/{}".format(row.get("category", ""), row["name"]),
-            source=row.get("source", "optional"),
-        )
-    )
     forget(session_key)
-    return improve.receipt(plan, improve.apply(plan, store=store))
+    return market_mod.handle(row["name"], session_key=session_key, store=store)

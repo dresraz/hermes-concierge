@@ -83,8 +83,8 @@ class Ranking(unittest.TestCase):
     def test_stopwords_alone_match_nothing(self):
         self.assertEqual(match.rank("I want it for me, please", CATALOG), [])
 
-    def test_best_returns_none_rather_than_a_bad_match(self):
-        self.assertIsNone(match.best("quarterly payroll export", CATALOG))
+    def test_rank_returns_nothing_rather_than_a_bad_match(self):
+        self.assertEqual(match.rank("quarterly payroll export", CATALOG), [])
 
 
 if __name__ == "__main__":

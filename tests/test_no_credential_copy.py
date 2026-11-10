@@ -9,9 +9,14 @@ import pathlib
 import tempfile
 import unittest
 
+from unittest import mock
+
 from tests import harness  # noqa: F401  (declares the local surface)
 
+from hermes_yaml import safe_dump
+
 commands = harness.load("commands")
+plugins_inherit = harness.load("plugins_inherit")
 
 
 class NoCopy(unittest.TestCase):
@@ -55,6 +60,44 @@ class NoCopy(unittest.TestCase):
         self.assertNotIn("keys ", text)
         self.assertNotIn("your login", text)
         self.assertNotIn("auth.json", text)
+
+
+class NoOptionCopy(unittest.TestCase):
+    """A hire copies plugin names, never their option values.
+
+    Option dicts are arbitrary and can carry URLs with credentials; the bot
+    gets the switch, not the owner's login.
+    """
+
+    def plan(self):
+        class Plan:
+            name = "inbox-bot"
+            title = "keeps my inbox at zero"
+
+        return Plan()
+
+    def test_option_dict_with_credentials_does_not_reach_the_bot(self):
+        import os
+
+        owner = pathlib.Path(tempfile.mkdtemp(prefix="owner-home-"))
+        bot = pathlib.Path(tempfile.mkdtemp(prefix="bot-home-"))
+        (owner / "config.yaml").write_text(
+            safe_dump(
+                {"plugins": {"entries": {"some-plugin": {"url": "https://user:token@host"}}}}
+            ),
+            encoding="utf-8",
+        )
+        with mock.patch.dict(os.environ, {"HERMES_HOME": str(owner)}):
+            commands.handle_hire(
+                "keeps my inbox at zero",
+                store=None,
+                hire=lambda text: (self.plan(), bot),
+                known=[],
+            )
+        body = (bot / "config.yaml").read_text(encoding="utf-8")
+        self.assertIn("some-plugin", body)
+        self.assertNotIn("user:token@host", body)
+        self.assertNotIn("token@host", body)
 
 
 class Surface(unittest.TestCase):

@@ -140,7 +140,6 @@ class NoFit(unittest.TestCase):
         ]
         with mock.patch.dict(os.environ, base_env(), clear=True):
             self.assertEqual(match.rank("teach my goldfish to file taxes", catalog), [])
-            self.assertIsNone(match.best("teach my goldfish to file taxes", catalog))
 
     def test_long_sentence_catching_two_words_is_not_enough(self):
         """A single name word plus one common word is a coincidence.

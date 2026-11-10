@@ -5,7 +5,8 @@ Plugins live in a home, and a bot profile is its own home. A fresh profile's
 own default and the bot comes up with switches its owner never chose. This copies
 the owner's block into the new profile, minus the names that only exist in the
 owner's home: those folders are not inside the profile, so copying them would
-write entries that point at nothing.
+write entries that point at nothing. Entry option dicts are never copied, only
+the names: the values can carry URLs with credentials.
 
 Skills are not this. A skill is copied into the bot's own `skills/` directory,
 which is why presets can carry skills and cannot carry plugins.
@@ -90,7 +91,9 @@ def _split(block: dict, local: set) -> tuple:
             if keep:
                 kept[key] = keep
         elif key == "entries" and isinstance(value, dict):
-            keep = {name: opts for name, opts in value.items() if name not in local}
+            # Names only, never option values: an option dict can carry a URL
+            # with credentials, and the bot must not receive the owner's login.
+            keep = {name: {} for name, opts in value.items() if name not in local}
             left += [name for name in value if name in local]
             if keep:
                 kept["entries"] = keep

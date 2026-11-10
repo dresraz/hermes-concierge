@@ -298,12 +298,6 @@ def _has_hits(word: str) -> bool:
         return True
 
 
-def _replaced(session_key: str) -> str:
-    """The previous card is gone; say so, or a yes answers the wrong question."""
-    held = _slot(session_key).get("sentence", "")
-    return "(This replaces the {} card.)\n".format(held) if held else ""
-
-
 def nothing(sentence: str, entries: Optional[list] = None) -> str:
     """The honest no: nothing in the catalog does this, and nothing was installed."""
     said = " ".join((sentence or "").split())[:80]

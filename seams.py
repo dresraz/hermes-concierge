@@ -88,21 +88,6 @@ def _fetch_own_catalog() -> Optional[list]:
         return None
 
 
-def catalog_source() -> str:
-    """"marketplace" when the published catalogue answered, "bundled" when not.
-
-    The difference matters for honesty: with no network the plugin still ranks
-    against its bundled snapshot, but "nothing fits" would then be a claim about
-    an old copy, not about the marketplace.
-    """
-    try:
-        if _fetch_own_catalog():
-            return "marketplace"
-    except Exception:
-        pass
-    return "bundled"
-
-
 def catalog() -> list:
     """Every plugin the marketplace advertises, at the pin it advertises."""
     from hermes_cli.plugin_catalog import entry_from_mapping, load_catalog_live
@@ -117,14 +102,6 @@ def catalog() -> list:
         if parsed:
             return parsed
     return load_catalog_live()
-
-
-def find(name: str, entries: Optional[list] = None) -> Optional[object]:
-    """The catalog entry whose name is exactly *name*, else None."""
-    for entry in entries if entries is not None else catalog():
-        if getattr(entry, "name", "") == name:
-            return entry
-    return None
 
 
 def _findings(result) -> list:

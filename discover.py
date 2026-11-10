@@ -292,18 +292,3 @@ def suggest(
         scored.append((weight, item["kb"], {**item, "why": sorted(hits)[:4]}))
     scored.sort(key=lambda row: (-row[0], row[1], row[2]["name"]))
     return [item for _, _, item in scored[:limit]]
-
-
-def lines(picks: Sequence[dict], bot: str) -> list[str]:
-    """One line per pick on the hire receipt, with the command that takes it."""
-    if not picks:
-        return []
-    out = []
-    for pick in picks:
-        why = "/".join(pick.get("why") or [])[:28]
-        out.append(
-            "Also: {} ({} KB{}). Install it with /concierge install {} into {}.".format(
-                pick["name"], pick["kb"], ", " + why if why else "", pick["name"], bot
-            )
-        )
-    return out

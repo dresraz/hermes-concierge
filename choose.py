@@ -112,10 +112,6 @@ class Option:
         self.payload = payload
         self.caution = caution
 
-    @property
-    def here(self) -> bool:
-        return self.kind == "skill"
-
 
 def _skills() -> list:
     rows = []

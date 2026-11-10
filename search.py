@@ -350,11 +350,6 @@ def index() -> Index:
     return _INDEX
 
 
-def search(query: str, limit: int = 20) -> list:
-    """Ranked rows: kind, name, description, score."""
-    return index().search(query, limit)
-
-
 def menu() -> str:
     """Every entry as one line: kind and name. 43k characters for 2,131.
 
@@ -362,10 +357,3 @@ def menu() -> str:
     gate: the gate is what hides "weather" from "is it going to rain".
     """
     return "\n".join("{} {}".format(row["kind"], row["name"]) for row in index().rows)
-
-
-def find(kind: str, name: str) -> Optional[dict]:
-    for row in index().rows:
-        if row["kind"] == kind and row["name"].lower() == str(name or "").lower():
-            return row
-    return None
