@@ -52,7 +52,7 @@ Use the plain product words a catalogue entry would use, not sentences.
 WHOLE_PROMPT = """You are Concierge. Pick the one entry that does the job.
 
 Every entry in the Hermes marketplace is below, as "kind name". plugins are
-installed, skills are turned on, connectors are accounts you sign in to.
+installed, skills are turned on.
 
 {menu}
 

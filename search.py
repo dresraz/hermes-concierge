@@ -1,4 +1,4 @@
-"""Search the whole marketplace: every plugin, connector and skill, ranked locally.
+"""Search the whole marketplace: every plugin and skill, ranked locally.
 
 The old matcher scored a hand-picked catalog with hand-written weights. This is a
 real index over everything Hermes can install — about 105,000 entries — built once,
@@ -233,7 +233,13 @@ def _plugins_meta() -> dict:
 
 
 def _connectors() -> list:
-    """The hosted connectors the marketplace lists, then Hermes's MCP catalog."""
+    """The hosted connectors the marketplace lists, kept only to name them honestly.
+
+    Concierge does not install connectors: they are accounts you sign in to,
+    not code that lands in a profile. This list never enters the install
+    index; it only lets an ask for one answer plainly instead of falling
+    into the plugin installer.
+    """
     out = []
     seen = set()
     try:
@@ -250,12 +256,13 @@ def _connectors() -> list:
 
 
 def build() -> list:
-    """Every installable thing, from all three registries."""
+    """Every installable thing, from both registries. Connectors are not installable."""
     hub = _skills()
     local = _local_skills()
     seen = {row["name"].lower() for row in local}
     # Local skills first (already installed), then the marketplace the screen shows.
-    return local + [row for row in hub if row["name"].lower() not in seen] + _plugins() + _connectors()
+    # Connectors are named honestly on ask, never installed, so they stay out.
+    return local + [row for row in hub if row["name"].lower() not in seen] + _plugins()
 
 
 class Index:

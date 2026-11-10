@@ -31,7 +31,7 @@ class Shelf(unittest.TestCase):
         self.assertIn("Concierge", text)
         self.assertIn("skills", text)
         self.assertIn("plugins", text)
-        self.assertIn("connector", text)
+        self.assertNotIn("connector", text)
 
     def test_browse_numbers_what_it_shows(self):
         text = shelf.browse("notes", session_key="t")

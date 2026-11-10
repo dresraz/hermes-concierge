@@ -198,6 +198,9 @@ Leave out the bot and it goes into the profile you are talking to. The word afte
 an existing profile; a typo means the card says `this profile` instead of landing somewhere else
 quietly. Undo follows the receipt, so a skill installed into `intern` comes back out of `intern`.
 
+Concierge does not install connectors yet. Asked for one by name, it says so
+plainly and installs nothing.
+
 One caution: Concierge does not recommend **memory plugins**. They hook the agent's own memory, so
 they can depend on your setup, a hosted service or a paid plan, and a bad one changes every
 conversation you have. Install those by hand, one at a time, after reading what they need.

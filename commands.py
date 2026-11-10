@@ -194,7 +194,7 @@ def _run_route(
             if selector and not selector.isdigit():
                 return "Concierge did not create {}, so it will not delete it.\n".format(selector)
             return (
-                "Deleting a bot needs its number, so nothing is removed by a guess.\n"
+                "Deleting a bot needs its number.\n"
                 "/concierge bots, then /concierge fire <number>\n"
             )
         return handle_concierge(
@@ -284,10 +284,10 @@ def handle_concierge(
         if bare == "no" or shelf._rows(session_key):
             shelf.forget(session_key)
             if bare == "no":
-                return "Nothing installed.\n"
+                return "Nothing installed. Say the job: /concierge something that reads my pdfs.\n"
         if bare in ("yes", "1"):
             return "Nothing to say yes to yet. Say the job: /concierge something that reads my pdfs.\n"
-        return "Pick a number from the list, or say the job in one sentence.\n"
+        return "Say the job in one sentence: /concierge something that reads my pdfs.\n"
     if low in ("help all", "help -a", "help --all"):
         _drop_cards(session_key)
         return HELP
@@ -399,7 +399,7 @@ def handle_concierge(
             if selector and not selector.isdigit():
                 return "Concierge did not create {}, so it will not delete it.\n".format(selector)
             return (
-                "Deleting a bot needs its number, so nothing is removed by a guess.\n"
+                "Deleting a bot needs its number.\n"
                 "/concierge bots, then /concierge {} <number>\n".format(head)
             )
         _drop_cards(session_key)
@@ -517,6 +517,17 @@ def handle_install(
         )
 
     query, target = market.split_target(text)
+    # Connectors are not installable: name them honestly before any installer runs.
+    try:
+        from . import search as search_mod
+
+        for row in search_mod._connectors():
+            want = "".join(char for char in str(row.get("name", "")).lower() if char.isalnum())
+            got = "".join(char for char in query.lower() if char.isalnum())
+            if want and (want == got or (len(got) >= 3 and want in got)):
+                return "Concierge does not install connectors yet. {} is a connector, so nothing was installed.\n".format(row.get("name", ""))
+    except Exception:
+        pass
     if _is_bot_profile():
         here = _self_name()
         if target and target != here:
@@ -612,7 +623,7 @@ def handle_hire(
     from . import bots, lifecycle, seams, state
 
     if _is_bot_profile():
-        return "A bot cannot make other bots. Ask the owner, or improve yourself.\n"
+        return "A bot cannot make other bots. Ask the owner.\n"
 
     text = _clean(raw)
     if text.lower().startswith("/concierge"):
@@ -670,6 +681,23 @@ def handle_hire(
     lines, ok = bots.receipt(
         plan, path, known=taken, count_skills=presets.detect(text) is None
     )
+    # Record what hire wrote, not just that a bot exists: the role preset's
+    # skills are stock, and reset keeps stock while taking back later changes.
+    # Without the role and its skills, reset claims it replayed every record
+    # while leaving the hire-time tree behind.
+    role_name = ""
+    preset_skills: list = []
+    try:
+        role = presets.detect(text) or presets.get("assistant")
+        if role is not None:
+            role_name = str(role.name)
+            try:
+                preset_skills = list(presets.verify(Path(str(path)), role))
+            except Exception:
+                preset_skills = list(role.picks)
+    except Exception:
+        role_name = ""
+        preset_skills = []
     saved = _remember(
         state.Installed(
             name=plan.name,
@@ -678,6 +706,8 @@ def handle_hire(
             profile=plan.name,
             soul_path=str(Path(str(path)) / "SOUL.md"),
             enabled=True,
+            role=role_name,
+            skills=preset_skills,
         ),
         store,
     )
@@ -777,7 +807,14 @@ def handle_improve(
             "Improve which bot? Say it plainly:\n"
             "/concierge improve researcher-bot: it needs to read scanned PDFs\n"
         )
-    bot, sentence = (bot, text) if bot else training.guess_bot(text)
+    if bot:
+        sentence = text
+    else:
+        try:
+            names = list(known) if known is not None else _bot_names()
+        except Exception:
+            names = []
+        bot, sentence = training.guess_bot(text, names or None)
     if _is_bot_profile():
         here = _self_name()
         if (bot or "").lower() in ("me", "myself", "self", "yourself", "itself", "you", "your self", ""):
@@ -792,8 +829,7 @@ def handle_improve(
     llm = _llm()
     plan = improve.plan(bot, sentence, llm=llm)
     if plan is None:
-        names = ", ".join(_bot_names()) or "none"
-        return "No bot called {}. Bots here: {}\n".format(bot, names)
+        return "No bot called {}. Say /concierge bots to see them.\n".format(bot)
     if not plan.items and not getattr(plan, "have", None) and llm is None:
         # No model, no verdict: the sentence names no skill, and only a reader
         # can say whether it is a rule or a capability.
@@ -1160,10 +1196,28 @@ def _gateway_refusal(raw: Any) -> Optional[str]:
     with no core answer is therefore allowed: the command only exists on
     Hermes's own surfaces.
     """
-    # Answering a card this chat was already shown is not a new request: the
-    # card only exists because the action that drew it was allowed.
+    # A card yes is still a change: it needs the same verdict as a normal
+    # command. Only the owner's opt-in or a non-chat surface allows it.
+    # Dropping a card (no) or describing the runner-up (more) changes nothing,
+    # so those answers stay allowed: refusing them would strand the card.
     if _PLATFORM_ANSWER:
-        return None
+        try:
+            from . import card as _card_mod
+
+            _safe = set(_card_mod.NO) | set(_card_mod.MORE) | {"2"}
+        except Exception:
+            _safe = {"n", "no", "nope", "cancel", "stop", "more", "details", "2"}
+        if _clean(raw).lower() in _safe:
+            return None
+        if _allow_gateway():
+            return None
+        surface = _surface()
+        if surface in _LOCAL_SURFACES:
+            return None
+        if not _messaging() and surface not in _MESSAGING:
+            return None
+        # Otherwise fall through to the refusal below: a bare yes on a
+        # shared chat does not install.
     if _allow_gateway():
         return None
     surface = _surface()

@@ -181,7 +181,7 @@ class Improve(unittest.TestCase):
             "improve invoices-bot: chase faster", store=store()
         )
         self.assertIn("No bot called invoices-bot", text)
-        self.assertIn("inbox-bot", text)
+        self.assertIn("/concierge bots", text)
 
     def test_a_hand_made_bot_can_be_improved(self):
         _with_llm(self, "rule")

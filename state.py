@@ -37,6 +37,7 @@ class Installed:
     soul_path: str = ""
     soul_backup: str = ""
     soul_existed: bool = False
+    role: str = ""
     installed_at: str = ""
 
     def stamp(self) -> "Installed":

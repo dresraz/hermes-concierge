@@ -34,7 +34,7 @@ INSTRUCTIONS = """You decide what a Hermes user is asking for, from one sentence
 Answer with JSON only: {"action": ..., "bot": ..., "what": ...}
 
 action is one of:
-  install  one plugin, skill or connector from the marketplace
+  install  one plugin or skill from the marketplace
   improve  make an existing bot better, by adding a skill or writing a standing rule
   create   a new bot (a new assistant with its own name)
   list     which bots exist
@@ -69,6 +69,21 @@ Rules:
 """
 
 
+def _slug(text: str) -> str:
+    """Profile-safe form: 'Writer Bot!' reads as 'writer-bot'."""
+    out: list[str] = []
+    token: list[str] = []
+    for char in (text or "").lower():
+        if char.isalnum():
+            token.append(char)
+        elif token:
+            out.append("".join(token))
+            token = []
+    if token:
+        out.append("".join(token))
+    return "-".join(out)
+
+
 def route(text: str, *, here: str, bots: list, llm: Any) -> Optional[dict]:
     """One call, one action. None when the model cannot answer."""
     if llm is None:
@@ -97,8 +112,16 @@ def route(text: str, *, here: str, bots: list, llm: Any) -> Optional[dict]:
     if action not in ACTIONS:
         return None
     bot = str(data.get("bot") or "").strip()
+    if bot:
+        # A spoken name uses spaces where the profile uses hyphens:
+        # "writer bot" is "writer-bot". Normalize before validating.
+        norm = _slug(bot)
+        real = { _slug(name): name for name in bots }
+        if norm in real:
+            bot = real[norm]
     if bot and bot.lower() not in {name.lower() for name in bots}:
         # A name the user typed is fine; a hallucinated one is not.
-        if bot.lower() not in text.lower():
+        # Compare spoken forms too, so "writer bot" in the sentence keeps it.
+        if bot.lower() not in text.lower() and _slug(bot) not in _slug(text):
             bot = ""
     return {"action": action, "bot": bot, "what": str(data.get("what") or "").strip()}

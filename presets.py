@@ -272,6 +272,12 @@ def _copy_bundled(home: Path, names: Sequence[str]) -> list[str]:
         try:
             shutil.copytree(folder, target)
         except Exception:
+            # A failed copy leaves a half-written dir that makes every retry
+            # fail with FileExistsError. Remove it and report one honest line.
+            try:
+                shutil.rmtree(target, ignore_errors=True)
+            except Exception:
+                pass
             continue
         copied.append(name)
     return copied

@@ -298,6 +298,12 @@ def _install_one(bot: str, item: Item, *, home: Path, runner=None) -> bool:
         try:
             shutil.copytree(item.path, target)
         except Exception:
+            # A failed copy leaves a half-written dir that makes every retry
+            # fail with FileExistsError. Remove it so the next try starts clean.
+            try:
+                shutil.rmtree(target, ignore_errors=True)
+            except Exception:
+                pass
             return False
     elif runner is not None:
         code, _ = runner(item.identifier)

@@ -183,11 +183,9 @@ def overview() -> str:
             except Exception:
                 available = 0
         available = available or len(discover.catalogue())
-        total_connectors = len(search._connectors())
     except Exception:
         total_plugins = 0
         available = len(discover.catalogue())
-        total_connectors = 0
     def _n(count: int, word: str) -> str:
         return "{} {}".format(count, word if count == 1 else word + "s")
 
@@ -211,8 +209,8 @@ def overview() -> str:
         "",
         bot_bit,
         here_bit,
-        "On the shelf: {}, {} and {}.".format(
-            _n(available, "skill"), _n(total_plugins, "plugin"), _n(total_connectors, "connector")
+        "On the shelf: {} and {}.".format(
+            _n(available, "skill"), _n(total_plugins, "plugin")
         ),
         "",
         "Build {}.".format(_build()),

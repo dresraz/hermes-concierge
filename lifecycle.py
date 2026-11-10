@@ -248,6 +248,61 @@ def reset(store: Any = None, token: Any = "", *, seams: Any = None) -> str:
             store.drop(record.name, record.kind)
         lines.extend(got)
 
+    # Return to stock: the hire-time preset is the baseline, not an empty bot.
+    # Later skills and rules were just undone above; missing preset skills are
+    # restored from the recorded role so a reset leaves the bot as hired.
+    for record in touched:
+        if (getattr(record, "kind", "") or "") != BOT or not getattr(record, "role", ""):
+            continue
+        try:
+            from . import presets
+
+            role = presets.get(str(record.role))
+            if role is None:
+                break
+            try:
+                home = seams.profile_home(name) if seams is not None else None
+            except Exception:
+                home = None
+            if home is None:
+                try:
+                    from . import improve
+
+                    home = improve.resolve(name)
+                except Exception:
+                    home = None
+            if home is None:
+                break
+            from pathlib import Path as _P
+
+            home_p = _P(str(home))
+            if not home_p.is_dir():
+                break
+            try:
+                have = set(presets.verify(home_p, role))
+            except Exception:
+                have = set()
+            missing = [skill for skill in role.picks if skill not in have]
+            if not missing:
+                lines.append("kept: preset skills for {}".format(role.name))
+            else:
+                try:
+                    presets._copy_bundled(home_p, [m for m in missing if m in role.bundled])
+                except Exception:
+                    pass
+                try:
+                    have2 = set(presets.verify(home_p, role))
+                except Exception:
+                    have2 = have
+                for skill in missing:
+                    if skill in have2:
+                        lines.append("restored: preset skill {}".format(skill))
+                    else:
+                        lines.append("missing: preset skill {} (needs network)".format(skill))
+        except Exception:
+            pass
+        break
+
     head = "Reset: {} ({} change{})".format(name, len(touched), "" if len(touched) == 1 else "s")
     tail = ["", "{} change{} kept, so /concierge reset {} tries again.".format(
         failed, "" if failed == 1 else "s", name
