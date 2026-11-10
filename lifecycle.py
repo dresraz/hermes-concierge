@@ -74,7 +74,10 @@ def resolve(store: Any, token: Any) -> Optional[str]:
         if 1 <= index <= len(items):
             return name_of(items[index - 1])
         return None
-    for record in records(store):
+    # Only bots resolve to a profile. An install record carries the profile it
+    # landed in, so matching those let `fire obsidian` delete the bot that holds
+    # the plugin -- no number, no name.
+    for record in bots(store):
         if low in {(record.name or "").lower(), name_of(record).lower()}:
             return name_of(record)
     return None

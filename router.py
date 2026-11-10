@@ -85,7 +85,7 @@ def route(text: str, *, here: str, bots: list, llm: Any) -> Optional[dict]:
         )
     except Exception:
         return None
-    raw = (getattr(answer, "text") or "").strip()
+    raw = (getattr(answer, "text", "") or "").strip()
     start, end = raw.find("{"), raw.rfind("}")
     if start < 0 or end <= start:
         return None

@@ -195,6 +195,8 @@ def _run_route(
         from . import lifecycle
 
         if not lifecycle.is_selector(store, selector):
+            if selector and not selector.isdigit():
+                return "Concierge did not create {}, so it will not delete it.\n".format(selector)
             return (
                 "Deleting a bot needs its number, so nothing is removed by a guess.\n"
                 "/concierge bots, then /concierge fire <number>\n"
@@ -395,6 +397,10 @@ def handle_concierge(
         selector = parts[0] if parts else ""
         confirm = " ".join(parts[1:])
         if not lifecycle.is_selector(store, selector):
+            # An existing profile Concierge never made is still refused, and said
+            # plainly: this is not a typo, it is somebody else's bot.
+            if selector and not selector.isdigit():
+                return "Concierge did not create {}, so it will not delete it.\n".format(selector)
             return (
                 "Deleting a bot needs its number, so nothing is removed by a guess.\n"
                 "/concierge bots, then /concierge {} <number>\n".format(head)
