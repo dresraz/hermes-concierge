@@ -1,7 +1,7 @@
 # Concierge
 
 [![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
-[![tests](https://img.shields.io/badge/tests-43%20passing-3fb950)](tests)
+[![tests](https://img.shields.io/badge/tests-47%20passing-3fb950)](tests)
 [![hermes](https://img.shields.io/badge/hermes-%3E%3D0.22.7-4B5563)](plugin.yaml)
 
 **The front door to the Hermes marketplace.**
@@ -23,7 +23,8 @@ one undo.
   marketplace has today.
 - **Creates bots** from ten presets, each a small, light skill set: researcher, writer, coder,
   assistant, marketer, watcher, designer, analyst, tutor, planner. A bot is a core profile
-  (`hermes profile create --clone`), so aliases, config and skills stay core's work.
+  (`hermes profile create --clone`), so aliases, config and skills stay core's work. Each preset
+  also writes the bot a short soul: the role, the shape of an answer, one safety line, nothing more.
 - **Improves a bot** by adding a skill, or by writing one habit into its `SOUL.md`.
 - **Deletes a bot** it created, after a confirmation, and never one it did not create.
 - **Undoes** the last change from a receipt on disk.
