@@ -280,6 +280,7 @@ def apply(plan_: Plan, *, store: Any = None) -> list:
     store = store or state.Store()
     lines = []
     added = []
+    installed = []
     for item in plan_.items:
         if item.kind == "rule":
             written = add_rule(plan_)
@@ -310,18 +311,22 @@ def apply(plan_: Plan, *, store: Any = None) -> list:
                 None,
             )
             added.append(str(folder or plan_.home / "skills"))
-            store.add(
-                state.Installed(
-                    name=item.name,
-                    kind="skill",
-                    title=plan_.sentence[:120],
-                    profile=plan_.bot,
-                    skills=[str(folder)] if folder else [],
-                    enabled=True,
-                )
-            )
+            installed.append((item.name, str(folder) if folder else ""))
         else:
             lines.append("Skill {} did not install.".format(item.name))
+    if installed:
+        # One action, one undo: three skills installed in one breath come back in
+        # one breath, or /concierge undo leaves two of them behind.
+        store.add(
+            state.Installed(
+                name=", ".join(name for name, _ in installed)[:120],
+                kind="skill",
+                title=plan_.sentence[:120],
+                profile=plan_.bot,
+                skills=[folder for _, folder in installed if folder],
+                enabled=True,
+            )
+        )
     return lines
 
 

@@ -166,7 +166,23 @@ def overview() -> str:
         from . import search
 
         total_plugins = len(search._plugins_meta().get("rows") or []) or len(seams.catalog())
-        available = len(search._skills_meta().get("rows") or []) or len(discover.catalogue())
+        available = len(search._skills_meta().get("rows") or [])
+        if not available:
+            # A bot profile keeps its own cache and starts empty; the owner's list
+            # is the same marketplace, so read it instead of claiming 144.
+            import json
+            import pathlib as _pl
+
+            from hermes_constants import get_hermes_home
+
+            home_now = _pl.Path(str(get_hermes_home()))
+            owner = home_now.parent.parent if home_now.parent.name == "profiles" else home_now
+            meta = owner / "cache" / "concierge" / "skills-meta.json"
+            try:
+                available = len(json.loads(meta.read_text()).get("rows") or [])
+            except Exception:
+                available = 0
+        available = available or len(discover.catalogue())
         total_connectors = len(search._connectors())
     except Exception:
         total_plugins = 0
