@@ -261,7 +261,7 @@ def profile_dir(name: str) -> Path:
     return root / "profiles" / name
 
 
-def create_bot(name: str, preset_skills: list) -> tuple:
+def create_bot(name: str, preset_skills: list, soul: str = "") -> tuple:
     target = home()
     clean = (name or "").strip()
     if not clean or clean.startswith("-") or clean in (".", "..") or "/" in clean or clean.startswith("."):
@@ -284,6 +284,14 @@ def create_bot(name: str, preset_skills: list) -> tuple:
             auth_file.unlink()
     except Exception:
         pass
+    # A new bot gets the preset's own short soul, not the owner's cloned one.
+    # Never fatal: the bot exists either way.
+    if soul:
+        try:
+            soul_path = profile_dir(name) / "SOUL.md"
+            soul_path.write_text(soul if soul.endswith("\n") else soul + "\n", encoding="utf-8")
+        except Exception:
+            pass
     done = 0
     failed: list = []
     for skill in preset_skills or []:

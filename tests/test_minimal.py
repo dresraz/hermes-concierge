@@ -76,6 +76,21 @@ class Presets(unittest.TestCase):
         self.assertIn("designer", presets.ROLES)
         self.assertTrue(all(presets.skills_for(name) for name in presets.names()))
 
+    def test_souls_stay_short_plain_and_generic(self):
+        for name in presets.names():
+            soul = presets.soul_for(name)
+            self.assertTrue(soul, name)
+            self.assertLessEqual(len(soul), 500, name)
+            self.assertNotIn("\u2014", soul, name)
+            self.assertNotIn("http", soul, name)
+            lowered = soul.lower()
+            self.assertNotIn("each morning", lowered, name)
+            self.assertNotIn("every morning", lowered, name)
+            for row in presets.skills_for(name):
+                if "-" in row:
+                    self.assertNotIn(row, soul, name)
+        self.assertEqual(presets.soul_for("nope"), "")
+
 
 class Tables(unittest.TestCase):
     def test_only_six_anchored_patterns(self):
@@ -412,6 +427,28 @@ class OfflineHeads(unittest.TestCase):
             self.assertIn("--clone", made[0])
             self.assertFalse((home / "profiles" / "probe-bot" / "auth.json").exists())
             self.assertTrue((home / "profiles" / "probe-bot" / ".env").exists())
+        finally:
+            store._run = real_run
+
+    def test_create_writes_the_preset_soul_not_the_owners(self):
+        home = pathlib.Path(self.tmp.name)
+        (home / ".env").write_text("OPENROUTER_API_KEY=kept\n", encoding="utf-8")
+
+        def fake_run(args, target, timeout=180):
+            if args[:3] == ["hermes", "profile", "create"]:
+                bot = home / "profiles" / args[3]
+                bot.mkdir(parents=True, exist_ok=True)
+                (bot / "SOUL.md").write_text("owner private stuff\n", encoding="utf-8")
+            return (0, "ok")
+
+        real_run = store._run
+        store._run = fake_run
+        try:
+            ok, _out, _done, _failed = store.create_bot("soul-bot", [], soul=presets.soul_for("writer"))
+            self.assertTrue(ok)
+            text = (home / "profiles" / "soul-bot" / "SOUL.md").read_text(encoding="utf-8")
+            self.assertIn("writing bot", text)
+            self.assertNotIn("owner private stuff", text)
         finally:
             store._run = real_run
 

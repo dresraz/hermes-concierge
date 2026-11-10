@@ -540,7 +540,7 @@ def _do_create(role: str, what: str) -> str:
             candidate = "{}-{}-bot".format(picked, suffix)
         name = candidate
     skills = presets_mod.skills_for(picked)
-    code, out, done, failed = store_mod.create_bot(name, skills)
+    code, out, done, failed = store_mod.create_bot(name, skills, soul=presets_mod.soul_for(picked))
     if not code:
         return "Could not create {}. Nothing was kept. Try again, or run /concierge help.\n".format(name)
     saved = bool(store_mod.push({"kind": "bot", "name": name, "paths": [str(store_mod.profile_dir(name))],
