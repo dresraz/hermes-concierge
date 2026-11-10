@@ -395,7 +395,10 @@ def handle_concierge(
         selector = parts[0] if parts else ""
         confirm = " ".join(parts[1:])
         if not lifecycle.is_selector(store, selector):
-            return card.handle(text, session_key=session_key)
+            return (
+                "Deleting a bot needs its number, so nothing is removed by a guess.\n"
+                "/concierge bots, then /concierge {} <number>\n".format(head)
+            )
         _drop_cards(session_key)
         try:
             if head in ("fire", "delete", "remove", "rm"):

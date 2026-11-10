@@ -81,7 +81,7 @@ Concierge
 Below a confidence floor a match only counts when the ask's own words appear in the
 entry's name or title, so the whole junk set (8 of 8 absurd asks) returns nothing.
 
-The matcher does not have the last word. It builds a shortlist of ten and one
+The matcher does not have the last word. It builds a shortlist of fourteen and one
 model call picks the one that does the job, reading names, descriptions and
 capabilities together, and it is allowed to answer nothing. A clear lexical
 winner skips the model, so the obvious asks stay instant. The model may reorder
