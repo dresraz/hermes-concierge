@@ -632,7 +632,14 @@ def handle_hire(
     # The role's soul and skills must land before the receipt is computed, or the
     # card reports the generic soul the hire flow wrote a moment earlier. A preset
     # failure never costs the bot: it exists, and the receipt says what is missing.
-    key_lines: list[str] = []
+    # A bot gets no copy of the owner's login: copying auth.json forks single-use
+    # OAuth grants, and the first profile to refresh revokes the rest. Core's
+    # credential pool covers the common case; a bot that genuinely needs its own
+    # credential gets one through core's own command, so the receipt names it
+    # instead of implying the login came along.
+    key_lines: list[str] = [
+        "Its own login, only if it needs one: hermes -p {} auth add <provider>".format(plan.name)
+    ]
     try:
         plugin_lines = _inherit_plugins(path)
     except Exception as exc:
