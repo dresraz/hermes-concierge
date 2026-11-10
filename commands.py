@@ -26,16 +26,6 @@ from typing import Any, Callable, Optional, Sequence
 
 from . import text as _text
 
-YES = frozenset({"y", "yes", "do it", "ok", "okay", "go", "confirm"})
-NO = frozenset({"n", "no", "cancel", "stop", "never mind", "nvm"})
-UNDO_WORDS = frozenset({"undo", "revert", "roll back", "rollback", "reverse"})
-HELP_WORDS = frozenset({"help", "?", "-h", "--help", "h", "commands"})
-
-CANCEL_WORDS = frozenset({
-    "cancel", "stop", "forget it", "never mind", "nevermind", "drop it",
-    "same as last time", "do it again", "not now", "abort",
-})
-
 HELP_SHORT = (
     ""
     "Concierge\n"
@@ -93,192 +83,7 @@ def _clean(raw: Any) -> str:
     return " ".join(str(raw or "").split())
 
 
-# A sentence that names a bot to make is a hire, whatever verb it starts with:
-# "install a research bot", "I want a research bot", "make me a coder". The role
-# cue is the tell, and a destination ("into <bot>") always wins over it.
-BOT_WORDS = frozenset({"bot", "bots", "agent", "agents"})
-# Asking for a capability is not asking for a bot, even when a role word shows up.
-CAPABILITY_WORDS = frozenset({
-    "skill", "skills", "plugin", "plugins", "tool", "tools", "integration",
-    "integrations", "app", "apps", "extension", "extensions",
-})
-# How people ask for a bot without saying "bot": "I need something that ...",
-# "I could use a writer", "another researcher".
-ASK_WORDS = ("i need", "i want", "i could use", "could use", "looking for",
-             "help me", "something that", "one that", "another ", "second ",
-             "one more ")
-MAKE_VERBS = ("hire", "make ", "make me", "create", "build", "spawn", "set up",
-              "stand up", "give me")
-
-
-def _is_word_char(char: str) -> bool:
-    """A word character for boundary checks, the old \\w without importing it."""
-    return char.isalnum() or char == "_"
-
-
-def _starts_anchored(low: str, prefix: str) -> bool:
-    """low starts with prefix on a word boundary, the old ^prefix\\b."""
-    return low.startswith(prefix) and (
-        len(low) == len(prefix) or not _is_word_char(low[len(prefix)])
-    )
-
-
-def _starts_any(low: str, prefixes: Sequence[str]) -> bool:
-    return any(_starts_anchored(low, prefix) for prefix in prefixes)
-
-
-def _plain_words(low: str, extra: str) -> set:
-    """Lowercase letter runs plus extra chars, the old [a-z...]+ findalls."""
-    out: set = set()
-    buf: list[str] = []
-    for char in low:
-        if "a" <= char <= "z" or char in extra:
-            buf.append(char)
-        elif buf:
-            out.add("".join(buf))
-            buf = []
-    if buf:
-        out.add("".join(buf))
-    return out
-
-
-def _apostrophe_words(low: str) -> set:
-    """The old [a-z']+ tokens: "what's" stays one word."""
-    return _plain_words(low, "'")
-
-
-def _dash_words(low: str) -> set:
-    """The old [a-z0-9'-]+ tokens."""
-    return _plain_words(low, "0123456789'-")
-
-
-def _underscore_words(low: str) -> set:
-    """The old [a-z0-9_-]+ tokens."""
-    return _plain_words(low, "0123456789_-")
-
-
-
-_BOTS_PHRASES = (
-    tuple(
-        head + mid + noun
-        for head in ("what", "which", "list", "show")
-        for mid in ("", " me", " my", " the", " all",
-                    " me my", " me the", " me all")
-        for noun in (" bot", " bots")
-    )
-    + ("my bots",)
-    + tuple(
-        head + " bots " + tail
-        for head in ("what", "how many")
-        for tail in ("do i have", "have i got", "are there")
-    )
-    + ("bots",)
-)
-_UNDO_PHRASES = (
-    "undo", "revert", "roll back", "rollback", "deshaz", "deshacer",
-)
-_FIRE_PHRASES = (
-    "delete", "remove", "fire", "reset", "get rid of", "kill", "drop",
-    "uninstall", "borra", "elimina",
-)
-_BROWSE_PHRASES = (
-    tuple(
-        head + " " + mid + " i " + tail
-        for head in ("what", "which")
-        for mid in ("can", "should")
-        for tail in ("install", "add", "get")
-    )
-    + tuple(
-        head + mid + " what " + able + " " + tail
-        for head in ("show", "list")
-        for mid in ("", " me")
-        for able in ("i can", "can i")
-        for tail in ("install", "add", "get")
-    )
-    + tuple(
-        head + mid + tail
-        for head in ("show", "list")
-        for mid in ("", " me")
-        for tail in (" everything", " the catalog", " the marketplace")
-    )
-)
-
-
-def _natural_verb(low: str) -> str:
-    """The command a plain sentence is asking for, or "".
-
-    Politeness is stripped first: "please list my bots" is the same sentence as
-    "list my bots", and "can you remove the old coder bot" is a fire.
-    """
-    low = _strip_polite(low)
-    if _starts_any(low, _UNDO_PHRASES):
-        return "undo"
-    if _starts_any(low, _BOTS_PHRASES):
-        return "bots"
-    if _starts_any(low, _BROWSE_PHRASES):
-        return "browse"
-    if _starts_any(low, _FIRE_PHRASES):
-        return "fire"
-    return ""
-
-
-def _wants_a_bot(text: str) -> bool:
-    """True when the sentence asks for a bot, not for a plugin or a skill.
-
-    A bot word next to a role cue is not enough on its own: "a bot that writes
-    my taxes" names a writer and asks for nothing, and it must reach the
-    marketplace answer ("nothing fits") rather than invent a bot.
-    """
-    from . import market, presets
-
-    low = " ".join((text or "").lower().split())
-    if not low or " into " in low:
-        return False
-    if market.split_target(text)[1]:
-        return False
-    role = presets.detect(text)
-    if role is None:
-        return False
-    words = _apostrophe_words(low)
-    stripped = _strip_polite(low)
-    asking = _asks_create(stripped) or _asks_create(low)
-    if words & BOT_WORDS:
-        return asking
-    return asking
-
-
-def _asks_for_bot(text: str) -> bool:
-    """A bot was asked for, whatever the sentence calls it.
-
-    This is the guard that keeps the worst outcome off the screen: showing an
-    install card for a random package when the person asked for a bot.
-    """
-    from . import market
-
-    low = " ".join((text or "").lower().split())
-    if not low or market.split_target(text)[1]:
-        return False
-    words = _apostrophe_words(low)
-    if words & CAPABILITY_WORDS:
-        return False
-    # "make the house bot shorter" names a bot you already have: that is a
-    # change to it, not a request for another one.
-    try:
-        if any(_has_token_word(low, name) for name in _bot_names()):
-            return False
-    except Exception:
-        pass
-    asked = any(
-        verb.strip() in words or low.startswith(verb.strip()) for verb in MAKE_VERBS
-    ) or any(phrase in low for phrase in ASK_WORDS)
-    if not asked:
-        return False
-    if words & BOT_WORDS:
-        return True
-    # "I'd like another researcher" names the role, not the word bot.
-    from . import presets
-
-    return presets.detect(low) is not None
+# Intent lives in the model router now (router.route); no word lists here.
 
 
 def _self_name() -> str:
@@ -323,302 +128,7 @@ def _is_bot_profile() -> bool:
     return home.parent.name == "profiles" and home.name not in ("", "profiles")
 
 
-POLITE = (
-    "please ", "can you ", "could you ", "would you ", "will you ",
-    "i want to ", "i'd like to ", "i would like to ", "i need to ",
-    "i need ", "i want ", "i'd like ", "help me ", "let's ", "lets ",
-)
-CREATE_ANY = ("hire", "make", "create", "build", "spawn", "set up", "stand up",
-              "give me", "get me", "spin up", "start",
-              "hazme", "haz", "crea", "crear", "arma", "armar", "monta", "montar")
-NEED_ANY = ("need", "want", "looking for", "could use", "necesito", "quiero",
-            "kiero", "busco")
-SECOND_ANY = ("another", "second one", "one more", "twin", "number 2", "a new")
 
-
-def _strip_polite(low: str) -> str:
-    """Drop the words people put in front of a request."""
-    out = low
-    changed = True
-    while changed:
-        changed = False
-        for phrase in POLITE:
-            if out.startswith(phrase):
-                out = out[len(phrase):].lstrip()
-                changed = True
-    return out
-
-
-def _has_phrase(low: str, phrases: Sequence[str]) -> bool:
-    """A phrase as whole words, the old \\bphrase\\b search."""
-    for phrase in phrases:
-        if not phrase:
-            continue
-        start = 0
-        while True:
-            at = low.find(phrase, start)
-            if at < 0:
-                break
-            end = at + len(phrase)
-            left_ok = (at > 0 and _is_word_char(low[at - 1])) != _is_word_char(low[at])
-            right_ok = _is_word_char(low[end - 1]) != (end < len(low) and _is_word_char(low[end]))
-            if left_ok and right_ok:
-                return True
-            start = at + 1
-    return False
-
-
-def _has_token_word(haystack: str, needle: str) -> bool:
-    """needle as a whole token, where a hyphen joins: the old (?<![\\w-])m(?![\\w-]).
-
-    "reads" is inside "threads" and "pdf" is inside "pdf-skill": neither counts.
-    """
-    if not needle:
-        return False
-    start = 0
-    while True:
-        at = haystack.find(needle, start)
-        if at < 0:
-            return False
-        end = at + len(needle)
-        left = haystack[at - 1] if at > 0 else ""
-        right = haystack[end] if end < len(haystack) else ""
-        if left and (left.isalnum() or left in "_-"):
-            start = at + 1
-            continue
-        if right and (right.isalnum() or right in "_-"):
-            start = at + 1
-            continue
-        return True
-
-
-def _help_me_job(low: str) -> bool:
-    """'help me <word>' where the word is not 'with', the old lookahead."""
-    start = 0
-    while True:
-        at = low.find("help me ", start)
-        if at < 0:
-            return False
-        if at > 0 and _is_word_char(low[at - 1]):
-            start = at + 1
-            continue
-        rest = low[at + len("help me "):]
-        if rest.startswith("with") and (
-            len(rest) == 4 or not _is_word_char(rest[4])
-        ):
-            start = at + 1
-            continue
-        if rest and _is_word_char(rest[0]):
-            return True
-        start = at + 1
-
-
-def _asks_create(low: str) -> bool:
-    """The sentence asks for a bot in make or need words, anywhere in it."""
-    if _has_phrase(low, CREATE_ANY) or _has_phrase(low, NEED_ANY):
-        return True
-    # "help me keep my inbox at zero" is a job; "help me with excel" is a tool.
-    return _help_me_job(low)
-
-
-def _has_det_name(stripped: str, name: str) -> bool:
-    """'my/the/for/to/into <name>' as whole words, the old det + \\s+ + name."""
-    for det in ("my", "the", "for", "to", "into"):
-        start = 0
-        while True:
-            at = stripped.find(det, start)
-            if at < 0:
-                break
-            end = at + len(det)
-            if at > 0 and _is_word_char(stripped[at - 1]):
-                start = at + 1
-                continue
-            gap = end
-            while gap < len(stripped) and stripped[gap].isspace():
-                gap += 1
-            if gap == end or not stripped.startswith(name, gap):
-                start = at + 1
-                continue
-            stop = gap + len(name)
-            if stop < len(stripped) and _is_word_char(stripped[stop]):
-                start = at + 1
-                continue
-            return True
-    return False
-
-
-_LEAD_QUANTIFIERS = ("one more", "another", "a second", "second", "new")
-
-
-def _trim_leading_quantifier(stripped: str) -> str:
-    """Drop one leading 'another'/'a second'/..., the old anchored removal."""
-    for word in _LEAD_QUANTIFIERS:
-        if stripped.startswith(word):
-            tail = stripped[len(word):]
-            if tail and tail[0].isspace():
-                return tail.lstrip()
-    return stripped
-
-
-def _mine_word(stripped: str) -> str:
-    """The word after my/the/our, the old capture group."""
-    i, n = 0, len(stripped)
-    while i < n:
-        for det in ("my", "the", "our"):
-            if not stripped.startswith(det, i):
-                continue
-            if i > 0 and _is_word_char(stripped[i - 1]):
-                continue
-            gap = i + len(det)
-            if gap >= n or not stripped[gap].isspace():
-                continue
-            while gap < n and stripped[gap].isspace():
-                gap += 1
-            if gap >= n or not ("a" <= stripped[gap] <= "z" or "0" <= stripped[gap] <= "9"):
-                continue
-            stop = gap + 1
-            while stop < n and (
-                "a" <= stripped[stop] <= "z" or "0" <= stripped[stop] <= "9" or stripped[stop] == "-"
-            ):
-                stop += 1
-            return stripped[gap:stop]
-        i += 1
-    return ""
-
-
-def _starts_det_name(stripped: str, name: str) -> bool:
-    """stripped opens with 'a/an/the <name>', the old anchored article match."""
-    for det in ("a", "an", "the"):
-        if stripped.startswith(det):
-            gap = len(det)
-            if gap < len(stripped) and stripped[gap].isspace():
-                if stripped[gap:].lstrip().startswith(name):
-                    return True
-    return False
-
-
-def _route(text: str) -> tuple:
-    """One sentence, one decision.
-
-    The order matters and it is the whole product: a destination beats
-    everything, a bot you already have beats a new one, asking for a bot beats
-    the marketplace, and the marketplace is the last resort rather than the
-    answer to every sentence.
-    """
-    from . import presets
-
-    if _is_bot_profile():
-        return "improve", _self_name(), text
-
-    from . import market
-
-    query, target = market.split_target(text)
-    if target:
-        return "install", "", text
-    low = " ".join((query or "").lower().split())
-    if not low:
-        return "install", "", text
-    words = _dash_words(low)
-    stripped = _strip_polite(low)
-    names = [name for name in _bot_names() if name != "default"]
-
-    # A bot you already have, aimed at by name. A hyphenated name is a name;
-    # a plain word also has to be pointed at ("my intern", "for intern").
-    for name in sorted(names, key=len, reverse=True):
-        if name not in words:
-            continue
-        if "-" in name or _has_det_name(stripped, name):
-            return "improve", name, query
-
-    second = _has_phrase(stripped, SECOND_ANY)
-    role = presets.detect(query)
-    if role is None:
-        trimmed = _trim_leading_quantifier(stripped)
-        if trimmed != stripped:
-            role = presets.detect(trimmed)
-            if role is None:
-                for candidate in presets.names():
-                    if candidate in trimmed.split():
-                        role = presets.get(candidate)
-                        break
-
-    # "my researcher" is the one you have, unless the sentence asks for another.
-    # "install a weather plugin for my assistant" is an install, not an improve:
-    # the verb says what to do, the possessive only says where it goes.
-    install_verb = _has_phrase(stripped, ("install", "add", "enable"))
-    capability = bool(words & CAPABILITY_WORDS)
-    if install_verb and (capability or role is not None) and ":" not in text:
-        return "install", "", text
-
-    # "my coder" and "the coder" both point at the one you have.
-    wanted = _mine_word(stripped)
-    if wanted and not second:
-        if wanted in names or presets.get(wanted) is not None:
-            for name in names:
-                if name == wanted or name.startswith(wanted + "-"):
-                    return "improve", name, query
-            return "improve", wanted, query
-
-    bot_word = bool(words & BOT_WORDS)
-    # Read the ask from the whole sentence: "I need something that ..." keeps its
-    # verb before the politeness words are stripped.
-    asking = _asks_create(low) or _asks_create(stripped)
-    capability = bool(words & CAPABILITY_WORDS)
-    # A bot was asked for: by the word, by a role, or by "something that does X".
-    # The marketplace is never the answer to that, even when the sentence also
-    # says "skills" or "plugins".
-    if second and (bot_word or role is not None or asking):
-        return "create", "", query
-    if bot_word and asking:
-        return "create", "", query
-    if role is not None and asking and not capability:
-        return "create", "", query
-    if role is not None and role.name in words and not capability:
-        return "create", "", query
-    if role is not None and not capability and not _has_phrase(stripped, ("install", "add", "get")):
-        if _starts_det_name(stripped, role.name) or _is_role_bare(stripped, role):
-            return "create", "", query
-    if role is not None:
-        for name in names:
-            if name == role.name or name.startswith(role.name + "-"):
-                return "improve", name, query
-    return "install", "", text
-
-
-def _is_role_bare(low: str, role: Any) -> bool:
-    """"a researcher, please" and "researcher for papers" are bot asks."""
-    head = low.rstrip(",!.?").strip()
-    return head == role.name or head.startswith(role.name + " ")
-
-
-def _strip_name(text: str, name: str) -> str:
-    """The ask without the bot's name in it."""
-    target = (name or "").lower()
-    at = -1
-    if target:
-        low = text.lower()
-        start = 0
-        while True:
-            found = low.find(target, start)
-            if found < 0:
-                break
-            end = found + len(target)
-            if (found == 0 or not _is_word_char(low[found - 1])) and (
-                end >= len(low) or not _is_word_char(low[end])
-            ):
-                at = found
-                break
-            start = found + 1
-    out = text[:at] + " " + text[at + len(target):] if at >= 0 else text
-    return " ".join(out.split()).strip(" :,-") or text
-
-
-_SELF = ("yourself", "itself", "your self", "yourself.")
-
-_SELF_VERBS = (
-    "improve", "add ", "capable", "capabilities", "capability", "ability",
-    "handle", "support", "better at", "able to",
-)
 
 
 _ROUTING = False
@@ -699,18 +209,6 @@ def _run_route(
     return None
 
 
-_SPANISH_VERBS = ("mejora", "mejorar", "ensea", "ensña", "entrena")
-
-
-def _spanish_improve(low: str) -> str:
-    """The sentence after mejora/mejorar/ensea/ensña/entrena, or "" when it is not one."""
-    for verb in _SPANISH_VERBS:
-        if low.startswith(verb):
-            tail = low[len(verb):]
-            if tail and tail[0].isspace() and tail.lstrip():
-                return tail.lstrip()
-    return ""
-
 
 def _into_target(text: str):
     """A trailing 'into <name>', as (name, start), the way the old search read it."""
@@ -721,8 +219,8 @@ def _into_target(text: str):
         if at < 0:
             return None
         end = at + len("into")
-        if (at == 0 or not _is_word_char(low[at - 1])) and (
-            end >= len(low) or not _is_word_char(low[end])
+        if (at == 0 or not (low[at - 1].isalnum() or low[at - 1] == "_")) and (
+            end >= len(low) or not (low[end].isalnum() or low[end] == "_")
         ):
             gap = end
             while gap < len(text) and text[gap].isspace():
@@ -737,66 +235,6 @@ def _into_target(text: str):
                 if stop > gap and not text[stop:].strip():
                     return text[gap:stop], at
         start = at + 1
-
-
-def _self_improve(text: str) -> bool:
-    """'make yourself able to read pdfs' is about the bot you are talking to."""
-    low = " " + " ".join((text or "").lower().split()) + " "
-    if not any(word in low for word in _SELF):
-        return False
-    return any(verb in low for verb in _SELF_VERBS)
-
-
-def _improve_shape(text: str) -> bool:
-    """"<bot>: <what>" is an improve, whatever word came before it."""
-    head, sep, rest = (text or "").partition(":")
-    if not sep or not rest.strip():
-        return False
-    if "://" in head:
-        return False
-    words = _underscore_words(head.lower())
-    if words & BOT_WORDS:
-        return False
-    shape = head.strip().lower()
-    if not shape or not ("a" <= shape[0] <= "z" or "0" <= shape[0] <= "9"):
-        return False
-    return all(
-        "a" <= char <= "z" or "0" <= char <= "9" or char in " ._-"
-        for char in shape
-    )
-
-
-_WHAT_IN_HEADS = (
-    "what installed in", "what is installed in", "what's installed in",
-    "what inside", "what is inside", "what's inside",
-    "what is in", "what's in", "what in",
-)
-
-
-def _what_is_in(low: str) -> str:
-    """The bot after "what's in X", or "" when the sentence is not that shape."""
-    for head in _WHAT_IN_HEADS:
-        if not low.startswith(head):
-            continue
-        tail = low[len(head):]
-        if not tail or not tail[0].isspace():
-            continue
-        rest = tail.lstrip()
-        for det in ("my", "the"):
-            if rest.startswith(det):
-                gap = len(det)
-                if gap < len(rest) and rest[gap].isspace():
-                    rest = rest[gap:].lstrip()
-                    break
-        name: list[str] = []
-        for char in rest:
-            if "a" <= char <= "z" or "0" <= char <= "9" or char in "_-":
-                name.append(char)
-            else:
-                break
-        if name:
-            return "".join(name)
-    return ""
 
 
 def handle_concierge(
@@ -834,10 +272,6 @@ def handle_concierge(
         from . import shelf
 
         return shelf.overview()
-    if low in CANCEL_WORDS:
-        _drop_cards(session_key)
-        market.forget(session_key)
-        return "Dropped. Nothing was installed.\n"
 
     # A card word with no card in front of it is not a search term: "more" was
     # once answered by installing a random plugin.
@@ -860,40 +294,11 @@ def handle_concierge(
     if low in ("help all", "help -a", "help --all"):
         _drop_cards(session_key)
         return HELP
-    if low in HELP_WORDS:
+    if low == "help":
         _drop_cards(session_key)
         return HELP_SHORT
-    in_bot = _what_is_in(low)
-    if in_bot:
-        _drop_cards(session_key)
-        return handle_concierge("skills " + in_bot, store=store,
-                                session_key=session_key, known=known, hire=hire)
 
-    # The model reads the sentence; the action set is closed and every action
-    # runs through the code that already knows how to install, verify and undo.
-    routed = _model_route(text, store=store)
-    if routed:
-        answer = _run_route(routed, text, store=store, session_key=session_key,
-                            known=known, hire=hire)
-        if answer is not None:
-            return answer
 
-    natural = _natural_verb(low)
-    if natural == "bots":
-        _drop_cards(session_key)
-        return _safe_bots(store)
-    first_word = low.split(" ", 1)[0]
-    if natural == "fire" and first_word not in ("fire", "reset", "delete", "remove", "rm"):
-        _drop_cards(session_key)
-        return (
-            "Deleting a bot needs its number, so nothing is removed by a guess.\n"
-            "/concierge bots, then /concierge fire <number>\n"
-        )
-    if natural == "browse":
-        from . import shelf
-
-        _drop_cards(session_key)
-        return shelf.overview()
     # A card this conversation was shown owns yes, no, more and 1. Checked before
     # anything forgets it, or the flagship loop dies on its own receipt.
     from . import card as card_mod
@@ -908,7 +313,7 @@ def handle_concierge(
         ):
             return card_mod.handle(text, session_key=session_key, store=store)
         # Any other sentence is a new request: the old card is dropped below.
-    if low in UNDO_WORDS or _starts_anchored(low, "undo") or _starts_anchored(low, "roll back") or _starts_anchored(low, "rollback"):
+    if low == "undo":
         _drop_cards(session_key)
         return handle_undo(store=store, undo=undo, seams=seams)
 
@@ -1015,10 +420,6 @@ def handle_concierge(
 
         _drop_cards(session_key)
         market_mod.forget(session_key)
-        # "install a research bot" is a hire: the sentence names the thing to
-        # make, not a package to fetch. A destination still wins.
-        if _wants_a_bot(rest):
-            return handle_hire(rest, store=store, hire=hire, known=known)
         return handle_install(rest, store=store, session_key=session_key)
 
     # Bare yes/no/more belong to a card this conversation was shown.
@@ -1033,146 +434,23 @@ def handle_concierge(
     if first.lower() == "train":
         return "train is gone. Same thing: /concierge improve {}\n".format(after.strip() or "<bot>: <what>")
 
-    if _self_improve(text) and not (_asks_for_bot(text) or _wants_a_bot(text)):
+    # Free text goes to the model router. With no model there is no second
+    # search and no guessing: one plain sentence says what to do instead.
+    routed = _model_route(text, store=store)
+    if routed is None:
         _drop_cards(session_key)
-        return handle_improve(
-            text, store=store, known=known, bot=_self_name() if _is_bot_profile() else None
-        )
-    improved = _spanish_improve(low)
-    if improved:
-        _drop_cards(session_key)
-        return handle_improve(improved, store=store, known=known)
-    if _improve_shape(text):
-        _drop_cards(session_key)
-        return handle_improve(text, store=store, known=known)
-
-    intent_name, bot, sentence = _classify(text, store=store)
-    # A sentence that plainly asks for a bot is a bot, whatever the model said:
-    # a prompt that talks the model into "install" must not override the guard.
-    already = (bot or "") in _bot_names()
-    if intent_name != "create" and not (intent_name == "improve" and already):
-        if _asks_for_bot(text) or _wants_a_bot(text):
-            intent_name, bot, sentence = "create", "", text
-    _drop_cards(session_key)
-    if intent_name == "create":
-        return handle_hire(sentence or text, store=store, hire=hire, known=known)
-    if intent_name == "improve":
-        if not bot:
-            return handle_improve(sentence or text, store=store, known=known)
-        return handle_improve(_strip_name(sentence, bot), store=store, known=known, bot=bot)
-    if intent_name == "bots":
-        return _safe_bots(store)
-    if intent_name == "browse":
-        from . import shelf
-
-        return shelf.overview()
-    if intent_name == "help":
-        return HELP
-    if intent_name == "undo":
-        return handle_undo(store=store, undo=undo, seams=seams)
-    if intent_name == "none":
         return (
-            "I only take plain requests, not instructions about how to answer.\n"
-            "Say what you want, like /concierge install obsidian.\n"
+            "I need a model to read that. Name the thing and I will install it, "
+            "or run /concierge help.\n"
         )
-    if intent_name == "fire":
-        return (
-            "Deleting a bot needs its number, so nothing is removed by a guess.\n"
-            "/concierge bots, then /concierge fire <number>\n"
-        )
-
-    if _is_bot_profile() and intent_name == "install":
-        here = _self_name()
-        from . import card as card_mod
-        from . import market as market_mod
-
-        _, target = market_mod.split_target(text)
-        if target and target != here:
-            return "This bot can only install into itself, not {}.\n".format(target)
-        return card_mod.handle(text, session_key=session_key, store=store, target=here)
-
-    # "into <word>" that is not a bot is a typo, not a destination.
-    aimed = _into_target(text)
-    if aimed:
-        aimed_name = aimed[0]
-        try:
-            from . import seams as _seams
-
-            if not _seams.profile_exists(aimed_name):
-                return "No bot called {}. Say /concierge bots to see them.\n".format(
-                    aimed_name
-                )
-        except Exception:
-            pass
-
-    # No bot named: a plugin or a skill. A skill this machine already ships wins
-    # when the sentence names it, because it costs nothing and adds no tools;
-    # otherwise the catalog answers first, and the skills on disk get a turn
-    # only when the catalog has nothing.
-    from . import improve
-
-    here = _self_name() or "default"
-    if improve.resolve(here) is None:
-        here = "default"
-    early = improve.plan(here, text)
-    low = text.lower()
-    def _named(item: Any) -> bool:
-        for form in (item.name, item.name.replace("-", " ")):
-            if _has_token_word(low, form):
-                return True
-        return False
-
-    if early is not None and any(_named(item) for item in early.items):
-        return improve.receipt(early, improve.apply(early, store=store))
-
-    if _asks_for_bot(text):
-        return handle_hire(text, store=store, hire=hire, known=known)
-
-    # One decision point for "install this": handle_install owns the shortlist
-    # and the model's pick. A second card.handle here would answer again from a
-    # different ranking, which is how two screens could disagree.
-    answer = handle_install(text, store=store, session_key=session_key)
-    if "Nothing here fits" in answer:
-        try:
-            from . import seams as _seams
-
-            if _seams.catalog_source() != "marketplace":
-                return (
-                    "I could not reach the marketplace just now, so I will not claim\n"
-                    "that nothing exists. Nothing was installed. Try again in a moment.\n"
-                )
-        except Exception:
-            pass
-        # A job with no package is still a job: offer the bot instead of dead-ending.
-        from . import presets as _presets
-
-        low_text = " ".join(text.lower().split())
-        finance = any(
-            word in low_text
-            for word in ("tax", "taxes", "invoice", "invoices", "bookkeeping",
-                         "payroll", "accountant", "accounting", "vat", "irs",
-                         "impuestos", "factura", "contabilidad")
-        )
-        role = _presets.detect(text)
-        named = role is not None and role.name in low_text.split()
-        if finance:
-            subject = "an analyst for this (it can build the workbook)"
-            answer += (
-                "Tax and invoicing tools are country-specific: say which country\n"
-                "and I will look for one that fits.\n"
-            )
-        elif named:
-            subject = "a {} for this".format(role.name)
-        else:
-            subject = "a bot that does that"
-        if answer.count("Next:") < 1:
-            answer += "Next: /concierge create {}\n".format(subject)
+    answer = _run_route(routed, text, store=store, session_key=session_key,
+                        known=known, hire=hire)
+    if answer is not None:
         return answer
-    if "best match  none" in answer:
-        plan = improve.plan(here, text)
-        if plan is not None and plan.items:
-            return improve.receipt(plan, improve.apply(plan, store=store))
-    return answer
+    return (
+        "I need a model to read that. Name the thing and I will install it, "
+        "or run /concierge help.\n"
+    )
 
 
 def _exact_entry(query: str, catalog: list) -> str:
@@ -1308,23 +586,11 @@ def handle_install(
         return _install_now(choice.name, catalog=catalog, store=store,
                             session_key=session_key, target=target, caution=caution)
     if _llm() is None:
-        # No model at all: the old two-shelf search still beats a dead end. The
-        # caution still has to reach the card, or offline is the one path where a
-        # paid memory provider or a GPU-heavy skill installs without a word.
-        from . import choose
-
-        rows = choose.shortlist(query, entries=catalog)
-        if rows:
-            top = rows[0]
-            warning = choose.caution_for(top, query)
-            if warning and getattr(top, "kind", "") == "skill":
-                return market.handle(top.name, target=target, session_key=session_key,
-                                     store=store, search_fn=search, caution=warning)
-            if warning:
-                return card.handle(top.name, entries=catalog, store=store,
-                                   session_key=session_key, target=target, caution=warning)
-        return market.handle(text, target=target, session_key=session_key,
-                             store=store, search_fn=search)
+        # No model, no guessing: the sentence needs a reader.
+        return (
+            "I need a model to read that. Name the thing and I will install it, "
+            "or run /concierge help.\n"
+        )
     # Nothing was picked, so nothing is installed. Falling through to a second
     # lexical search here is how a polite "keep my desk tidy" ended up offering
     # a submission ledger: two shots at a wrong answer instead of one honest no.
@@ -1539,10 +805,18 @@ def handle_improve(
             "Improve {} how? Name the job: /concierge improve {}: it needs to read PDFs.\n"
             .format(bot, bot)
         )
-    plan = improve.plan(bot, sentence)
+    llm = _llm()
+    plan = improve.plan(bot, sentence, llm=llm)
     if plan is None:
         names = ", ".join(_bot_names()) or "none"
         return "No bot called {}. Bots here: {}\n".format(bot, names)
+    if not plan.items and not getattr(plan, "have", None) and llm is None:
+        # No model, no verdict: the sentence names no skill, and only a reader
+        # can say whether it is a rule or a capability.
+        return (
+            "I need a model to read that. Name the thing and I will install it, "
+            "or run /concierge help.\n"
+        )
     return improve.receipt(plan, improve.apply(plan, store=store))
 
 
@@ -1557,41 +831,6 @@ def _llm() -> Any:
         return None
 
 
-def _classify(text: str, store: Any = None) -> tuple:
-    """What this sentence means: model first, rules when there is no model."""
-    from . import intent as intent_mod, presets
-
-    # A sentence that plainly hires or installs is decided by the rules, so the
-    # common case costs no network wait at all.
-    if _asks_for_bot(text) or _wants_a_bot(text):
-        return _route(text)
-    llm = None
-    if _CTX is not None:
-        try:
-            llm = _CTX.llm
-        except Exception:
-            llm = None
-    try:
-        names = _bot_names()
-    except Exception:
-        names = ["default"]
-    # Each bot carries its job, so "the house bot" resolves to lima-house-seller.
-    jobs = {}
-    try:
-        records = getattr(store, "all", lambda: [])() if store is not None else []
-    except Exception:
-        records = []
-    for record in records:
-        if getattr(record, "kind", "") == "bot":
-            jobs[record.profile or record.name] = getattr(record, "title", "")
-    return intent_mod.classify(
-        text,
-        llm=llm,
-        bots=names,
-        roles=presets.names(),
-        jobs=jobs,
-        fallback=_route,
-    )
 
 
 def _bot_names() -> list:
@@ -1855,7 +1094,6 @@ _CTX: Any = None
 # gateway turn get_hermes_home() is the bot's own home, so reading "the owner's
 # login" at call time would read the empty profile we are about to fill.
 _HOME: Any = None
-_READ_ONLY = frozenset({"", "help", "?", "h", "commands", "-h", "--help", "bots", "browse", "shelf"})
 
 
 _PLATFORM: str = ""
@@ -1948,7 +1186,9 @@ def _gateway_refusal(raw: Any) -> Optional[str]:
     if text.lower().startswith("/concierge"):
         text = text[len("/concierge"):].strip()
     low = text.lower()
-    if low in _READ_ONLY or low.split(" ", 1)[0] in _READ_ONLY:
+    if low in ("", "help", "help all", "bots", "browse", "shelf"):
+        return None
+    if low.split(" ", 1)[0] in ("help", "bots", "browse", "shelf"):
         return None
     return (
         "Concierge changes this machine, so it does not run from a shared chat.\n"
@@ -1987,9 +1227,6 @@ def register(ctx: Any) -> None:
 __all__ = [
     "HELP",
     "USAGE",
-    "YES",
-    "NO",
-    "UNDO_WORDS",
     "handle_concierge",
     "handle_hire",
     "handle_undo",

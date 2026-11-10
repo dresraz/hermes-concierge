@@ -231,15 +231,6 @@ def expand(query: str) -> list:
     return list(seen)
 
 
-CAPABILITY_KEYS = (
-    "provides_tools",
-    "provides_hooks",
-    "provides_middleware",
-    "provides_commands",
-    "requires_env",
-)
-
-
 def capabilities(entry: Any) -> dict:
     """The entry's capabilities as a plain dict, whichever shape the catalog hands us.
 
@@ -252,7 +243,15 @@ def capabilities(entry: Any) -> dict:
         return {}
     if isinstance(caps, dict):
         return {k: v for k, v in caps.items() if v}
-    return {k: getattr(caps, k) for k in CAPABILITY_KEYS if getattr(caps, k, None)}
+    # The catalog's own capability fields, read off the entry itself.
+    keys = (
+        "provides_tools",
+        "provides_hooks",
+        "provides_middleware",
+        "provides_commands",
+        "requires_env",
+    )
+    return {k: getattr(caps, k) for k in keys if getattr(caps, k, None)}
 
 
 def _entry_tokens(entry: Any) -> tuple:

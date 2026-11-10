@@ -16,6 +16,21 @@ import harness  # noqa: E402
 improve = harness.load("improve")
 
 
+class _KindLlm:
+    """A stub model that answers rule-vs-skill with one fixed kind."""
+
+    def __init__(self, kind):
+        self.kind = kind
+
+    def complete_structured(self, **kwargs):
+        kind = self.kind
+
+        class _Result:
+            text = '{"kind": "%s"}' % kind
+
+        return _Result()
+
+
 class Plan(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
@@ -33,7 +48,7 @@ class Plan(unittest.TestCase):
         self.assertEqual(plan.items[0].kind, "skill")
 
     def test_a_rule_is_a_rule_not_a_skill(self):
-        plan = improve.plan("demo-bot", "always show the source first")
+        plan = improve.plan("demo-bot", "always show the source first", llm=_KindLlm("rule"))
         self.assertEqual([item.kind for item in plan.items], ["rule"])
 
     def test_an_unknown_bot_is_none_not_a_crash(self):
@@ -58,7 +73,7 @@ class Apply(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def test_a_rule_lands_in_soul_where_every_turn_reads_it(self):
-        plan = improve.plan("demo-bot", "never send without asking")
+        plan = improve.plan("demo-bot", "never send without asking", llm=_KindLlm("rule"))
         improve.apply(plan, store=harness.load("state").Store())
         soul = (self.bot / "SOUL.md").read_text(encoding="utf-8")
         self.assertIn("## Learned rules", soul)

@@ -164,6 +164,7 @@ class Improve(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def test_a_rule_lands_in_soul_with_one_undo_line(self):
+        _with_llm(self, "rule")
         made = store()
         text = commands.handle_concierge(
             "improve inbox-bot: always label receipts", store=made
@@ -183,6 +184,7 @@ class Improve(unittest.TestCase):
         self.assertIn("inbox-bot", text)
 
     def test_a_hand_made_bot_can_be_improved(self):
+        _with_llm(self, "rule")
         text = commands.handle_concierge(
             "improve inbox-bot: never send without asking", store=store()
         )
@@ -190,27 +192,80 @@ class Improve(unittest.TestCase):
         self.assertTrue((self.bot / "SOUL.md").is_file())
 
     def test_nothing_in_the_marketplace_says_so(self):
+        _with_llm(self, "skill")
         text = commands.handle_concierge(
             "improve inbox-bot: quantum flux capacitor", store=store()
         )
         self.assertIn("Nothing in the marketplace fits that", text)
 
 
+class _KindLlm:
+    """A stub model that answers rule-vs-skill with one fixed kind."""
+
+    def __init__(self, kind):
+        self.kind = kind
+
+    def complete_structured(self, **kwargs):
+        kind = self.kind
+
+        class _Result:
+            text = '{"kind": "%s"}' % kind
+
+        return _Result()
+
+
+class _Ctx:
+    """A stub plugin context carrying one stub model."""
+
+    def __init__(self, llm):
+        self._llm = llm
+
+    @property
+    def llm(self):
+        return self._llm
+
+
+def _with_llm(testcase, kind):
+    saved = commands._CTX
+    commands._CTX = _Ctx(_KindLlm(kind))
+    testcase.addCleanup(lambda: setattr(commands, "_CTX", saved))
+
+
 class Router(unittest.TestCase):
-    """One sentence, one decision, using the bots that exist."""
+    """Free text belongs to the model router; without one the answer is honest."""
 
-    def test_a_new_role_creates(self):
-        with mock.patch.object(commands, "_bot_names", lambda: ["default"]):
-            self.assertEqual(commands._route("a researcher that reads papers")[0], "create")
+    def test_free_text_without_a_model_says_so(self):
+        for sentence in (
+            "a researcher that reads papers",
+            "make my researcher better at citations",
+            "stripe payments",
+            "something that reads my pdfs",
+        ):
+            text = commands.handle_concierge(sentence, store=store())
+            self.assertIn("I need a model to read that", text, sentence)
 
-    def test_a_role_that_exists_is_improved_not_duplicated(self):
-        with mock.patch.object(commands, "_bot_names", lambda: ["default", "researcher-bot"]):
-            kind, bot, _ = commands._route("make my researcher better at citations")
-            self.assertEqual((kind, bot), ("improve", "researcher-bot"))
-
-    def test_no_role_is_an_install(self):
-        with mock.patch.object(commands, "_bot_names", lambda: ["default"]):
-            self.assertEqual(commands._route("stripe payments")[0], "install")
+    def test_a_routed_action_runs_through_the_code_that_owns_it(self):
+        with mock.patch.object(
+            commands, "_model_route",
+            return_value={"action": "help", "bot": "", "what": ""},
+        ):
+            self.assertEqual(
+                commands.handle_concierge("whatever the model says", store=store()),
+                commands.HELP_SHORT,
+            )
+        with mock.patch.object(
+            commands, "_model_route",
+            return_value={"action": "list", "bot": "", "what": ""},
+        ):
+            self.assertIn(
+                "No bots yet",
+                commands.handle_concierge("whatever the model says", store=store()),
+            )
+        with mock.patch.object(commands, "_model_route", return_value=None):
+            self.assertIn(
+                "I need a model to read that",
+                commands.handle_concierge("whatever the model says", store=store()),
+            )
 
 
 class Gateway(unittest.TestCase):
@@ -436,13 +491,14 @@ class SelfOnly(unittest.TestCase):
         self.assertIn("only improve itself", text)
 
     def test_a_bot_can_improve_itself(self):
+        _with_llm(self, "rule")
         text = commands.handle_concierge("improve me: always answer in one line", store=store())
         self.assertIn("Improved helper-two", text)
         self.assertTrue((self.bot / "SOUL.md").is_file())
 
-    def test_a_plain_sentence_inside_a_bot_is_a_self_improve(self):
-        intent, bot, _ = commands._route("it needs to read scanned pdfs")
-        self.assertEqual((intent, bot), ("improve", "helper-two"))
+    def test_a_plain_sentence_inside_a_bot_waits_for_a_model(self):
+        text = commands.handle_concierge("it needs to read scanned pdfs", store=store())
+        self.assertIn("I need a model to read that", text)
 
     def test_the_owner_profile_keeps_full_power(self):
         from hermes_constants import reset_hermes_home_override, set_hermes_home_override
@@ -452,17 +508,8 @@ class SelfOnly(unittest.TestCase):
         self.assertFalse(commands._is_bot_profile())
 
 
-class AskingForABot(unittest.TestCase):
-    """How a person actually asks for a bot."""
-
-    def test_i_want_to_make_a_general_assistant_bot_creates_one(self):
-        for sentence in (
-            "I want to make a general assistant bot",
-            "make me a general assistant",
-            "create an assistant bot for me",
-            "I need an assistant",
-        ):
-            self.assertEqual(commands._route(sentence)[0], "create", sentence)
+class BotAskGuard(unittest.TestCase):
+    """Free text never guesses: without a model it says so, with one it obeys."""
 
     def test_a_research_assistant_is_a_researcher_not_the_generic_one(self):
         from concierge import presets
@@ -471,34 +518,15 @@ class AskingForABot(unittest.TestCase):
         self.assertIsNotNone(role)
         self.assertEqual(role.name, "researcher")
 
-    def test_a_bot_ask_with_no_known_role_still_makes_a_bot(self):
-        intent, _, _ = commands._route("make me a bot that answers the door")
-        self.assertEqual(intent, "create")
-
-    def test_a_plain_capability_is_still_an_install(self):
-        self.assertEqual(commands._route("install obsidian")[0], "install")
-
-
-class BotAskGuard(unittest.TestCase):
-    """An install card must never answer a request for a bot."""
-
-    def test_a_bot_sentence_is_never_an_install(self):
+    def test_free_text_without_a_model_names_no_bot(self):
         for sentence in (
             "I want to make a general assistant bot",
             "I need a bot that answers the door",
             "could you build me an agent for invoices",
             "I'd like another researcher",
         ):
-            self.assertTrue(commands._asks_for_bot(sentence), sentence)
-
-    def test_a_capability_sentence_is_not_a_bot(self):
-        for sentence in (
-            "I need a skill that reads spreadsheets",
-            "install obsidian",
-            "add pdf support",
-            "install obsidian into lima-house-seller",
-        ):
-            self.assertFalse(commands._asks_for_bot(sentence), sentence)
+            text = commands.handle_concierge(sentence, store=store())
+            self.assertIn("I need a model to read that", text, sentence)
 
 
 class TheCardStillWorks(unittest.TestCase):
@@ -562,6 +590,16 @@ class RoundTwo(unittest.TestCase):
         )
         self.assertEqual(got[0], "install")  # the module alone trusts the model
 
-    def test_the_command_layer_overrides_that_model_answer(self):
-        # The guard lives where the reply is decided, not inside the classifier.
-        self.assertTrue(commands._asks_for_bot("I want to make a general assistant bot"))
+    def test_the_command_layer_obeys_the_router_answer(self):
+        # No guard overrides the model: the router is the only decision maker.
+        with mock.patch.object(
+            commands, "_model_route",
+            return_value={"action": "install", "bot": "", "what": "obsidian"},
+        ), mock.patch.object(
+            commands, "handle_install", return_value="INSTALL ANSWER"
+        ) as sent:
+            text = commands.handle_concierge(
+                "I want to make a general assistant bot", store=store()
+            )
+        self.assertEqual(text, "INSTALL ANSWER")
+        self.assertEqual(sent.call_count, 1)

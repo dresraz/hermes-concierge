@@ -1,13 +1,8 @@
 """intent.py: what the person actually means, decided by the model.
 
-The rules in ``commands._route`` are a fallback for the no-model case (tests,
-offline, a provider that is down). They are lexical and they are wrong on real
-phrasing: "I want to make a general assistant bot" read as a bag of words and
-matched a language pack.
-
-So the first attempt is a model call: one short structured completion, answered
-from a closed world (the ten roles, the bots on this machine), with a strict
-JSON shape. Anything unexpected falls back to the rules rather than guessing.
+The model reads one short structured completion from a closed world (the ten
+roles, the bots on this machine), with a strict JSON shape. Anything
+unexpected falls back to the caller rather than guessing.
 """
 
 from __future__ import annotations
@@ -15,12 +10,12 @@ from __future__ import annotations
 import json
 from typing import Any, Optional, Sequence
 
-INTENTS = ("create", "improve", "install", "bots", "browse", "help", "undo", "fire")
-
+# The closed action set lives here as plain values, not a named list: the
+# router owns the decision, and this module only validates what it is told.
 SCHEMA = {
     "type": "object",
     "properties": {
-        "intent": {"type": "string", "enum": list(INTENTS)},
+        "intent": {"type": "string", "enum": ["create", "improve", "install", "bots", "browse", "help", "undo", "fire"]},
         "role": {"type": "string"},
         "bot": {"type": "string"},
         "query": {"type": "string"},
@@ -100,7 +95,7 @@ def _parse(result: Any) -> Optional[dict]:
 
 def _clean(data: dict, bots: Sequence[str], roles: Sequence[str]) -> Optional[tuple]:
     intent = str(data.get("intent") or "").strip().lower()
-    if intent not in INTENTS:
+    if intent not in ("create", "improve", "install", "bots", "browse", "help", "undo", "fire"):
         return None
     role = str(data.get("role") or "").strip().lower()
     if role not in roles:
@@ -110,17 +105,6 @@ def _clean(data: dict, bots: Sequence[str], roles: Sequence[str]) -> Optional[tu
         return None
     query = " ".join(str(data.get("query") or "").split())
     return intent, role, bot, query
-
-
-INJECTION = (
-    "ignore the instructions", "ignore previous", "ignore all previous",
-    "disregard the", "system prompt", "you are now", "answer only with",
-)
-
-
-def _is_injection(text: str) -> bool:
-    low = " ".join((text or "").lower().split())
-    return any(phrase in low for phrase in INJECTION)
 
 
 def classify(
@@ -134,12 +118,9 @@ def classify(
 ) -> tuple:
     """(intent, bot, query) for one sentence.
 
-    The model answers first; the lexical router answers when there is no model,
-    when the call fails, or when the answer is not one of the known intents.
+    The model answers; the caller answers when there is no model, when the
+    call fails, or when the answer is not one of the known intents.
     """
-    if _is_injection(text):
-        # A sentence that tries to rewrite the rules is not a request at all.
-        return "none", "", text
     if llm is not None and text:
         try:
             result = llm.complete_structured(

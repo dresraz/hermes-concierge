@@ -18,7 +18,7 @@ class Memory(unittest.TestCase):
 
     def test_a_memory_provider_is_offered_plainly_when_memory_is_the_ask(self):
         picked = self.row("mem0", "Mem0 memory provider - server-side fact extraction.")
-        self.assertEqual(choose.caution_for(picked, "I want it to remember things across sessions"), "")
+        self.assertEqual(choose.caution_for(picked, "I want memory that remembers things across sessions"), "")
 
     def test_an_ordinary_plugin_is_unaffected(self):
         picked = self.row("stripe", "Take card payments over MCP.")

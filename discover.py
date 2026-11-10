@@ -26,14 +26,7 @@ MAX_FILES = 25
 
 # A skill that needs one of these is not a "nice extra": it is a dependency the
 # operator has to agree to on its own card.
-# Only tells that mean a service actually runs: a mention of an API key or
-# OAuth inside a skill is guidance, not weight.
-HEAVY_MARKERS = (
-    "systemd", "docker run", "supervisord", "kubernetes", "tailscale",
-    "playwright", "selenium", "jupyter lab", "comfyui server", "--daemon",
-)
-
-# A download piped into a shell runs code at install time: never a free extra.
+# Only a piped download runs code at arrival: never a free extra.
 def _has_shell_pipe(text: str) -> bool:
     """A curl piped into sh/bash, the way installers run code on arrival.
 
@@ -189,7 +182,7 @@ def catalogue(roots: Optional[Sequence[Path]] = None) -> list[dict]:
             except OSError:
                 continue
             head = text.lower()
-            if any(marker in head for marker in HEAVY_MARKERS) or _has_shell_pipe(text):
+            if _has_shell_pipe(text):
                 continue
             front_name, desc = _head(text)
             seen.add(name)

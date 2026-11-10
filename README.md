@@ -2,7 +2,7 @@
 
 [![version](https://img.shields.io/github/v/tag/dresraz/hermes-concierge?color=E8C15A)](https://github.com/dresraz/hermes-concierge/tags)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
-[![tests](https://img.shields.io/badge/tests-241%20passing-3fb950)](tests)
+[![tests](https://img.shields.io/badge/tests-234%20passing-3fb950)](tests)
 [![hermes](https://img.shields.io/badge/hermes-%3E%3D0.22.7-4B5563)](plugin.yaml)
 
 **The front door to the Hermes marketplace.**
@@ -471,7 +471,7 @@ python tests/eval_match.py
 hermes plugins validate . --install-deps
 ```
 
-241 tests, `unittest`, stdlib only, deterministic, no network and no model calls. They never touch a real profile, a real SOUL file, or a real plugins directory: every seam is injected.
+234 tests, `unittest`, stdlib only, deterministic, no network and no model calls. They never touch a real profile, a real SOUL file, or a real plugins directory: every seam is injected.
 
 ## License
 

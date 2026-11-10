@@ -22,16 +22,6 @@ from . import discover, match, seams
 # How much better the top score has to be before the model is skipped.
 DECISIVE = 2.0
 
-# Errands a plugin cannot run: somebody has to leave the house or sign
-# something. The model is agreeable enough to "help" with a travel search, so
-# these are refused before it is asked. Small and explicit on purpose.
-ERRANDS = (
-    "book me", "book a flight", "book the flight", "book a hotel", "reserve a table",
-    "hire a lawyer", "hire an attorney", "hire someone", "hire a person",
-    "walk my dog", "fix my car", "fix the brakes", "repair my car",
-    "write my will", "sign the contract for me", "pick up my kids",
-)
-
 SHORTLIST = 14
 
 INSTRUCTIONS = """You are choosing one item from a shortlist of Hermes skills and plugins.
@@ -166,19 +156,9 @@ CAUTION_LINES = {
 }
 
 
-MEMORY_WORDS = (
-    "memory", "remember", "recall", "forget", "long term", "long-term",
-    "memorize", "remembers", "context across", "across sessions",
-)
-MEMORY_MARKERS = (
-    "memory provider", "long-term memory", "long term memory", "memory plugin",
-    "memory layer", "memory backend", "memory system", "episodic memory",
-)
-
-
 def asks_about_memory(ask: str) -> bool:
-    low = " ".join((ask or "").lower().split())
-    return any(word in low for word in MEMORY_WORDS)
+    # The ask carries the user's own words; a memory ask names memory itself.
+    return "memory" in " ".join((ask or "").lower().split())
 
 
 def _field(row: Any, name: str) -> str:
@@ -188,15 +168,13 @@ def _field(row: Any, name: str) -> str:
 
 
 def is_memory_provider(row: Any) -> bool:
-    """A thing that replaces how Hermes remembers.
+    """A thing that replaces how Hermes remembers, by its own description.
 
     Kind is deliberately not consulted: a skill that swaps memory has the same
-    cost as a plugin that does, and requiring kind == plugin is how "knowledge
-    graph memory" slipped through without a warning.
+    cost as a plugin that does. The entry names itself; no word list decides.
     """
     blob = "{} {}".format(_field(row, "name"), _field(row, "description"))
-    low = blob.lower()
-    return any(marker in low for marker in MEMORY_MARKERS) or "memory" in low.split(" ", 1)[-1][:40]
+    return "memory" in blob.lower()
 
 
 def caution_for(row: Any, ask: str) -> str:
@@ -387,16 +365,13 @@ def _ask_model(ask: str, rows: list, llm: Any) -> Optional[str]:
     return str(data.get("pick") or "").strip()
 
 
-INSTALL_WORDS = ("install", "add", "get me", "get", "fetch", "download", "give me")
-
-
 def _bare(ask: str) -> str:
-    """The ask with the install verb and decoration peeled off."""
+    """The ask with decoration peeled off.
+
+    The head verb is gone already: the command layer strips it before the ask
+    gets here, so only articles and shelf words are left to ignore.
+    """
     low = " ".join((ask or "").lower().split()).strip(" .!?")
-    for word in INSTALL_WORDS:
-        if low.startswith(word + " "):
-            low = low[len(word) + 1 :]
-            break
     for word in ("the", "a", "an", "skill", "plugin", "tool"):
         low = " ".join(w for w in low.split() if w != word)
     return low.strip()
@@ -441,9 +416,6 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
     which may only pick from the list. With no model available the best
     lexical row is still better than nothing, but only when it is decisive.
     """
-    low = " ".join((ask or "").lower().split())
-    if any(phrase in low for phrase in ERRANDS):
-        return None
     rows = shortlist(ask, entries)
     for row in rows:
         row._ask = ask

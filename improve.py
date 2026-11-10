@@ -29,10 +29,17 @@ from .bots import slugify
 # answer a gap in the sentence. Beyond that it is a shopping spree, not a fix.
 MAX_ITEMS = 3
 
-# A sentence in this shape is behaviour, not a capability.
-RULE_WORDS = ("always", "never", "every time", "each time", "from now on", "don't", "do not")
-
 RULE_HEAD = "\n\n## Learned rules\n\n"
+
+RULE_PROMPT = """Is this sentence standing behavior for a bot, or a capability that needs a marketplace skill?
+
+Answer JSON only: {"kind": "rule" or "skill"}.
+
+A rule is how the bot should behave or talk on every turn: a standing habit
+or a reply shape ("always label receipts", "start replies with the answer").
+A skill is a thing the bot should be able to do that software provides
+("read scanned PDFs", "handle spreadsheets"). When unsure, say skill.
+"""
 
 
 @dataclass
@@ -59,16 +66,47 @@ class Plan:
         return [item for item in self.items if item.kind == "skill"]
 
 
-# A sentence that starts like behaviour is a rule, even without "always": the
-# bot does not get a skill out of "start replies with the answer".
-RULE_SHAPES = ("start ", "end ", "reply ", "answer ", "keep ", "write ", "prefer ", "use ")
+# A sentence that starts like behaviour is a rule, and the model is the one
+# that says so. With no model there is no decision: the marketplace gets the
+# only say, so offline never invents a rule it cannot justify.
+def decide_kind(sentence: str, llm: Any) -> str:
+    """'rule' or 'skill' for one sentence, '' when the model cannot answer."""
+    import json
+
+    if llm is None:
+        return ""
+    try:
+        answer = llm.complete_structured(
+            instructions=RULE_PROMPT,
+            input=[{"type": "text", "text": sentence}],
+            json_mode=True,
+            max_tokens=40,
+            temperature=0,
+            timeout=15,
+        )
+    except Exception:
+        return ""
+    raw = (getattr(answer, "text", "") or "").strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return ""
+    try:
+        data = json.loads(raw[start : end + 1])
+    except Exception:
+        return ""
+    kind = str(data.get("kind") or "").strip().lower()
+    return kind if kind in ("rule", "skill") else ""
 
 
-def is_rule(sentence: str) -> bool:
-    low = " " + " ".join((sentence or "").lower().split()) + " "
-    if any(" " + word + " " in low or low.strip().startswith(word) for word in RULE_WORDS):
-        return True
-    return low.strip().startswith(RULE_SHAPES)
+def is_rule(sentence: str, llm: Any = None) -> bool:
+    """True when the sentence is standing behavior for the bot.
+
+    The model decides. With no model the answer is False: the sentence goes
+    to the marketplace, and only a skill match acts on it.
+    """
+    if llm is None:
+        return False
+    return decide_kind(sentence, llm) == "rule"
 
 
 def resolve(bot: str) -> Optional[Path]:
@@ -109,8 +147,12 @@ def installed(home: Path) -> set:
     return {item.parent.name for item in skills.glob("**/SKILL.md")}
 
 
-def plan(bot: str, sentence: str, *, limit: int = MAX_ITEMS) -> Optional[Plan]:
-    """What this sentence needs, or None when the bot does not exist."""
+def plan(bot: str, sentence: str, *, limit: int = MAX_ITEMS, llm: Any = None) -> Optional[Plan]:
+    """What this sentence needs, or None when the bot does not exist.
+
+    The model says rule or skill. With no model the marketplace gets the only
+    say: a skill match installs, anything else waits for a reader.
+    """
     home = resolve(bot)
     if home is None:
         return None
@@ -119,7 +161,7 @@ def plan(bot: str, sentence: str, *, limit: int = MAX_ITEMS) -> Optional[Plan]:
         return None
     result = Plan(bot=slugify(bot), home=home, sentence=text)
 
-    if is_rule(text):
+    if is_rule(text, llm):
         result.items.append(Item(kind="rule", name=text, why="standing rule"))
         return result
 
