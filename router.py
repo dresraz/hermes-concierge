@@ -51,11 +51,12 @@ inside_bot: the name of the bot this message is being sent to, or empty.
 
 Rules:
 - "you", "yourself", "me", "your own" mean inside_bot when inside_bot is set.
-- Words that ask to LOOK are browse, never improve: "show me", "look for",
-  "search for", "search", "look up", "look at", "what can", "which skills", "what are my options", "is there
-  anything that", "find me", "anything for you". "look for X for you" is still a
-  look: only an explicit install/add/give/teach changes a bot.
-  Browse changes nothing; improve changes a bot.
+- Looking and changing are different outcomes, not different verbs. If the user
+  wants to SEE what exists, the answer is browse and nothing changes. If they
+  want something added or altered, it is install or improve. Judge the outcome
+  the sentence asks for; the verb ("search", "find", "get", "add") is a hint,
+  never the rule. "search for design skills" is looking. "give me design skills"
+  is changing.
 - Dialogue with no clear action is "help".
 - Asking to add a capability to a bot that is not a marketplace thing is
   "improve" with the capability as "what"; do not answer none just because the
