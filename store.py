@@ -271,13 +271,17 @@ def create_bot(name: str, preset_skills: list) -> tuple:
     code, out = _run(["hermes", "profile", "create", name, "--clone", "--no-alias"], target, timeout=120)
     if code != 0:
         return (False, out, 0, [])
-    # A fresh clone inherits the owner's .env. The bot must not receive
-    # credentials, so drop the copied file right away. Model access resolves
-    # through the credential pool, or the owner runs hermes -p <bot> auth add.
+    # Core's own clone route is the credential policy: it copies .env with the
+    # channel keys stripped (a bot must not inherit the owner's bot token) and it
+    # copies no auth.json, so a single-use OAuth grant is never forked. The bot
+    # thinks through the credential pool; one that needs its own login gets one
+    # with `hermes -p <bot> auth add`, which the receipt says out loud.
+    # The removal below is a belt-and-braces check on the one file whose copy
+    # would be destructive, not a second policy of our own.
     try:
-        env_file = profile_dir(name) / ".env"
-        if env_file.exists():
-            env_file.unlink()
+        auth_file = profile_dir(name) / "auth.json"
+        if auth_file.exists():
+            auth_file.unlink()
     except Exception:
         pass
     done = 0

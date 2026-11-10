@@ -389,6 +389,30 @@ class OfflineHeads(unittest.TestCase):
 
             importlib.reload(commands)
 
+    def test_create_uses_core_clone_and_leaves_auth_json_out(self):
+        home = pathlib.Path(self.tmp.name)
+        made = []
+
+        def fake_run(args, target, timeout=180):
+            if args[:3] == ["hermes", "profile", "create"]:
+                bot = home / "profiles" / args[3]
+                bot.mkdir(parents=True, exist_ok=True)
+                (bot / ".env").write_text("OPENROUTER_API_KEY=kept\n", encoding="utf-8")
+                (bot / "auth.json").write_text('{"openai":{"access_token":"one-time"}}', encoding="utf-8")
+                made.append(args)
+            return (0, "ok")
+
+        real_run = store._run
+        store._run = fake_run
+        try:
+            ok, _out, _done, _failed = store.create_bot("probe-bot", [])
+            self.assertTrue(ok)
+            self.assertIn("--clone", made[0])
+            self.assertFalse((home / "profiles" / "probe-bot" / "auth.json").exists())
+            self.assertTrue((home / "profiles" / "probe-bot" / ".env").exists())
+        finally:
+            store._run = real_run
+
     def test_hook_answers_a_pending_delete_only(self):
         deleted = []
         store.has_bot_record = lambda name: True

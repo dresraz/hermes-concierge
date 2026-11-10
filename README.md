@@ -38,6 +38,29 @@ one undo.
   `hermes -p <bot> auth add <provider>`.
 - It does not touch another bot from inside a bot. Inside a bot, the command only changes that bot.
 
+## What it touches
+
+Nothing hidden, listed so a reviewer can check it:
+
+- **Two HTTPS reads a day**, to the marketplace's own published lists:
+  `hermes-agent.nousresearch.com/docs/api/skills.json` and
+  `hermes-agent.nousresearch.com/docs/api/plugin-catalog.json`. The response is cached under
+  `<hermes home>/cache/concierge/` and reused for a day.
+- **Child processes**, each a public `hermes` command, never a private helper:
+  `hermes profile create --clone --no-alias`, `hermes profile delete -y`,
+  `hermes -p <bot> skills install <name> --yes`, `hermes plugins install <name> --enable --yes-deps`,
+  `hermes plugins remove <name>`.
+- **Four core reads**, the seams that make it a plugin rather than a fork:
+  `hermes_constants.get_hermes_home` (profile-aware paths),
+  `gateway.session_context.session_is_messaging_surface` (fail-closed surface gate),
+  `tools.connectors.targets.hosted_names` (the connectors shelf), and
+  `hermes_cli.config_effective.load_user_config_effective` (the owner's `allow_gateway` opt-in).
+- **One hook**, `post_gateway_admission`, used only to answer a pending delete when the sentence is a
+  yes, a no, or the number the prompt printed.
+
+It writes only inside the Hermes home: skills and plugins through `hermes` itself, a bot's `SOUL.md`
+when you teach it a habit, and one undo receipt per change under `cache/concierge/undo.json`.
+
 ## How it decides
 
 The model your Hermes already runs reads your sentence and answers one small plan: which action,
