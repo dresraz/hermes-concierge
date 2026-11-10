@@ -180,28 +180,30 @@ def overview() -> str:
     if not here:
         here_bit = ""
     elif len(here) >= 60:
-        here_bit = "the full skill tree is available here"
+        here_bit = "The full skill tree is available here."
     else:
-        here_bit = "{} added".format(_n(len(here), "skill"))
-    bot_bit = (
-        "{}: {}".format(_n(len(bots), "bot"), ", ".join(bots[:3]) + (" +{}".format(len(bots) - 3) if len(bots) > 3 else ""))
-        if bots
-        else "no bots yet"
-    )
+        here_bit = "{} added.".format(_n(len(here), "skill"))
+    if bots:
+        shown = ", ".join(bots[:3])
+        if len(bots) > 3:
+            shown += " and {} more".format(len(bots) - 3)
+        bot_bit = "{}: {}.".format(_n(len(bots), "bot"), shown)
+    else:
+        bot_bit = "No bots yet."
     lines = [
         "Concierge",
         "",
-        "  {}".format(bot_bit),
-        "  {}".format(here_bit),
-        "  ready    {}, {}, {}".format(
+        bot_bit,
+        here_bit,
+        "On the shelf: {}, {} and {}.".format(
             _n(available, "skill"), _n(total_plugins, "plugin"), _n(total_connectors, "connector")
         ),
         "",
-        "  build    {}".format(_build()),
+        "Build {}.".format(_build()),
         "",
-        "  say what you need in one sentence, or look first:",
-        "  /concierge browse pdf        look through what is available",
-        "  /concierge help              the commands",
+        "Say what you need in one sentence, or look first:",
+        "/concierge browse pdf looks through what is available.",
+        "/concierge help lists the commands.",
         "",
     ]
     return "\n".join(lines)
@@ -230,34 +232,42 @@ def browse(query: str = "", session_key: str = "", page: int = 1) -> str:
         oldest = min(_LAST, key=lambda key: _LAST[key][0])
         _LAST.pop(oldest, None)
     _LAST[session_key or ""] = (time.time(), rows)
-    head = "  LOOKING FOR  {}".format(query) if query else "  READY TO ADD"
     pages = max(1, (len(everything) + LIMIT - 1) // LIMIT)
     if not rows:
         if everything:
-            return (
-                head + "\n\n"
-                "  There {} only {} page{}. You asked for page {}.\n"
-                "  Back to the start: /concierge browse {}\n".format(
-                    "is" if pages == 1 else "are", pages, "" if pages == 1 else "s", page, query,
-                )
-            )
-        return (
-            head + "\n\n"
-            "  Nothing matches {}.\n"
-            "  See everything: /concierge browse\n".format(query)
-        )
-    lines = [head, ""]
+            return "\n".join([
+                "There {} only {} page{}. You asked for page {}.".format(
+                    "is" if pages == 1 else "are", pages, "" if pages == 1 else "s", page,
+                ),
+                "Back to the start: /concierge browse {}".format(query),
+                "",
+            ])
+        return "\n".join([
+            "Nothing matches {}.".format(query),
+            "See everything: /concierge browse",
+            "",
+        ])
+    lines = []
     for index, row in enumerate(rows, start=1):
-        tag = "here" if row.get("installed") else row["weight"]
-        lines.append(
-            "  {:<2} {:<7} {:<24} {:<7} {}".format(
-                index, row["kind"], row["name"], tag, row["why"]
-            ).rstrip()
-        )
+        bits = ["a " + row["kind"]]
+        if row.get("installed"):
+            bits.append("already here")
+        elif row["weight"]:
+            bits.append(row["weight"])
+        why = row["why"]
+        line = "{}. {}, {}".format(index, row["name"], ", ".join(bits))
+        if why:
+            line += ": {}".format(why)
+        else:
+            line += "."
+        lines.append(line)
     if pages > 1:
-        nxt = "  next: /concierge browse {} {}".format(query, page + 1) if page < pages else "  that is the last page"
-        lines += ["", "  page {} of {}{}".format(page, pages, nxt)]
-    lines += ["", "  reply with a number to install it, or no to drop it", ""]
+        if page < pages:
+            nxt = "Next: /concierge browse {} {}.".format(query, page + 1)
+        else:
+            nxt = "That is the last page."
+        lines += ["", "Page {} of {}. {}".format(page, pages, nxt)]
+    lines += ["", "Reply with a number to install one, or say the job in one sentence.", ""]
     return "\n".join(lines)
 
 
@@ -297,7 +307,7 @@ def pick(number: int, *, session_key: str = "", store: Any = None) -> Optional[s
         )
     if row.get("installed"):
         forget(session_key)
-        return "  {} is already here.\n".format(row["name"])
+        return "{} is already here. Nothing was installed.\n".format(row["name"])
     if row["kind"] == "plugin":
         from . import card
 

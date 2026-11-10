@@ -227,7 +227,7 @@ class Surface(unittest.TestCase):
         finally:
             presets.install = original_install
         self.assertIn("Created", out)
-        self.assertIn("skills   researcher 1/1 installed: parallel-cli", out)
+        self.assertIn("researcher skills 1/1 installed: parallel-cli.", out)
 
     def test_hire_without_a_role_becomes_a_general_assistant(self):
         home = Path(tempfile.mkdtemp(prefix="preset-plain-")) / "profile"

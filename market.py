@@ -172,9 +172,9 @@ def render(text: str, offers: list, target: str, caution: str = "") -> str:
             line = _fit(line, 96)
         elif not line.endswith("."):
             line += "."
-        body.append("  " + line)
+        body.append(line)
     if target:
-        body.append("  It goes into {}.".format(target))
+        body.append("It goes into {}.".format(target))
     if body:
         lines += [""] + body
     line = _caution_line(caution)
@@ -183,8 +183,8 @@ def render(text: str, offers: list, target: str, caution: str = "") -> str:
 
     rival = next((offer for offer in offers[1:] if offer.name != top.name), None)
     if rival is not None:
-        lines += ["", "  Another option: {}.".format(rival.name)]
-    lines += ["", "  yes     no", ""]
+        lines += ["", "Another option: {}.".format(rival.name)]
+    lines += ["", "Reply yes to install it, or no to drop it.", ""]
     return "\n".join(lines)
 
 
@@ -204,9 +204,9 @@ def nothing(text: str, target: str = "") -> str:
     try:
         from . import shelf
 
-        nxt = "  Next: /concierge browse {}".format(hint) if shelf.items(hint, limit=2) else "  Next: /concierge create a bot that does it"
+        nxt = "Next: /concierge browse {}".format(hint) if shelf.items(hint, limit=2) else "Next: /concierge create a bot that does it"
     except Exception:
-        nxt = "  Next: /concierge create a bot that does it"
+        nxt = "Next: /concierge create a bot that does it"
     return "\n".join([head, "", nxt, ""])
 
 
@@ -216,7 +216,7 @@ def handle(text: str, *, target: str = "", session_key: str = "",
     """One request in, one skill card or one receipt out."""
     text = (text or "").strip()
     if not text:
-        return "Concierge\n\n  Say what you want, like: /concierge install stripe payments\n"
+        return "Concierge\n\nSay what you want, like: /concierge install stripe payments\n"
 
     lowered = text.lower()
     if lowered in NO:
@@ -294,14 +294,14 @@ def receipt(record, offer: Offer, *, saved: bool = True) -> str:
     lines = [f"Installed skill {record.name}", ""]
     if folder is not None and folder.is_dir():
         files = sum(1 for item in folder.rglob("*") if item.is_file())
-        lines.append(f"  on disk     {folder} ({files} files)")
+        lines.append(f"It is at {folder} ({files} files).")
     else:
-        lines.append("  on disk     not found, core reported a path that is not there")
-    lines.append(f"  into        {record.profile}")
+        lines.append("It is not on disk. Core reported a path that is not there.")
+    lines.append(f"It goes into {record.profile}.")
     if offer.where:
-        lines.append(f"  source      {offer.where}")
+        lines.append(f"Source: {offer.where}.")
     if saved:
-        lines += ["", "Undo it with /concierge undo", ""]
+        lines += ["", "Undo with /concierge undo.", ""]
     else:
         lines += ["", "Undo is off for this one: the record could not be saved.", ""]
     return "\n".join(lines)

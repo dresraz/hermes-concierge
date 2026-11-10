@@ -161,8 +161,8 @@ def _live() -> list:
 
 
 CAUTION_LINES = {
-    "memory": "  Memory provider: usually needs a paid plan.",
-    "heavy": "  Heavy: downloads models and wants a GPU.",
+    "memory": "Memory provider: usually needs a paid plan.",
+    "heavy": "Heavy: downloads models and wants a GPU.",
 }
 
 

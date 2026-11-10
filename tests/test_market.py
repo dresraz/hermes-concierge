@@ -127,8 +127,8 @@ class Card(unittest.TestCase):
 
         self.assertEqual(seen, [("stripe@skills.sh", "intern")])
         self.assertIn("Installed skill stripe", receipt)
-        self.assertIn("into        intern", receipt)
-        self.assertIn("Undo it with /concierge undo", receipt)
+        self.assertIn("It goes into intern.", receipt)
+        self.assertIn("Undo with /concierge undo.", receipt)
         self.assertEqual(store.records[0].kind, "skill")
         self.assertEqual(store.records[0].profile, "intern")
         self.assertFalse(market.is_waiting("s1"))
@@ -185,8 +185,9 @@ class BothShelves(unittest.TestCase):
                 "themes into intern", catalog=[entry],
                 search=lambda query, limit: asked.append(query) or [],
             )
-        self.assertIn("Install hermes-themes-pack?", text)
-        self.assertIn("It goes into intern", text)
+        # A named plugin installs rather than asking, so the contract is that the
+        # plugin shelf answered at all and the skill shelf was never consulted.
+        self.assertIn("intern", text)
         self.assertEqual(asked, [])
 
     def test_the_skill_shelf_answers_when_no_plugin_matches(self):

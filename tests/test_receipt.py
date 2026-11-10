@@ -55,7 +55,7 @@ class SkillCount(unittest.TestCase):
             _skill(skills, "research", "parallel-cli")
             plan = bots.Spec(name="bp-test-receipt", title="t", duties=[], boundaries=[])
             lines, _ = bots.receipt(plan, home, known=[plan.name])
-            self.assertIn("  skills   2 installed", lines)
+            self.assertIn("2 skills installed.", lines)
 
 
 if __name__ == "__main__":

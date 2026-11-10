@@ -112,7 +112,7 @@ class ReceiptLine(unittest.TestCase):
                 name="deps-probe", sha="c" * 40, title="deps-probe", target=str(root), enabled=True
             )
             text = card.receipt(outcome, record)
-            self.assertIn("deps        httpx, rich installed", text)
+            self.assertIn("Also installed httpx, rich.", text)
 
     def test_a_plugin_with_no_declaration_prints_no_deps_line(self):
         with tempfile.TemporaryDirectory() as tmp:

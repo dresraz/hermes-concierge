@@ -128,7 +128,7 @@ class Hire(unittest.TestCase):
         )
         self.assertIn("Created invoices-bot", text)
         self.assertNotIn("/concierge undo", text)
-        self.assertIn("no undo", text)
+        self.assertIn("Undo is off for this one", text)
 
     def test_the_sentence_survives_the_verb(self):
         seen = {}
@@ -238,7 +238,7 @@ class Gateway(unittest.TestCase):
     def test_a_gateway_may_still_look(self):
         commands._CTX = self.Ctx("telegram")
         self.assertIn("Concierge", commands.handle_concierge("", store=store()))
-        self.assertTrue(commands.handle_concierge("browse notes", store=store()).startswith("  LOOKING FOR"))
+        self.assertRegex(commands.handle_concierge("browse notes", store=store()), r"^1\. ")
 
     def test_the_owner_can_open_the_gateway(self):
         commands._CTX = self.Ctx("telegram")
@@ -273,7 +273,7 @@ class Bots(unittest.TestCase):
     def test_numbers_come_from_one_place(self):
         made = store(bot("inbox-bot", "keeps my inbox at zero"), bot("newsletter-bot", "writes my weekly newsletter"))
         text = commands.handle_concierge("bots", store=made)
-        self.assertIn("Bots  2", text)
+        self.assertIn("2 bots:", text)
         self.assertIn("inbox-bot", text)
         self.assertIn("newsletter-bot", text)
 

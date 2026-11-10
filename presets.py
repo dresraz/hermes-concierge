@@ -206,7 +206,7 @@ class Report:
             shown += " +{} more".format(rest)
         if self.failed:
             shown += " (failed: {})".format(", ".join(self.failed))
-        return ["  skills   {} {}/{} installed: {}".format(
+        return ["{} skills {}/{} installed: {}.".format(
             self.role, len(self.installed), len(self.wanted), shown)]
 
 

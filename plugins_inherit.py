@@ -32,13 +32,13 @@ class Report:
 
     def lines(self) -> list:
         if not self.found:
-            return ["  plugins  stock defaults, your main profile sets no switches"]
+            return ["Plugins use stock defaults: your main profile sets no switches."]
         if not self.wrote:
-            return ["  plugins  stock defaults, nothing to copy"]
-        text = "  plugins  your setup, {} switches".format(self.switched)
+            return ["Plugins use stock defaults: nothing to copy."]
+        text = "Plugins follow your setup: {} switches".format(self.switched)
         if self.left:
             text += ", {} not available here".format(len(self.left))
-        return [text]
+        return [text + "."]
 
 
 def home(root: Optional[Any] = None) -> Path:

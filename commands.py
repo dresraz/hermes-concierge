@@ -37,54 +37,54 @@ CANCEL_WORDS = frozenset({
 })
 
 HELP_SHORT = (
+    ""
+    "Concierge\n"
+    "One sentence does the work.\n"
     "\n"
-    "  Concierge\n"
-    "  One sentence does the work.\n"
+    "/concierge install obsidian adds a plugin or skill.\n"
+    "/concierge create a researcher makes a bot, with skills.\n"
+    "/concierge improve coder-bot: always run tests.\n"
     "\n"
-    "  /concierge install obsidian            add a plugin or skill\n"
-    "  /concierge create a researcher         make a bot, with skills\n"
-    "  /concierge improve coder-bot: always run tests\n"
-    "\n"
-    "  /concierge browse pdf     look first\n"
-    "  /concierge bots           your bots\n"
-    "  /concierge undo           take back the last change\n"
-    "  /concierge help all       every command\n"
+    "/concierge browse pdf looks first.\n"
+    "/concierge bots shows your bots.\n"
+    "/concierge undo takes back the last change.\n"
+    "/concierge help all shows every command.\n"
     "\n"
 )
 
 HELP = (
     "\n"
-    "  CONCIERGE\n"
-    "  Bots, plugins and skills, one sentence at a time.\n"
+    "Concierge\n"
+    "Bots, plugins and skills, one sentence at a time.\n"
     "\n"
-    "  /concierge                     the shelf: what can be added\n"
-    "  /concierge browse <word>       look through the shelf\n"
-    "  /concierge browse <word> 2     the next page\n"
-    "  /concierge <sentence>          install a plugin or skill, this profile\n"
-    "  /concierge create <sentence>   make a new bot\n"
-    "  /concierge improve <bot>: <what>  add what that bot is missing\n"
-    "  /concierge bots                list the bots Concierge made\n"
-    "  /concierge skills <bot>        what that bot has installed\n"
-    "  /concierge fire <n>            delete bot number n\n"
-    "  /concierge reset <n>           take back what Concierge changed in bot n\n"
-    "  /concierge undo                take back the last thing Concierge did\n"
-    "  /concierge help                this list\n"
+    "/concierge shows the shelf: what can be added.\n"
+    "/concierge browse <word> looks through the shelf.\n"
+    "/concierge browse <word> 2 shows the next page.\n"
+    "/concierge <sentence> installs a plugin or skill into this profile.\n"
+    "/concierge create <sentence> makes a new bot.\n"
+    "/concierge improve <bot>: <what> adds what that bot is missing.\n"
+    "/concierge bots lists the bots Concierge made.\n"
+    "/concierge skills <bot> shows what that bot has installed.\n"
+    "/concierge fire <n> deletes bot number n.\n"
+    "/concierge reset <n> takes back what Concierge changed in bot n.\n"
+    "/concierge undo takes back the last thing Concierge did.\n"
+    "/concierge help shows this list.\n"
     "\n"
-    "  Add \"into <bot>\" to install into a bot instead of this profile.\n"
-    "  A marketplace install shows one card and waits for your yes.\n"
-    "  On a card: yes installs it, no drops it, more describes the runner-up.\n"
-    "  Bots and training act straight away and show a receipt.\n"
+    "Add \"into <bot>\" to install into a bot instead of this profile.\n"
+    "A marketplace install shows one card and waits for your yes.\n"
+    "On a card: yes installs it, no drops it, more describes the runner-up.\n"
+    "Bots and training act straight away and show a receipt.\n"
     "\n"
-    "  improve works on any bot on this machine, not only ones Concierge made.\n"
+    "improve works on any bot on this machine, not only ones Concierge made.\n"
     "\n"
-    "  Roles create with their skills: researcher, writer, coder, assistant,\n"
-    "  marketer, watcher, designer, analyst, tutor, planner.\n"
+    "Roles create with their skills: researcher, writer, coder, assistant,\n"
+    "marketer, watcher, designer, analyst, tutor, planner.\n"
     "\n"
-    "  Example: /concierge install stripe payments into intern\n"
-    "  Example: /concierge create a researcher for papers\n"
-    "  Example: /concierge improve researcher-bot: it needs to read scanned PDFs\n"
-    "  Example: /concierge create keeps my inbox at zero\n"
-    "  Name it: /concierge create inbox-zero: keeps my inbox at zero\n"
+    "Example: /concierge install stripe payments into intern\n"
+    "Example: /concierge create a researcher for papers\n"
+    "Example: /concierge improve researcher-bot: it needs to read scanned PDFs\n"
+    "Example: /concierge create keeps my inbox at zero\n"
+    "Name it: /concierge create inbox-zero: keeps my inbox at zero\n"
 )
 
 USAGE = HELP
@@ -686,8 +686,8 @@ def _run_route(
 
         if not lifecycle.is_selector(store, selector):
             return (
-                "  Deleting a bot needs its number, so nothing is removed by a guess.\n"
-                "  /concierge bots, then /concierge fire <number>\n"
+                "Deleting a bot needs its number, so nothing is removed by a guess.\n"
+                "/concierge bots, then /concierge fire <number>\n"
             )
         return handle_concierge(
             "{} {}".format(action, selector), store=store, session_key=session_key
@@ -837,7 +837,7 @@ def handle_concierge(
     if low in CANCEL_WORDS:
         _drop_cards(session_key)
         market.forget(session_key)
-        return "  Dropped. Nothing was installed.\n"
+        return "Dropped. Nothing was installed.\n"
 
     # A card word with no card in front of it is not a search term: "more" was
     # once answered by installing a random plugin.
@@ -853,10 +853,10 @@ def handle_concierge(
         if bare == "no" or shelf._rows(session_key):
             shelf.forget(session_key)
             if bare == "no":
-                return "  Nothing installed.\n"
+                return "Nothing installed.\n"
         if bare in ("yes", "1"):
-            return "  Nothing to say yes to yet. Say the job: /concierge something that reads my pdfs\n"
-        return "  Pick a number from the list, or say the job in one sentence.\n"
+            return "Nothing to say yes to yet. Say the job: /concierge something that reads my pdfs.\n"
+        return "Pick a number from the list, or say the job in one sentence.\n"
     if low in ("help all", "help -a", "help --all"):
         _drop_cards(session_key)
         return HELP
@@ -886,8 +886,8 @@ def handle_concierge(
     if natural == "fire" and first_word not in ("fire", "reset", "delete", "remove", "rm"):
         _drop_cards(session_key)
         return (
-            "  Deleting a bot needs its number, so nothing is removed by a guess.\n"
-            "  /concierge bots, then /concierge fire <number>\n"
+            "Deleting a bot needs its number, so nothing is removed by a guess.\n"
+            "/concierge bots, then /concierge fire <number>\n"
         )
     if natural == "browse":
         from . import shelf
@@ -914,8 +914,8 @@ def handle_concierge(
 
     if low.replace(" ", "").isdigit() and len(low.replace(" ", "")) > 4:
         return (
-            "  That looks like a number, not a request.\n"
-            "  Say what you want in one sentence, like /concierge install obsidian.\n"
+            "That looks like a number, not a request.\n"
+            "Say what you want in one sentence, like /concierge install obsidian.\n"
         )
 
     head, _, _ = low.partition(" ")
@@ -944,7 +944,7 @@ def handle_concierge(
             if picked:
                 return picked
         if waiting and text != "1":
-            return "  One card at a time. /concierge yes takes it, /concierge no drops it.\n"
+            return "One card at a time. /concierge yes takes it, /concierge no drops it.\n"
 
     if head in ("skills", "show") and _names_a_bot(rest, store):
         from . import improve, lifecycle, state
@@ -954,16 +954,16 @@ def handle_concierge(
             try:
                 made = [lifecycle.name_of(record) for record in lifecycle.bots(store)]
             except Exception:
-                return "  The bot list could not be read just now. Nothing was changed.\n"
+                return "The bot list could not be read just now. Nothing was changed.\n"
             if not made:
-                return "  No bots yet. Make one: /concierge create a researcher\n"
-            lines = ["  Skills per bot", ""]
+                return "No bots yet. Make one: /concierge create a researcher.\n"
+            lines = ["Skills each bot has:", ""]
             for bot in made:
                 home = improve.resolve(bot)
                 count = len(improve.installed(home)) if home is not None else 0
-                lines.append("  {:<26} {}".format(bot, "{} skills".format(count) if count else "none yet"))
+                lines.append("{}: {}".format(bot, "{} skills".format(count) if count else "none yet"))
             lines.append("")
-            lines.append("  One bot in detail: /concierge skills <bot>")
+            lines.append("One bot in detail: /concierge skills <bot>.")
             lines.append("")
             return "\n".join(lines)
         name = rest.split()[0] if rest else _self_name()
@@ -972,14 +972,11 @@ def handle_concierge(
         except Exception:
             home = None
         if home is None:
-            return "  No bot called {}. Say /concierge bots to see them.\n".format(name)
+            return "No bot called {}. Say /concierge bots to see them.\n".format(name)
         have = sorted(improve.installed(home))
         if not have:
-            return "  {} has no skills of its own yet.\n  Give it one: /concierge improve {}: it needs to read scanned PDFs\n".format(name, name)
-        return "  {}\n\n{}".format(
-            name,
-            "".join("  - {}\n".format(skill) for skill in have),
-        )
+            return "{} has no skills of its own yet.\nGive it one: /concierge improve {}: it needs to read scanned PDFs.\n".format(name, name)
+        return "{} has these skills: {}\n".format(name, ", ".join(have))
 
     if head == "bots":
         _drop_cards(session_key)
@@ -987,7 +984,7 @@ def handle_concierge(
 
     if head in ("fire", "delete", "remove", "rm", "reset"):
         if _is_bot_profile():
-            return "  A bot cannot delete or reset profiles. Ask the owner.\n"
+            return "A bot cannot delete or reset profiles. Ask the owner.\n"
         # "fire the intern" is a sentence, not a bot: only a selector fires.
         parts = rest.split()
         selector = parts[0] if parts else ""
@@ -1000,7 +997,7 @@ def handle_concierge(
                 return lifecycle.fire(store, selector, confirm=confirm, seams=seams)
             return lifecycle.reset(store, selector, seams=seams)
         except lifecycle.Refused as exc:
-            return "  {}\n".format(exc)
+            return "{}\n".format(exc)
 
     if head == "create":
         _drop_cards(session_key)
@@ -1032,9 +1029,9 @@ def handle_concierge(
     # Old words are gone, but a stale habit should get a pointer, not a mystery.
     first, _, after = text.partition(" ")
     if first.lower() == "hire":
-        return "  hire is gone. Same thing: /concierge create {}\n".format(after.strip() or "<sentence>")
+        return "hire is gone. Same thing: /concierge create {}\n".format(after.strip() or "<sentence>")
     if first.lower() == "train":
-        return "  train is gone. Same thing: /concierge improve {}\n".format(after.strip() or "<bot>: <what>")
+        return "train is gone. Same thing: /concierge improve {}\n".format(after.strip() or "<bot>: <what>")
 
     if _self_improve(text) and not (_asks_for_bot(text) or _wants_a_bot(text)):
         _drop_cards(session_key)
@@ -1075,13 +1072,13 @@ def handle_concierge(
         return handle_undo(store=store, undo=undo, seams=seams)
     if intent_name == "none":
         return (
-            "  I only take plain requests, not instructions about how to answer.\n"
-            "  Say what you want, like /concierge install obsidian.\n"
+            "I only take plain requests, not instructions about how to answer.\n"
+            "Say what you want, like /concierge install obsidian.\n"
         )
     if intent_name == "fire":
         return (
-            "  Deleting a bot needs its number, so nothing is removed by a guess.\n"
-            "  /concierge bots, then /concierge fire <number>\n"
+            "Deleting a bot needs its number, so nothing is removed by a guess.\n"
+            "/concierge bots, then /concierge fire <number>\n"
         )
 
     if _is_bot_profile() and intent_name == "install":
@@ -1091,7 +1088,7 @@ def handle_concierge(
 
         _, target = market_mod.split_target(text)
         if target and target != here:
-            return "  This bot can only install into itself, not {}.\n".format(target)
+            return "This bot can only install into itself, not {}.\n".format(target)
         return card_mod.handle(text, session_key=session_key, store=store, target=here)
 
     # "into <word>" that is not a bot is a typo, not a destination.
@@ -1102,7 +1099,7 @@ def handle_concierge(
             from . import seams as _seams
 
             if not _seams.profile_exists(aimed_name):
-                return "  No bot called {}. Say /concierge bots to see them.\n".format(
+                return "No bot called {}. Say /concierge bots to see them.\n".format(
                     aimed_name
                 )
         except Exception:
@@ -1141,8 +1138,8 @@ def handle_concierge(
 
             if _seams.catalog_source() != "marketplace":
                 return (
-                    "  I could not reach the marketplace just now, so I will not claim\n"
-                    "  that nothing exists. Nothing was installed. Try again in a moment.\n"
+                    "I could not reach the marketplace just now, so I will not claim\n"
+                    "that nothing exists. Nothing was installed. Try again in a moment.\n"
                 )
         except Exception:
             pass
@@ -1161,15 +1158,15 @@ def handle_concierge(
         if finance:
             subject = "an analyst for this (it can build the workbook)"
             answer += (
-                "  Tax and invoicing tools are country-specific: say which country\n"
-                "  and I will look for one that fits.\n"
+                "Tax and invoicing tools are country-specific: say which country\n"
+                "and I will look for one that fits.\n"
             )
         elif named:
             subject = "a {} for this".format(role.name)
         else:
             subject = "a bot that does that"
         if answer.count("Next:") < 1:
-            answer += "  Next: /concierge create {}\n".format(subject)
+            answer += "Next: /concierge create {}\n".format(subject)
         return answer
     if "best match  none" in answer:
         plan = improve.plan(here, text)
@@ -1191,6 +1188,16 @@ def _exact_entry(query: str, catalog: list) -> str:
         if flat and flat == wanted:
             return str(name)
     return ""
+
+
+def _install_now(name, *, catalog, store, session_key, target, caution=""):
+    """Install the pick and print the receipt. There is no question to answer."""
+    from . import card
+
+    card.handle(name, entries=catalog, store=store, session_key=session_key,
+                target=target, caution=caution)
+    return card.handle("yes", entries=catalog, store=store, session_key=session_key,
+                       target=target, caution=caution)
 
 
 def _exact_skill(query: str) -> str:
@@ -1227,15 +1234,15 @@ def handle_install(
     if not text:
         return (
             "Install what? Say it plainly, for example:\n"
-            "  /concierge install stripe payments\n"
-            "  /concierge install stripe payments into intern\n"
+            "/concierge install stripe payments\n"
+            "/concierge install stripe payments into intern\n"
         )
 
     query, target = market.split_target(text)
     if _is_bot_profile():
         here = _self_name()
         if target and target != here:
-            return "  This bot can only install into itself, not {}.\n".format(target)
+            return "This bot can only install into itself, not {}.\n".format(target)
         target = here
     if not target:
         aimed = _into_target(text)
@@ -1244,7 +1251,7 @@ def handle_install(
         except Exception:
             known_destination = False
         if aimed and not known_destination:
-            return "  No bot called {}. Say /concierge bots to see them.\n".format(aimed[0])
+            return "No bot called {}. Say /concierge bots to see them.\n".format(aimed[0])
         if aimed and known_destination:
             target = aimed[0]
             query = text[: aimed[1]].strip()
@@ -1263,8 +1270,8 @@ def handle_install(
     if card.is_waiting(session_key) and (
         answer_word in ("yes", "y", "no", "n", "more") or answer_word.isdigit()
     ):
-        return card.handle(text, entries=catalog, store=store,
-                           session_key=session_key, target=target)
+        return _install_now(text, catalog=catalog, store=store,
+                            session_key=session_key, target=target)
 
     # Asked for by name, with nothing to choose: install and print the receipt.
     # The card exists to ask a question; when the sentence already answered it,
@@ -1291,15 +1298,15 @@ def handle_install(
         if getattr(choice, "kind", "") == "builtin":
             tool = getattr(choice, "description", "") or "its built-in tools"
             return (
-                "  Nothing to install: Hermes already does this with {} \n"
-                "  No plugin needed, and nothing was added.\n"
-                "  If you want a bot that does it for you: /concierge create {}\n"
+                "Nothing to install: Hermes already does this with {}.\n"
+                "No plugin needed, and nothing was added.\n"
+                "If you want a bot that does it for you: /concierge create {}\n"
             ).format(tool, query[:60])
         if getattr(choice, "kind", "") == "skill":
             return market.handle(choice.name, target=target, session_key=session_key,
                                  store=store, search_fn=search, caution=caution)
-        return card.handle(choice.name, entries=catalog, store=store,
-                           session_key=session_key, target=target, caution=caution)
+        return _install_now(choice.name, catalog=catalog, store=store,
+                            session_key=session_key, target=target, caution=caution)
     if _llm() is None:
         # No model at all: the old two-shelf search still beats a dead end. The
         # caution still has to reach the card, or offline is the one path where a
@@ -1323,7 +1330,7 @@ def handle_install(
     # a submission ledger: two shots at a wrong answer instead of one honest no.
     answer = card.nothing(query)
     answer += (
-        "  If no tool can do it, a bot can try: /concierge create {}\n".format(query[:60])
+        "If no tool can do it, a bot can try: /concierge create {}\n".format(query[:60])
     )
     return answer
 
@@ -1339,33 +1346,33 @@ def handle_hire(
     from . import bots, lifecycle, seams, state
 
     if _is_bot_profile():
-        return "  A bot cannot make other bots. Ask the owner, or improve yourself.\n"
+        return "A bot cannot make other bots. Ask the owner, or improve yourself.\n"
 
     text = _clean(raw)
     if text.lower().startswith("/concierge"):
         text = text[len("/concierge"):].strip()
     if not text:
-        return "Usage: /concierge create <sentence>   e.g. /concierge create keeps my inbox at zero\n"
+        return "Usage: /concierge create <sentence>. For example: /concierge create keeps my inbox at zero.\n"
 
     plan = bots.spec(text)
     if plan.name == lifecycle.DEFAULT:
         return (
-            "  {} is the profile you are talking to, not a bot. Name this one:\n"
-            "  /concierge create {}-2: {}\n".format(plan.name, plan.name, text)
+            "{} is the profile you are talking to, not a bot. Name this one:\n"
+            "/concierge create {}-2: {}\n".format(plan.name, plan.name, text)
         )
 
     taken = list(known) if known is not None else bots.names()
     if plan.name in taken:
         return (
-            "  {} already exists.\n\n"
-            "  Name it yourself and try again, for example:\n"
-            "  /concierge create {}-2: {}\n".format(plan.name, plan.name, text)
+            "{} already exists.\n\n"
+            "Name it yourself and try again, for example:\n"
+            "/concierge create {}-2: {}\n".format(plan.name, plan.name, text)
         )
 
     try:
         plan, path = (hire or bots.hire)(text)
     except bots.Collision as exc:
-        return "  {} already exists. Nothing was created.\n".format(exc.name)
+        return "{} already exists. Nothing was created.\n".format(exc.name)
     except Exception as exc:
         return "Not hired: {}: {}\n".format(type(exc).__name__, exc)
 
@@ -1376,7 +1383,7 @@ def handle_hire(
     try:
         plugin_lines = _inherit_plugins(path)
     except Exception as exc:
-        plugin_lines = ["  plugins  stock defaults, copy failed: {}".format(type(exc).__name__)]
+        plugin_lines = ["Plugins use stock defaults: copy failed ({}).".format(type(exc).__name__)]
     try:
         preset_lines = _apply_preset(text, plan.name, path)
     except Exception:
@@ -1391,7 +1398,7 @@ def handle_hire(
         self_lines = (
             []
             if seams.link_self_plugin(path)
-            else ["  self     no /concierge in this bot (link failed)"]
+            else ["Link failed: no /concierge in this bot."]
         )
     except Exception:
         self_lines = []
@@ -1413,10 +1420,10 @@ def handle_hire(
         store,
     )
     head = "Created {}".format(plan.name) if ok else "Created {}, but check this".format(plan.name)
-    undo_line = "  undo     /concierge undo" if saved else "  no undo  the record could not be saved"
+    undo_line = "Undo with /concierge undo." if saved else "Undo is off for this one: the record could not be saved."
     return "\n".join(
         [head, ""]
-        + ["  " + line for line in lines]
+        + list(lines)
         + key_lines
         + self_lines
         + plugin_lines
@@ -1424,7 +1431,7 @@ def handle_hire(
         + extra_lines
         + [
             "",
-            "  next     /concierge improve {}: <habit>".format(plan.name),
+            "Next: /concierge improve {}: <habit>".format(plan.name),
             undo_line,
             "",
         ]
@@ -1438,7 +1445,7 @@ def _safe_bots(store: Any) -> str:
 
         return lifecycle.card(store)
     except Exception:
-        return "  The bot list could not be read just now. Nothing was changed.\n"
+        return "The bot list could not be read just now. Nothing was changed.\n"
 
 
 
@@ -1462,7 +1469,7 @@ def _apply_preset(text: str, name: str, profile_path: Any) -> list[str]:
     try:
         report = presets.install(name, Path(str(profile_path)), role)
     except Exception as exc:
-        return ["  skills   preset skipped: {}: {}".format(type(exc).__name__, exc)] + _job_line(
+        return ["Role skills skipped: {}: {}.".format(type(exc).__name__, exc)] + _job_line(
             text, profile_path, bots
         )
     lines = report.lines() if report.wanted else []
@@ -1518,7 +1525,7 @@ def handle_improve(
     if not text:
         return (
             "Improve which bot? Say it plainly:\n"
-            "  /concierge improve researcher-bot: it needs to read scanned PDFs\n"
+            "/concierge improve researcher-bot: it needs to read scanned PDFs\n"
         )
     bot, sentence = (bot, text) if bot else training.guess_bot(text)
     if _is_bot_profile():
@@ -1526,16 +1533,16 @@ def handle_improve(
         if (bot or "").lower() in ("me", "myself", "self", "yourself", "itself", "you", "your self", ""):
             bot = here
         if bot != here:
-            return "  This bot can only improve itself, not {}.\n".format(bot)
+            return "This bot can only improve itself, not {}.\n".format(bot)
     if not sentence:
         return (
-            "  Improve {} how? Name the job: /concierge improve {}: it needs to read PDFs\n"
+            "Improve {} how? Name the job: /concierge improve {}: it needs to read PDFs.\n"
             .format(bot, bot)
         )
     plan = improve.plan(bot, sentence)
     if plan is None:
         names = ", ".join(_bot_names()) or "none"
-        return "  No bot called {}. Bots here: {}\n".format(bot, names)
+        return "No bot called {}. Bots here: {}\n".format(bot, names)
     return improve.receipt(plan, improve.apply(plan, store=store))
 
 
@@ -1606,7 +1613,7 @@ def handle_undo(*, store: Any = None, undo: Optional[Callable[..., Any]] = None,
         here = _self_name()
         owner = getattr(record, "profile", "") or getattr(record, "name", "")
         if owner and owner != here:
-            return "  This bot can only undo its own changes.\n"
+            return "This bot can only undo its own changes.\n"
     if record is None:
         try:
             from . import lifecycle as _lifecycle
@@ -1618,28 +1625,28 @@ def handle_undo(*, store: Any = None, undo: Optional[Callable[..., Any]] = None,
             # Undo reverses installs and rules, never a profile: saying nothing
             # changed while a bot is standing there reads as a lie.
             return (
-                "  Nothing to undo. Bots are removed with a sentence of their own:\n"
-                "  /concierge bots, then /concierge delete 1\n"
+                "Nothing to undo. Bots are removed with a sentence of their own:\n"
+                "/concierge bots, then /concierge delete 1\n"
             )
-        return "  Nothing to undo.\n"
+        return "Nothing to undo.\n"
 
     lines = _undo_record(record, undo=undo, seams=seams)
     if any(line.startswith("kept:") for line in lines):
         # A refusal is not an undo: the receipt stays so the bot is still tracked.
         return "\n".join(
-            ["Not undone: {}".format(record.name), ""] + ["  " + line for line in lines] + [""]
+            ["Not undone: {}".format(record.name), ""] + list(lines) + [""]
         )
     problems = [line for line in lines if line.startswith(("could not", "still there"))]
     if problems:
         head = "Not fully undone"
-        tail = "  the receipt is kept, so /concierge undo tries again\n"
+        tail = "The receipt is kept, so /concierge undo tries again.\n"
     else:
         store.drop(record.name, record.kind)
         head = "Undone"
         tail = ""
     return "\n".join(
         ["{}: {}".format(head, record.name), ""]
-        + ["  " + line for line in lines]
+        + list(lines)
         + ([tail] if tail else [])
     )
 
@@ -1944,8 +1951,8 @@ def _gateway_refusal(raw: Any) -> Optional[str]:
     if low in _READ_ONLY or low.split(" ", 1)[0] in _READ_ONLY:
         return None
     return (
-        "  Concierge changes this machine, so it does not run from a shared chat.\n"
-        "  Ask the owner, or set plugins.entries.concierge.allow_gateway: true.\n"
+        "Concierge changes this machine, so it does not run from a shared chat.\n"
+        "Ask the owner, or set plugins.entries.concierge.allow_gateway: true.\n"
     )
 
 

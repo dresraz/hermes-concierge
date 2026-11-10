@@ -28,13 +28,14 @@ class Shelf(unittest.TestCase):
     def test_the_overview_counts_what_is_here(self):
         text = shelf.overview()
         self.assertIn("Concierge", text)
-        self.assertIn("ready", text)
+        self.assertIn("skills", text)
+        self.assertIn("plugins", text)
         self.assertIn("connector", text)
 
     def test_browse_numbers_what_it_shows(self):
         text = shelf.browse("notes", session_key="t")
-        self.assertIn("LOOKING FOR  notes", text)
-        self.assertIn("  1  ", text)
+        self.assertRegex(text.splitlines()[0], r"^1\. ")
+        self.assertIn("notes", text)
         self.assertTrue(shelf.pending("t"))
 
     def test_picking_an_installed_skill_says_so_and_installs_nothing(self):

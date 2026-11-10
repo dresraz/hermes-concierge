@@ -47,6 +47,10 @@ def name_of(record: Any) -> str:
     return getattr(record, "profile", "") or getattr(record, "name", "") or ""
 
 
+def _n(count: int, word: str) -> str:
+    return "{} {}".format(count, word if count == 1 else word + "s")
+
+
 def for_profile(store: Any = None, name: str = "") -> list:
     """Every record Concierge wrote for one profile."""
     return [r for r in records(store) if name_of(r) == name]
@@ -94,27 +98,29 @@ def card(store: Any = None) -> str:
     items = bots(store)
     lines = []
     if not items:
-        lines.append("  No bots yet.")
+        lines.append("No bots yet.")
         lines.append("")
-        lines.append("  Make one: /concierge create keeps my inbox at zero")
+        lines.append("Make one: /concierge create keeps my inbox at zero")
     else:
-        lines.append("  Bots  {}".format(len(items)))
+        lines.append("{}:".format(_n(len(items), "bot")))
         lines.append("")
-        width = max(len(name_of(r)) for r in items)
         for index, record in enumerate(items, 1):
             name = name_of(record)
             title = " ".join(str(getattr(record, "title", "") or "").split())
             if len(title) > 46:
                 title = title[:43].rstrip() + "..."
-            lines.append("  {:>2}  {:<{w}}  {}".format(index, name, title, w=width))
+            if title:
+                lines.append("{}. {}: {}".format(index, name, title))
+            else:
+                lines.append("{}. {}".format(index, name))
         lines.append("")
-        lines.append("  /concierge delete <n>   remove that bot for good")
-        lines.append("  /concierge reset <n>    keep it, take back my changes")
+        lines.append("/concierge delete <n> removes that bot for good.")
+        lines.append("/concierge reset <n> keeps the bot and takes back my changes.")
 
     touched = for_profile(store, DEFAULT)
     if touched:
         lines.append("")
-        lines.append("  default  {} Concierge change{}   reset default to take them back".format(
+        lines.append("Default has {} Concierge change{}. Reset default to take them back.".format(
             len(touched), "" if len(touched) == 1 else "s"))
     return "\n".join(lines) + "\n"
 
@@ -123,7 +129,7 @@ def _target(store: Any, token: Any, verb: str) -> str:
     """Resolve a selector, or say what a usable one looks like."""
     text = " ".join(str(token or "").split())
     if not text:
-        raise Refused("which bot? /concierge {} <n>, and /concierge bots shows the numbers.".format(verb))
+        raise Refused("Which bot? /concierge {} <n>, and /concierge bots shows the numbers.".format(verb))
     name = resolve(store, text)
     if name is None:
         raise Refused(
@@ -190,7 +196,7 @@ def fire(
     if history and " ".join(str(confirm or "").split()).lower() != name.lower():
         raise Refused(
             "{} has history: {}. Firing it throws that away, and nothing brings it back.\n"
-            "  To do it anyway: /concierge fire {} {}".format(name, ", ".join(history), token, name)
+            "To do it anyway: /concierge fire {} {}".format(name, ", ".join(history), token, name)
         )
 
     from . import commands
@@ -200,15 +206,15 @@ def fire(
     if problems:
         return "\n".join(
             ["Not fired: {}".format(name), ""]
-            + ["  " + line for line in lines]
-            + ["", "  the receipt is kept, so /concierge fire {} tries again".format(name), ""]
+            + list(lines)
+            + ["", "The receipt is kept, so /concierge fire {} tries again.".format(name), ""]
         )
 
     for other in for_profile(store, name):
         store.drop(other.name, other.kind)
     head = "Deleted {}".format(name)
-    return "\n".join([head, ""] + ["  " + line for line in lines] + [
-        "", "  The profile, its skills and its history are gone. A new one costs one sentence.",
+    return "\n".join([head, ""] + list(lines) + [
+        "", "The profile, its skills and its history are gone. A new one costs one sentence.",
         ""])
 
 
@@ -240,13 +246,13 @@ def reset(store: Any = None, token: Any = "", *, seams: Any = None) -> str:
         lines.extend(got)
 
     head = "Reset: {} ({} change{})".format(name, len(touched), "" if len(touched) == 1 else "s")
-    tail = ["", "  {} change{} kept, so /concierge reset {} tries again".format(
+    tail = ["", "{} change{} kept, so /concierge reset {} tries again.".format(
         failed, "" if failed == 1 else "s", name
     )] if failed else []
     if lines and all(line.startswith("kept:") for line in lines):
-        head = "Reset: {}. Nothing inside it to take back yet".format(name)
+        head = "Reset: {}. Nothing inside it to take back yet.".format(name)
         tail = []
-    return "\n".join([head, ""] + ["  " + line for line in lines] + tail + [""])
+    return "\n".join([head, ""] + list(lines) + tail + [""])
 
 
 __all__ = [

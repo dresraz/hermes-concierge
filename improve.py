@@ -1,7 +1,7 @@
 """improve.py: make a bot better, out of the marketplace.
 
-Two kinds of improvement, one sentence. A **capability** is a skill that
-already exists in the marketplace, installed into that bot. A **rule** is
+Two kinds of improvement, one sentence. A capability is a skill that
+already exists in the marketplace, installed into that bot. A rule is
 standing behaviour ("always show the source first"), appended to the bot's
 SOUL so it applies on every turn.
 
@@ -284,9 +284,9 @@ def apply(plan_: Plan, *, store: Any = None) -> list:
         if item.kind == "rule":
             written = add_rule(plan_)
             if written and written.get("duplicate"):
-                lines.append("  rule     already there: " + plan_.sentence)
+                lines.append("Rule already there: " + plan_.sentence)
             elif written:
-                lines.append("  rule     " + plan_.sentence)
+                lines.append("Rule added: " + plan_.sentence)
                 store.add(
                     state.Installed(
                         name=plan_.bot,
@@ -299,10 +299,10 @@ def apply(plan_: Plan, *, store: Any = None) -> list:
                     )
                 )
             else:
-                lines.append("  rule     could not write SOUL.md, nothing changed")
+                lines.append("SOUL.md could not be written, so nothing changed.")
             continue
         if _install_one(plan_.bot, item, home=plan_.home):
-            lines.append("  skill    {}".format(item.name))
+            lines.append("Installed skill {}.".format(item.name))
             # Record the directory that actually exists: undo removes a path,
             # never a guess at where the skill might be.
             folder = next(
@@ -321,7 +321,7 @@ def apply(plan_: Plan, *, store: Any = None) -> list:
                 )
             )
         else:
-            lines.append("  skill    {} did not install".format(item.name))
+            lines.append("Skill {} did not install.".format(item.name))
     return lines
 
 
@@ -329,15 +329,15 @@ def receipt(plan_: Plan, lines: Sequence[str]) -> str:
     """One short block: what the bot got, and how to take it back."""
     if not plan_.items and getattr(plan_, "have", None):
         return (
-            "  {} already has {}. Nothing changed.\n"
-            "  See what else does that job: /concierge browse {}\n".format(
+            "{} already has {}. Nothing changed.\n"
+            "See what else does that job: /concierge browse {}\n".format(
                 plan_.bot, ", ".join(plan_.have), plan_.have[0]
             )
         )
     if not plan_.items:
         return (
-            "  Nothing in the marketplace fits that yet.\n"
-            "  Try naming the job: /concierge improve {}: it needs to read scanned PDFs\n".format(plan_.bot)
+            "Nothing in the marketplace fits that yet.\n"
+            "Try naming the job: /concierge improve {}: it needs to read scanned PDFs\n".format(plan_.bot)
         )
     names = ", ".join(item.name for item in plan_.items)
     head = (
@@ -357,5 +357,5 @@ def receipt(plan_: Plan, lines: Sequence[str]) -> str:
     if duplicate:
         # Nothing changed, so the headline may not say it improved.
         head = "No change to {}".format(getattr(plan_, "bot", "") or getattr(plan_, "name", "the bot"))
-    tail = [""] if duplicate else ["", "  undo     /concierge undo"]
+    tail = [""] if duplicate else ["", "Undo with /concierge undo."]
     return "\n".join([head, ""] + list(lines) + tail)

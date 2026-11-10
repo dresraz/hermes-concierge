@@ -247,11 +247,11 @@ def receipt(plan: Spec, path: object, known: Sequence[str] | None = None,
     except Exception:
         listed = plan.name in (list(known) if known is not None else names())
     ok = home.is_dir() and bool(soul_text.strip()) and listed
-    lines = ["  soul     " + (_soul_gist(soul_text) if soul_text else "MISSING")]
+    lines = ["Soul: " + (_soul_gist(soul_text) if soul_text else "missing")]
     # One count only: when the role line below names the skills, a second
     # number above it reads as a mismatch to anyone who is not the author.
     if count_skills and skills:
-        lines.append("  skills   {} installed".format(skills))
+        lines.append("{} skills installed.".format(skills))
     if not listed:
-        lines.append("  profile  not confirmed yet, it is there on disk")
+        lines.append("The profile is not confirmed yet, but it is there on disk.")
     return lines, ok

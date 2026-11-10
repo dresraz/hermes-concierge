@@ -309,7 +309,7 @@ def lines(picks: Sequence[dict], bot: str) -> list[str]:
     for pick in picks:
         why = "/".join(pick.get("why") or [])[:28]
         out.append(
-            "  also     {} ({} KB{})  /concierge install {} into {}".format(
+            "Also: {} ({} KB{}). Install it with /concierge install {} into {}.".format(
                 pick["name"], pick["kb"], ", " + why if why else "", pick["name"], bot
             )
         )

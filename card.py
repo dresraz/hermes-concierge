@@ -189,7 +189,7 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
         # A card with an empty body asks someone to install a word.
         return nothing(sentence or top.name, candidates)
     if sentence:
-        lines.append("  " + sentence)
+        lines.append(sentence)
     adds = _plain_adds(top.entry)
     if deps:
         names = ", ".join(_dep_name(str(d)) for d in deps[:3])
@@ -205,11 +205,11 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
         adds = " ".join(part for part in (adds, "Also installs {}{}.".format(names, risky)) if part)
     tail = " ".join(part for part in (adds, where) if part)
     if tail:
-        lines.append("  " + tail)
+        lines.append(tail)
     locked = jurisdiction(top.entry)
     if locked and locked.split(" (")[0].lower() not in sentence.lower():
         # Only when the ask did not name that country itself.
-        lines.append("  Only for {}. Not your country? Say no.".format(locked))
+        lines.append("Only for {}. Not your country? Say no.".format(locked))
 
     line = _caution_line(caution)
     if line:
@@ -217,8 +217,8 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
 
     rival = _contender(candidates)
     if rival is not None:
-        lines += ["", "  Another option: {}.".format(rival.name)]
-    lines += ["", "  yes     no", ""]
+        lines += ["", "Another option: {}.".format(rival.name)]
+    lines += ["", "Reply yes to install it, or no to drop it.", ""]
     return "\n".join(lines)
 
 
@@ -301,7 +301,7 @@ def _has_hits(word: str) -> bool:
 def _replaced(session_key: str) -> str:
     """The previous card is gone; say so, or a yes answers the wrong question."""
     held = _slot(session_key).get("sentence", "")
-    return "  (This replaces the {} card.)\n".format(held) if held else ""
+    return "(This replaces the {} card.)\n".format(held) if held else ""
 
 
 def nothing(sentence: str, entries: Optional[list] = None) -> str:
@@ -310,9 +310,9 @@ def nothing(sentence: str, entries: Optional[list] = None) -> str:
     head = 'Nothing here fits "{}". Nothing was installed.'.format(said) if said else "Nothing here fits that. Nothing was installed."
     hint = _hint(sentence)
     if _has_hits(hint):
-        nxt = "  Next: /concierge browse {}".format(hint)
+        nxt = "Next: /concierge browse {}".format(hint)
     else:
-        nxt = "  Next: /concierge create a bot that does it"
+        nxt = "Next: /concierge create a bot that does it"
     return "\n".join([head, "", nxt, ""])
 
 
@@ -324,7 +324,7 @@ def handle(sentence: str, *, entries=None, store=None, install=None,
     slot = _slot(session_key)
     text = (sentence or "").strip()
     if not text:
-        return "Concierge\n\n  Say what you want in one sentence, like: /concierge remember my notes across sessions\n"
+        return "Concierge\n\nSay what you want in one sentence, like: /concierge remember my notes across sessions\n"
 
     if not target:
         # A plain sentence can name a bot too, not only the install verb.
@@ -395,9 +395,9 @@ def more(session_key: str = "") -> str:
         return f"{picked[0].name} is the only match on the card.\n"
 
     rival = picked[1]
-    lines = ["", "{}".format(rival.name), ""]
+    lines = ["", "Another option: {}.".format(rival.name), ""]
     if rival.description:
-        lines.append("  " + _one_line(rival.description))
+        lines.append(_one_line(rival.description))
     lines += [
         "",
         "The card still holds {}. /concierge yes installs that.".format(picked[0].name),
@@ -483,12 +483,12 @@ def receipt(outcome, record, *, saved: bool = True) -> str:
     )
     lines = [head, ""]
     if present:
-        lines.append("  on disk     yes, the files are there")
+        lines.append("The files are there.")
     else:
-        lines.append("  on disk     nothing there yet")
-    lines.append(f"  enabled     {'yes' if record.enabled else 'no'}")
+        lines.append("The files are not there yet.")
+    lines.append("It is enabled." if record.enabled else "It is not enabled.")
     if record.profile:
-        lines.append(f"  into        {record.profile}")
+        lines.append("It goes into {}.".format(record.profile))
     try:  # re-read the installed tree: what core actually installed, not what the repo promised
         installed = seams.declared_deps(target) if target is not None else []
     except Exception:
@@ -497,19 +497,19 @@ def receipt(outcome, record, *, saved: bool = True) -> str:
         names = ", ".join(_dep_name(str(d)) for d in installed[:4])
         if len(installed) > 4:
             names += f" (+{len(installed) - 4} more)"
-        lines.append(f"  deps        {names} installed")
+        lines.append("Also installed {}.".format(names))
     verdict = outcome.verdict or "not scanned"
     findings = len(outcome.findings)
     if not findings:
-        lines.append(f"  scan        {verdict}, nothing flagged")
+        lines.append("Scan: {}, nothing flagged.".format(verdict))
     elif findings == 1:
-        lines.append(f"  scan        {verdict}, 1 note")
+        lines.append("Scan: {}, 1 note.".format(verdict))
     else:
-        lines.append(f"  scan        {verdict}, {findings} notes")
+        lines.append("Scan: {}, {} notes.".format(verdict, findings))
     for note in outcome.notes:
-        lines.append(f"  note        {note}")
+        lines.append("Note: {}".format(note))
     if saved and present:
-        lines += ["", "Undo it with /concierge undo", ""]
+        lines += ["", "Undo with /concierge undo.", ""]
     elif saved:
         lines += ["", "Nothing to undo yet: the files are not there.", ""]
     else:
