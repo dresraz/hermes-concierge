@@ -77,7 +77,23 @@ def _allow_gateway() -> bool:
     return False
 
 
-def _messaging() -> bool:
+# The surfaces the owner is sitting at. Everything else, including a surface we
+# have never heard of, counts as a shared chat: the safe side of this gate is
+# "do not change the machine from someone else's chat".
+_LOCAL_SURFACES = frozenset({"cli", "tui", "desktop", "acp"})
+
+
+def _messaging(platform: str = "") -> bool:
+    """Is this a shared chat?
+
+    A platform named by the caller decides on its own: the admission hook is told
+    where the message came from, and that answer does not depend on session
+    variables a worker may have stripped. With no platform, core's own answer
+    stands, and an unknown answer counts as a shared chat.
+    """
+    named = (platform or "").strip().lower()
+    if named:
+        return named not in _LOCAL_SURFACES
     try:
         from gateway.session_context import session_is_messaging_surface
 
@@ -86,8 +102,8 @@ def _messaging() -> bool:
         return True
 
 
-def _refusal() -> Optional[str]:
-    if _messaging() and not _allow_gateway():
+def _refusal(platform: str = "") -> Optional[str]:
+    if _messaging(platform) and not _allow_gateway():
         return "Concierge changes this machine, so it does not run from a shared chat.\nAsk the owner, or set plugins.entries.concierge.allow_gateway to true.\n"
     return None
 
@@ -728,7 +744,7 @@ def _apply_undo(store_mod: Any, record: dict) -> str:
     return "Cleared an unreadable receipt. Say the job: /concierge something that reads my pdfs.\n"
 
 
-def on_admission(text: str = "", session_key: str = "", **_kw: Any) -> Any:
+def on_admission(text: str = "", session_key: str = "", platform: str = "", **_kw: Any) -> Any:
     """Answer a pending question this conversation is holding, and nothing else.
 
     The fire prompt asks for a plain yes or no, and a plain reply arrives as an
@@ -736,6 +752,10 @@ def on_admission(text: str = "", session_key: str = "", **_kw: Any) -> Any:
     delete is pending for this session and the sentence is a yes, a no, or the
     number the prompt printed. Every other message returns None and is left
     alone, which is why this cannot swallow normal chat.
+
+    The platform the hook was told about is the surface this runs on, and it is
+    what the refusal gate reads: a worker can strip session variables, so the
+    named surface is the answer that cannot go missing.
     """
     try:
         if not session_key:
@@ -743,7 +763,7 @@ def on_admission(text: str = "", session_key: str = "", **_kw: Any) -> Any:
         pending = _PENDING.get(session_key) or {}
         if not (pending.get("key", "") or "").startswith("fire:"):
             return None
-        if _refusal():
+        if _refusal(platform):
             return None
         low = " ".join(str(text or "").split()).strip().lower()
         if not low:

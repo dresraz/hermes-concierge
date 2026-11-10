@@ -100,7 +100,9 @@ class Tables(unittest.TestCase):
         import ast
 
         root = pathlib.Path(__file__).resolve().parents[1]
-        allowed = {"ACTIONS", "OUTCOMES"}
+        # Vocabulary, not phrasing: the action names, the answers, and the names
+        # of the surfaces the owner is actually sitting at.
+        allowed = {"ACTIONS", "OUTCOMES", "_LOCAL_SURFACES"}
         for path in root.glob("*.py"):
             tree = ast.parse(path.read_text())
             for node in tree.body:
@@ -412,6 +414,21 @@ class OfflineHeads(unittest.TestCase):
             self.assertTrue((home / "profiles" / "probe-bot" / ".env").exists())
         finally:
             store._run = real_run
+
+    def test_hook_refuses_a_named_messaging_surface(self):
+        deleted = []
+        store.has_bot_record = lambda name: True
+        store.delete_bot = lambda name: deleted.append(name) or (0, "ok")
+        commands._bot_names = lambda: ["x-bot"]
+        commands._PENDING["h3"] = {"key": "fire:x-bot", "summary": "delete x-bot",
+                                   "bot": "x-bot", "confirmed": True}
+        self.assertIsNone(commands.on_admission(text="yes", session_key="h3", platform="telegram"))
+        self.assertIsNone(commands.on_admission(text="yes", session_key="h3", platform="something-new"))
+        self.assertEqual(deleted, [])
+        out = commands.on_admission(text="yes", session_key="h3", platform="desktop")
+        self.assertEqual(out.get("action"), "handled")
+        self.assertEqual(deleted, ["x-bot"])
+        commands._PENDING.clear()
 
     def test_hook_answers_a_pending_delete_only(self):
         deleted = []
