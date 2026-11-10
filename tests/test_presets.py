@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 import tempfile
@@ -14,6 +15,23 @@ import harness  # noqa: E402
 commands = harness.load("commands")
 presets = harness.load("presets")
 state = harness.load("state")
+
+
+class RoleLlm:
+    """The model stub: answers one fixed role for every sentence."""
+
+    def __init__(self, role):
+        self.role = role
+        self.prompts = []
+
+    def complete_structured(self, **kwargs):
+        self.prompts.append(kwargs.get("instructions", ""))
+        role = self.role
+
+        class Result:
+            text = json.dumps({"role": role})
+
+        return Result()
 
 
 class Memory:
@@ -50,21 +68,27 @@ class Detection(unittest.TestCase):
         }
         for sentence, role in cases.items():
             with self.subTest(sentence=sentence):
-                found = presets.detect(sentence)
+                llm = RoleLlm(role)
+                found = presets.detect(sentence, llm)
                 self.assertIsNotNone(found, sentence)
                 self.assertEqual(found.name, role)
+                # The model chose from the preset names and their one-liners.
+                self.assertIn("- {}: ".format(role), llm.prompts[0])
 
     def test_generic_words_do_not_pick_a_role(self):
         for sentence in ("hire a bot", "make me an agent", "a helper please", ""):
             with self.subTest(sentence=sentence):
-                self.assertIsNone(presets.detect(sentence))
+                self.assertIsNone(presets.detect(sentence, RoleLlm("none")))
 
     def test_the_word_assistant_is_a_role_in_a_plain_phrase(self):
         for sentence in ("make me an assistant", "a general assistant", "personal assistant bot"):
             with self.subTest(sentence=sentence):
-                found = presets.detect(sentence)
+                found = presets.detect(sentence, RoleLlm("assistant"))
                 self.assertIsNotNone(found, sentence)
                 self.assertEqual(found.name, "assistant")
+
+    def test_no_model_picks_no_role(self):
+        self.assertIsNone(presets.detect("hire a researcher for papers", None))
 
     def test_roster_is_ten_and_named(self):
         self.assertEqual(len(presets.ROLES), 10)
@@ -213,6 +237,13 @@ class Surface(unittest.TestCase):
         home.mkdir()
         name = "researcher"
 
+        class Ctx:
+            @property
+            def llm(self):
+                return RoleLlm("researcher")
+
+        saved = commands._CTX
+        commands._CTX = Ctx()
         original_install = presets.install
         presets.install = lambda profile, path, role, **kw: presets.Report(
             role.name, ["parallel-cli"], ["parallel-cli"], []
@@ -226,6 +257,7 @@ class Surface(unittest.TestCase):
             )
         finally:
             presets.install = original_install
+            commands._CTX = saved
         self.assertIn("Created", out)
         self.assertIn("researcher skills 1/1 installed: parallel-cli.", out)
 

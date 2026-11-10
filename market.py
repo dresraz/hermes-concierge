@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-from .card import NO, YES, _fit
+from .card import PENDING_NEEDS_MODEL, _fit, decide_answer
 
 # A skills search is a network call, so it is spent once per sentence and never
 # on a yes. The pending offer holds the identifier the search already returned.
@@ -145,12 +145,12 @@ def _caution_line(caution: str) -> str:
     return choose.CAUTION_LINES.get(caution, "")
 
 
-def render(text: str, offers: list, target: str, caution: str = "") -> str:
+def render(text: str, offers: list, target: str, caution: str = "", llm=None) -> str:
     """The skill card: a name, one line, two words."""
     top = offers[0]
     from . import choose
 
-    caution = caution or choose.caution_for(top, text)
+    caution = caution or choose.caution_for(top, text, llm=llm)
     lines = ["", "Install {}?".format(top.name)]
     body = []
     # A registry blurb ("Indexed by skills.sh · 225,675 installs") tells a
@@ -212,23 +212,33 @@ def nothing(text: str, target: str = "") -> str:
 
 def handle(text: str, *, target: str = "", session_key: str = "",
            search_fn: Optional[Callable[[str, int], list]] = None,
-           install: Optional[Callable] = None, store=None, caution: str = "") -> str:
-    """One request in, one skill card or one receipt out."""
+           install: Optional[Callable] = None, store=None, caution: str = "",
+           llm=None) -> str:
+    """One request in, one skill card or one receipt out.
+
+    A pending skill offer is answered the same way as a plugin card: the
+    model reads the reply against the offer's description and answers
+    CONFIRM, DROP, or OTHER. Only CONFIRM installs; only DROP clears.
+    With no model the offer is left untouched.
+    """
     text = (text or "").strip()
     if not text:
         return "Concierge\n\nSay what you want, like: /concierge install stripe payments\n"
 
-    lowered = text.lower()
-    if lowered in NO:
-        _PENDING.pop(session_key, None)
-        _STAMP.pop(session_key, None)
-        return "Nothing installed.\n"
-    if lowered in YES:
-        return _answer(session_key=session_key, install=install, store=store)
-    if lowered == "2":
-        # The card describes one offer and may name a runner-up; a number is not
-        # a choice between two cards. Refuse it without dropping the offer.
-        return "One install at a time. Say yes for the top match, or name the other one.\n"
+    held = _PENDING.get(session_key) or {}
+    if held.get("offers"):
+        current = held["offers"][0]
+        description = "{}: {}".format(
+            getattr(current, "name", ""), getattr(current, "description", ""))
+        verdict = decide_answer(text, description, llm)
+        if verdict == "CONFIRM":
+            return _answer(session_key=session_key, install=install, store=store)
+        if verdict == "DROP":
+            _PENDING.pop(session_key, None)
+            _STAMP.pop(session_key, None)
+            return "Nothing installed.\n"
+        if llm is None:
+            return PENDING_NEEDS_MODEL
 
     from . import card as _card
 
@@ -256,7 +266,7 @@ def handle(text: str, *, target: str = "", session_key: str = "",
         _STAMP.pop(oldest, None)
     _STAMP[session_key] = now
     _PENDING[session_key] = {"query": query, "offers": offers, "target": target}
-    return render(query, offers, target, caution=caution)
+    return render(query, offers, target, caution=caution, llm=llm)
 
 
 def _answer(*, session_key: str = "", install=None, store=None) -> str:

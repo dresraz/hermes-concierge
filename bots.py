@@ -148,19 +148,20 @@ def _derive_name(words: Sequence[str]) -> str:
     return (slugify(head or "helper") + "-bot")[:NAME_MAX]
 
 
-def spec(sentence: str) -> Spec:
+def spec(sentence: str, llm=None) -> Spec:
     """A name a person can pick out of a list, not a word from their sentence.
 
     A role sentence names the bot after the role: "make me a researcher that
-    reads papers" makes researcher-bot, not papers-bot. An explicit name still
-    wins.
+    reads papers" makes researcher-bot, not papers-bot. The model picks the
+    role from the preset names and blurbs; an explicit name still wins. With
+    no model the name falls back to the last meaningful word.
     """
     from . import presets
 
     text = " ".join((sentence or "").split()).strip(" .!")
     name, rest = _explicit(text)
     body = _body(rest or text)
-    role = presets.detect(body)
+    role = presets.detect(body, llm)
     derived = "{}-bot".format(role.name) if role is not None else _derive_name(_words(body))
     return Spec(
         name=(name or derived)[:NAME_MAX],
@@ -188,9 +189,10 @@ def hire(
     *,
     known: Sequence[str] | None = None,
     create: Callable[[str, str, str], object] | None = None,
+    llm=None,
 ) -> tuple[Spec, object]:
     """Create the bot. Raises :class:`Collision` when the name is taken."""
-    plan = spec(sentence)
+    plan = spec(sentence, llm=llm)
     taken = list(known) if known is not None else names()
     if plan.name in taken:
         raise Collision(plan.name, taken)

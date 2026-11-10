@@ -87,27 +87,46 @@ class AnswerGate(unittest.TestCase):
         card._PENDING.clear()
 
     def test_yes_on_telegram_does_not_install_app_does(self):
+        import json
+
         made = store(bot("inbox-bot"))
-        with mock.patch.object(card, "handle", return_value="CARD ANSWER") as sent:
+
+        class DropLlm:
+            def complete_structured(self, **kwargs):
+                class Result:
+                    text = json.dumps({"answer": "DROP"})
+
+                return Result()
+
+        class Ctx:
+            @property
+            def llm(self):
+                return DropLlm()
+
+        saved_ctx = commands._CTX
+        commands._CTX = Ctx()
+        try:
+            with mock.patch.object(card, "handle", return_value="CARD ANSWER") as sent:
+                card._PENDING["chat-x"] = {"sentence": "install pdf", "entries": ["one"], "target": ""}
+                commands._PLATFORM = "telegram"
+                commands._messaging = lambda: False
+                text = commands.handle_concierge("yes", store=made, session_key="chat-x")
+                self.assertIn("shared chat", text)
+                self.assertEqual(sent.call_count, 0)
+                # The owner's app answers the same card.
+                card._PENDING["chat-x"] = {"sentence": "install pdf", "entries": ["one"], "target": ""}
+                commands._PLATFORM = "app"
+                text = commands.handle_concierge("yes", store=made, session_key="chat-x")
+                self.assertEqual(text, "CARD ANSWER")
+                self.assertEqual(sent.call_count, 1)
+            # A safe answer still drops the card on a shared chat.
             card._PENDING["chat-x"] = {"sentence": "install pdf", "entries": ["one"], "target": ""}
-            commands._PLATFORM = "telegram"
-            commands._messaging = lambda: False
-            text = commands.handle_concierge("yes", store=made, session_key="chat-x")
-            self.assertIn("shared chat", text)
-            self.assertEqual(sent.call_count, 0)
-            # The owner's app answers the same card.
-            card._PENDING["chat-x"] = {"sentence": "install pdf", "entries": ["one"], "target": ""}
-            commands._PLATFORM = "app"
-            text = commands.handle_concierge("yes", store=made, session_key="chat-x")
-            self.assertEqual(text, "CARD ANSWER")
-            self.assertEqual(sent.call_count, 1)
-        # A safe answer still drops the card on a shared chat.
-        card._PENDING["chat-x"] = {"sentence": "install pdf", "entries": ["one"], "target": ""}
-        import importlib
-        reply = harness.load("reply")
-        result = reply.on_admission(text="no", session_key="chat-x", platform="telegram")
-        self.assertIsNotNone(result)
-        self.assertIn("Nothing installed", result["reply"])
+            reply = harness.load("reply")
+            result = reply.on_admission(text="no, drop it", session_key="chat-x", platform="telegram")
+            self.assertIsNotNone(result)
+            self.assertIn("Nothing installed", result["reply"])
+        finally:
+            commands._CTX = saved_ctx
 
 
 class ConnectorsHonest(unittest.TestCase):
@@ -145,18 +164,33 @@ class HireResetReal(unittest.TestCase):
 
         made = store()
 
+        class RoleLlm:
+            def complete_structured(self, **kwargs):
+                class _R:
+                    text = '{"role": "researcher"}'
+                return _R()
+
+        class RoleCtx:
+            @property
+            def llm(self):
+                return RoleLlm()
+
+        saved_ctx = commands._CTX
+        commands._CTX = RoleCtx()
+        self.addCleanup(lambda: setattr(commands, "_CTX", saved_ctx))
+
         def fake_hire(sentence):
             from concierge_under_test import bots as _bots
             try:
                 from concierge import bots as _bots2  # noqa
             except Exception:
                 pass
-            plan = harness.load("bots").spec(sentence)
+            plan = harness.load("bots").spec(sentence, llm=RoleLlm())
             return plan, bot_home
 
         # A preset that really lands files, without network.
         def fake_apply(text, name, path):
-            role = presets.detect(text) or presets.get("assistant")
+            role = presets.detect(text, RoleLlm()) or presets.get("assistant")
             home = Path(str(path))
             for skill in list(role.bundled)[:2]:
                 folder = home / "skills" / "misc" / skill
@@ -199,7 +233,11 @@ class HireResetReal(unittest.TestCase):
         self.assertIn("always cite sources", soul)
 
         seams = FakeSeams({"researcher-bot": bot_home})
-        reset_text = commands.handle_concierge("reset 1", store=made, seams=seams)
+        with mock.patch.object(
+            commands, "_model_route",
+            return_value={"action": "reset", "bot": "", "what": "1"},
+        ):
+            reset_text = commands.handle_concierge("reset 1", store=made, seams=seams)
         self.assertIn("researcher-bot", reset_text)
         soul_after = (bot_home / "SOUL.md").read_text(encoding="utf-8")
         self.assertNotIn("always cite sources", soul_after)
@@ -256,16 +294,38 @@ class PartialWrites(unittest.TestCase):
 class PlainReplies(unittest.TestCase):
     def test_dead_ends_point_forward_without_scolding(self):
         made = store(bot("inbox-bot"))
+        # Bare words with no card waiting are free text: without a model the
+        # answer is honest, never a guess.
         no_text = commands.handle_concierge("no", store=made, session_key="quiet-1")
-        self.assertIn("Nothing installed", no_text)
-        self.assertIn("/concierge", no_text)
+        self.assertIn("I need a model", no_text)
+        self.assertIn("/concierge help", no_text)
         num_text = commands.handle_concierge("2", store=made, session_key="quiet-2")
         self.assertIn("/concierge", num_text)
         self.assertNotIn("the list", num_text.lower())
         unknown = commands.handle_improve("no-such-bot: do things", store=store())
         self.assertIn("No bot called no-such-bot", unknown)
         self.assertIn("/concierge bots", unknown)
-        need_number = commands.handle_concierge("fire", store=made)
+        # "fire" alone is free text for the router: the deleting rule answers.
+        import json as _json
+
+        class RouteLlm:
+            def complete_structured(self, **kwargs):
+                class Result:
+                    text = _json.dumps({"action": "fire", "bot": "", "what": ""})
+
+                return Result()
+
+        class Ctx:
+            @property
+            def llm(self):
+                return RouteLlm()
+
+        saved = commands._CTX
+        commands._CTX = Ctx()
+        try:
+            need_number = commands.handle_concierge("fire", store=made)
+        finally:
+            commands._CTX = saved
         self.assertIn("Deleting a bot needs its number", need_number)
         self.assertNotIn("guess", need_number.lower())
         self.assertNotIn("#", need_number)

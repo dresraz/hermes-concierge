@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 import tempfile
@@ -14,6 +15,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness  # noqa: E402
 
 market = harness.load("market")
+
+class StubLlm:
+    """The model stub: every pending answer reads one fixed verdict."""
+
+    def __init__(self, answer):
+        self.answer = answer
+
+    def complete_structured(self, **kwargs):
+        answer = self.answer
+
+        class Result:
+            text = json.dumps({"answer": answer})
+
+        return Result()
+
+
+CONFIRM = StubLlm("CONFIRM")
+DROP = StubLlm("DROP")
+
+
 commands = harness.load("commands")
 seams = harness.load("seams")
 
@@ -123,7 +144,7 @@ class Card(unittest.TestCase):
             "stripe payments", target="intern", session_key="s1",
             search_fn=lambda query, limit: [hit("stripe", "stripe@skills.sh")],
         )
-        receipt = market.handle("yes", session_key="s1", install=install, store=store)
+        receipt = market.handle("yes, take it", session_key="s1", install=install, store=store, llm=CONFIRM)
 
         self.assertEqual(seen, [("stripe@skills.sh", "intern")])
         self.assertIn("Installed skill stripe", receipt)
@@ -141,7 +162,7 @@ class Card(unittest.TestCase):
             "stripe payments", session_key="s1",
             search_fn=lambda query, limit: [hit("stripe")],
         )
-        self.assertEqual(market.handle("no", session_key="s1", install=install),
+        self.assertEqual(market.handle("drop it", session_key="s1", install=install, llm=DROP),
                          "Nothing installed.\n")
         self.assertFalse(market.is_waiting("s1"))
 
@@ -152,8 +173,9 @@ class Card(unittest.TestCase):
             search_fn=lambda query, limit: [hit("stripe")],
         )
         receipt = market.handle(
-            "yes", session_key="s1", store=store,
+            "yes, take it", session_key="s1", store=store,
             install=lambda offer, profile: (False, "", "core said no"),
+            llm=CONFIRM,
         )
         self.assertIn("Not installed: core said no", receipt)
         self.assertNotIn("Undo", receipt)
@@ -240,13 +262,13 @@ class CardSplitsTheBot(unittest.TestCase):
         with mock.patch.object(seams, "profile_exists", lambda name: name == "intern"):
             self.card.handle("accent picker into intern", entries=[self.entry()],
                              session_key="s4")
-            self.card.handle("yes", session_key="s4")
+            self.card.handle("yes, take it", session_key="s4", llm=CONFIRM)
         self.assertEqual(self.seen, ["intern"])
 
     def test_without_a_bot_the_install_goes_to_this_profile(self):
         with mock.patch.object(seams, "profile_exists", lambda name: False):
             self.card.handle("accent picker", entries=[self.entry()], session_key="s4")
-            self.card.handle("yes", session_key="s4")
+            self.card.handle("yes, take it", session_key="s4", llm=CONFIRM)
         self.assertEqual(self.seen, [""])
 
 

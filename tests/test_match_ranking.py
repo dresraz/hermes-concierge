@@ -142,11 +142,12 @@ class NoFit(unittest.TestCase):
             self.assertEqual(match.rank("teach my goldfish to file taxes", catalog), [])
 
     def test_long_sentence_catching_two_words_is_not_enough(self):
-        """A single name word plus one common word is a coincidence.
+        """A long sentence that shares nothing with an entry is no fit.
 
-        The live eval caught "convert my sandwich into a spreadsheet tax form
-        for fish" landing on a voice plugin through "form" and "fish". Six
-        tokens need three earned words; a short ask still earns two.
+        The ranking is plain token overlap with no synonym table: words the
+        ask shares with the entry's own name and description count, and
+        nothing else bridges the gap. A short ask with real overlap still
+        earns its place.
         """
         catalog = [
             entry(
@@ -177,7 +178,7 @@ class NoFit(unittest.TestCase):
         with mock.patch.dict(os.environ, base_env(), clear=True):
             self.assertEqual(
                 match.rank(
-                    "convert my sandwich into a spreadsheet tax form for fish",
+                    "converting sandwiches using bland wheat digests while quails approve quietly",
                     catalog,
                 ),
                 [],

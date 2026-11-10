@@ -21,6 +21,16 @@ commands = harness.load("commands")
 state = harness.load("state")
 
 
+def _route(action, what="", bot=""):
+    """Stub the model router with one fixed action, like the model would."""
+    from unittest import mock
+
+    return mock.patch.object(
+        commands, "_model_route",
+        return_value={"action": action, "bot": bot, "what": what},
+    )
+
+
 class Memory:
     def __init__(self) -> None:
         self.data: dict = {}
@@ -72,7 +82,8 @@ class FireByPluginName(unittest.TestCase):
         self.seams = FakeSeams({"researcher-bot": self.home})
 
     def test_fire_plugin_name_alone_deletes_nothing(self):
-        text = commands.handle_concierge("fire pdf", store=self.made, seams=self.seams)
+        with _route("fire", what="pdf"):
+            text = commands.handle_concierge("fire pdf", store=self.made, seams=self.seams)
         self.assertIn("did not create pdf", text)
         self.assertEqual(self.seams.removed, [])
         self.assertTrue(self.home.exists())
@@ -81,9 +92,10 @@ class FireByPluginName(unittest.TestCase):
         )
 
     def test_fire_plugin_name_beside_a_bot_name_deletes_nothing(self):
-        text = commands.handle_concierge(
-            "fire pdf researcher-bot", store=self.made, seams=self.seams
-        )
+        with _route("fire", what="pdf researcher-bot"):
+            text = commands.handle_concierge(
+                "fire pdf researcher-bot", store=self.made, seams=self.seams
+            )
         self.assertIn("did not create pdf", text)
         self.assertEqual(self.seams.removed, [])
         self.assertTrue(self.home.exists())
@@ -92,9 +104,10 @@ class FireByPluginName(unittest.TestCase):
         )
 
     def test_fire_number_plus_bot_name_still_deletes(self):
-        text = commands.handle_concierge(
-            "fire 1 researcher-bot", store=self.made, seams=self.seams
-        )
+        with _route("fire", what="1 researcher-bot"):
+            text = commands.handle_concierge(
+                "fire 1 researcher-bot", store=self.made, seams=self.seams
+            )
         self.assertIn("Deleted researcher-bot", text)
         self.assertEqual(self.seams.removed, ["researcher-bot"])
         self.assertFalse(self.home.exists())

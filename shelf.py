@@ -116,8 +116,54 @@ def _bot_rows(query: str = "", limit: int = 3) -> list:
 
 
 def items(query: str = "", limit: int = LIMIT) -> list:
-    """Bots to make, then skills already here, then plugins to fetch."""
-    return _bot_rows(query, 3) + _skills(query, limit) + _plugins(query, max(2, limit // 2))
+    """Bots to make, then skills already here, then plugins to fetch.
+
+    The marketplace rows come from the same ranked list install offers, so
+    the same words show the same names in both places.
+    """
+    return _bot_rows(query, 3) + _ranked(query, limit)
+
+
+def _ranked(query: str = "", limit: int = LIMIT) -> list:
+    """Marketplace rows off the shared search, or the local shelves offline."""
+    try:
+        from . import search as _search
+
+        ranked = _search.candidates(query, limit=200)
+    except Exception:
+        ranked = []
+    if ranked:
+        have = _installed()
+        out = []
+        for row in ranked:
+            name = str(row.get("name", "") or "")
+            if not name:
+                continue
+            if row.get("kind") == "skill":
+                payload = row.get("payload") or {}
+                out.append(
+                    {
+                        "kind": "skill",
+                        "name": name,
+                        "weight": "",
+                        "why": str(row.get("description", "") or "")[:48],
+                        "path": payload.get("path", "") if isinstance(payload, dict) else "",
+                        "source": payload.get("source", "") if isinstance(payload, dict) else "",
+                        "category": payload.get("category", "") if isinstance(payload, dict) else "",
+                        "installed": name in have,
+                    }
+                )
+            else:
+                out.append(
+                    {
+                        "kind": "plugin",
+                        "name": name,
+                        "weight": "",
+                        "why": str(row.get("description", "") or "")[:48],
+                    }
+                )
+        return out[:limit]
+    return _skills(query, limit) + _plugins(query, max(2, limit // 2))
 
 
 def _build() -> str:

@@ -50,12 +50,12 @@ CATALOG = [
 
 class Ranking(unittest.TestCase):
     def test_a_sentence_finds_the_plugin_that_does_it(self):
-        top = match.rank("make it remember things across sessions", CATALOG, limit=1)[0]
+        top = match.rank("memory provider that recalls notes across sessions", CATALOG, limit=1)[0]
         self.assertEqual(top.name, "hermes-memory-locus")
 
-    def test_outcome_words_reach_mechanism_descriptions(self):
-        # "colors" appears nowhere in the catalog; the vocabulary map bridges it.
-        top = match.rank("change the colors of my terminal", CATALOG, limit=1)[0]
+    def test_overlapping_words_reach_the_entry(self):
+        # Plain token overlap: the ask shares words with the entry itself.
+        top = match.rank("themes and skins for the terminal", CATALOG, limit=1)[0]
         self.assertEqual(top.name, "hermes-themes-pack")
 
     def test_exact_name_wins_outright(self):

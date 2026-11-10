@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import sys
 import tempfile
 import unittest
@@ -15,6 +16,26 @@ import harness  # noqa: E402
 
 card = harness.load("card")
 state = harness.load("state")
+
+
+class StubLlm:
+    """The model stub: every pending answer reads one fixed verdict."""
+
+    def __init__(self, answer):
+        self.answer = answer
+
+    def complete_structured(self, **kwargs):
+        answer = self.answer
+
+        class Result:
+            text = json.dumps({"answer": answer})
+
+        return Result()
+
+
+CONFIRM = StubLlm("CONFIRM")
+DROP = StubLlm("DROP")
+OTHER = StubLlm("OTHER")
 
 
 def entry(name, title="", description="", caps=None, tier="community", category="general"):
@@ -91,7 +112,7 @@ class Ask(unittest.TestCase):
         self.assertIn("Nothing was installed", text)
 
     def test_card_carries_the_decision(self):
-        text = card.handle("change the colors of my terminal", entries=CATALOG)
+        text = card.handle("themes and skins", entries=CATALOG)
         self.assertIn("hermes-themes-pack", text)
         self.assertIn("yes", text)
         self.assertIn("no", text)
@@ -114,7 +135,7 @@ class Ask(unittest.TestCase):
 
     def test_more_describes_the_runner_up_and_leaves_the_yes_alone(self):
         card.handle("themes memory browser", entries=CATALOG)
-        text = card.handle("more", entries=CATALOG)
+        text = card.more()
         self.assertIn("hermes-memory-locus", text)
         self.assertIn("Memory provider", text)
         self.assertIn("yes", text)
@@ -126,17 +147,23 @@ class Ask(unittest.TestCase):
             picked.append(entry_.name)
             return outcome(installed_name=entry_.name)
 
-        card.handle("yes", store=Store(), install=fake_install)
+        card.handle("ok, install it", store=Store(), install=fake_install, llm=CONFIRM)
         self.assertEqual(picked, ["browser-use"])
 
     def test_more_with_nothing_waiting_installs_nothing(self):
-        text = card.handle("more", entries=CATALOG)
+        text = card.more()
         self.assertIn("Nothing is waiting", text)
 
     def test_no_clears_the_pending_question(self):
-        card.handle("change the colors of my terminal", entries=CATALOG)
-        self.assertIn("Nothing installed", card.handle("no", entries=CATALOG))
-        self.assertIn("Nothing is waiting", card.handle("yes", entries=CATALOG))
+        card.handle("themes and skins", entries=CATALOG)
+        self.assertIn("Nothing installed", card.handle("drop it", entries=CATALOG, llm=DROP))
+        self.assertFalse(card.is_waiting())
+
+    def test_unanswered_card_needs_a_model(self):
+        card.handle("themes and skins", entries=CATALOG)
+        text = card.handle("ok", entries=CATALOG, llm=None)
+        self.assertIn("model", text.lower())
+        self.assertTrue(card.is_waiting())
 
 
 class Confirm(unittest.TestCase):
@@ -144,7 +171,7 @@ class Confirm(unittest.TestCase):
         card._reset()
 
     def test_yes_installs_and_reports_what_happened(self):
-        card.handle("change the colors of my terminal", entries=CATALOG)
+        card.handle("themes and skins", entries=CATALOG)
         store = Store()
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "plugin.yaml").write_text("name: x\n", encoding="utf-8")
@@ -154,7 +181,7 @@ class Confirm(unittest.TestCase):
                 calls.append(entry_.name)
                 return outcome(target=tmp)
 
-            text = card.handle("yes", store=store, install=fake_install)
+            text = card.handle("yes, install it", store=store, install=fake_install, llm=CONFIRM)
         self.assertEqual(calls, ["hermes-themes-pack"])
         self.assertIn("Installed hermes-themes-pack", text)
         self.assertIn("The files are there.", text)
@@ -164,7 +191,7 @@ class Confirm(unittest.TestCase):
         self.assertTrue(store.records[0].target.endswith(tmp))
 
     def test_caution_costs_a_second_yes(self):
-        card.handle("change the colors of my terminal", entries=CATALOG)
+        card.handle("themes and skins", entries=CATALOG)
         store = Store()
         first = SimpleNamespace(ok=False, verdict="caution", findings=[], blocked_reason="caution")
         second = outcome(verdict="caution", findings=["reads files"], target="")
@@ -173,19 +200,19 @@ class Confirm(unittest.TestCase):
             accepted = approve("report") if approve else False
             return second if accepted else first
 
-        text = card.handle("yes", store=store, install=fake_install)
+        text = card.handle("yes, install it", store=store, install=fake_install, llm=CONFIRM)
         self.assertIn("caution", text)
         self.assertIn("Accept it with /concierge yes", text)
         self.assertEqual(store.records, [])
 
-        text = card.handle("yes", store=store, install=fake_install)
+        text = card.handle("yes, install it", store=store, install=fake_install, llm=CONFIRM)
         self.assertIn("hermes-themes-pack", text)
         self.assertIn("1 note", text)
 
     def test_caution_report_comes_back_as_text_not_as_stdout(self):
         # TUI and gateway never show stdout, so a printed report is a report the
         # user cannot approve.
-        card.handle("change the colors of my terminal", entries=CATALOG)
+        card.handle("themes and skins", entries=CATALOG)
         blocked = SimpleNamespace(ok=False, verdict="caution", findings=[], blocked_reason="caution")
 
         def fake_install(entry_, approve=None):
@@ -195,21 +222,24 @@ class Confirm(unittest.TestCase):
 
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
-            text = card.handle("yes", store=Store(), install=fake_install)
+            text = card.handle("yes, install it", store=Store(), install=fake_install, llm=CONFIRM)
         self.assertEqual(buffer.getvalue(), "")
         self.assertIn("reads files outside its own directory", text)
         self.assertIn("Accept it with /concierge yes", text)
 
     def test_dangerous_rating_is_reported_not_installed(self):
-        card.handle("change the colors of my terminal", entries=CATALOG)
+        card.handle("themes and skins", entries=CATALOG)
         blocked = outcome(
             ok=False, verdict="dangerous", blocked_reason="scan rated the plugin dangerous"
         )
-        text = card.handle("yes", store=Store(), install=lambda e, approve=None: blocked)
+        text = card.handle("yes, install it", store=Store(),
+                           install=lambda e, approve=None: blocked, llm=CONFIRM)
         self.assertIn("Not installed", text)
         self.assertIn("dangerous", text)
 
-    def test_two_installs_nothing_unseen(self):
+    def test_a_number_is_not_an_answer(self):
+        # A bare number is not CONFIRM: the model reads OTHER and the sentence
+        # becomes a new request, installing nothing blind.
         card.handle("themes memory browser", entries=CATALOG)
         picked = []
 
@@ -217,25 +247,23 @@ class Confirm(unittest.TestCase):
             picked.append(entry_.name)
             return outcome(installed_name=entry_.name)
 
-        text = card.handle("2", store=Store(), install=fake_install)
+        text = card.handle("2", store=Store(), install=fake_install, llm=OTHER)
         self.assertEqual(picked, [])
-        self.assertIn("One install at a time", text)
-        # The card is untouched and still means the top match.
-        self.assertIn("Nothing installed", card.handle("no", entries=CATALOG))
+        self.assertIn("Nothing was installed", text)
 
-    def test_two_with_nothing_pending_installs_nothing(self):
+    def test_a_number_with_nothing_pending_installs_nothing(self):
         called = []
 
         def fake_install(entry_, approve=None):
             called.append(entry_.name)
             return outcome()
 
-        text = card.handle("2", store=Store(), install=fake_install)
+        text = card.handle("2", store=Store(), install=fake_install, llm=OTHER)
         self.assertEqual(called, [])
-        self.assertIn("One install at a time", text)
+        self.assertIn("Nothing was installed", text)
 
     def test_receipt_does_not_promise_undo_when_the_record_could_not_be_saved(self):
-        card.handle("change the colors of my terminal", entries=CATALOG)
+        card.handle("themes and skins", entries=CATALOG)
 
         class Broken:
             records = []
@@ -246,9 +274,10 @@ class Confirm(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "plugin.yaml").write_text("name: x\n", encoding="utf-8")
             text = card.handle(
-                "yes",
+                "yes, install it",
                 store=Broken(),
                 install=lambda e, approve=None: outcome(target=tmp),
+                llm=CONFIRM,
             )
         self.assertIn("Installed hermes-themes-pack", text)
         self.assertNotIn("Undo it with", text)
@@ -262,12 +291,19 @@ class CardsArePerConversation(unittest.TestCase):
         card._PENDING.clear()
 
     def test_a_yes_in_another_chat_installs_nothing(self):
-        card.handle("change the colors of my terminal", entries=CATALOG, session_key="chat-a")
-        text = card.handle("yes", entries=CATALOG, session_key="chat-b")
-        self.assertIn("Nothing is waiting", text)
+        card.handle("themes and skins", entries=CATALOG, session_key="chat-a")
+        picked = []
+        text = card.handle(
+            "yes, install it", entries=CATALOG, session_key="chat-b",
+            store=Store(),
+            install=lambda e, approve=None: picked.append(e.name) or outcome(),
+            llm=CONFIRM,
+        )
+        self.assertEqual(picked, [])
+        self.assertIn("Nothing was installed", text)
 
     def test_each_chat_answers_its_own_card(self):
-        card.handle("change the colors of my terminal", entries=CATALOG, session_key="chat-a")
+        card.handle("themes and skins", entries=CATALOG, session_key="chat-a")
         card.handle("drive a real browser", entries=CATALOG, session_key="chat-b")
         picked = []
 
@@ -275,11 +311,17 @@ class CardsArePerConversation(unittest.TestCase):
             picked.append(entry_.name)
             return outcome(installed_name=entry_.name)
 
-        card.handle("yes", entries=CATALOG, store=Store(), install=fake_install, session_key="chat-b")
+        card.handle("yes, install it", entries=CATALOG, store=Store(),
+                    install=fake_install, session_key="chat-b", llm=CONFIRM)
         self.assertEqual(picked, ["browser-use"])
+        # chat-c was shown nothing, so its yes installs nothing.
+        before = list(picked)
+        card.handle("yes, install it", entries=CATALOG, session_key="chat-c",
+                    store=Store(), install=fake_install, llm=CONFIRM)
+        self.assertEqual(picked, before)
         # chat-a still holds the card it was shown, and nothing else.
-        self.assertIn("Nothing is waiting", card.handle("yes", entries=CATALOG, session_key="chat-c"))
-        card.handle("yes", entries=CATALOG, store=Store(), install=fake_install, session_key="chat-a")
+        card.handle("yes, install it", entries=CATALOG, store=Store(),
+                    install=fake_install, session_key="chat-a", llm=CONFIRM)
         self.assertEqual(picked, ["browser-use", "hermes-themes-pack"])
 
 

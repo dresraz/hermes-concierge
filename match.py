@@ -4,10 +4,10 @@ Pure functions over a list of catalog entries, so the ranking is testable
 without core and the card can explain itself: every candidate carries the
 words that earned it its place.
 
-The vocabulary map is the only hand written knowledge in the plugin. It
-exists because people ask for outcomes ("remember this forever") while the
-catalog is written in mechanisms ("memory provider", "context engine"), and
-without the bridge a sentence scores zero against the thing it wants.
+The ranking is plain lexical overlap: the query's own tokens against the
+entry's own tokens. No synonym table expands the query and no stopword
+list filters it. When a model is reachable the shortlist is ordered by the
+model instead (see choose.shortlist); this module is the offline fallback.
 """
 
 from __future__ import annotations
@@ -19,115 +19,6 @@ from typing import Any, Iterable, Optional
 
 from . import text as _text
 
-# Words that carry no signal against a catalog description.
-STOPWORDS = frozenset(
-    """
-    a an and are as at be by can could do does for from get got have how i if
-    in into is it its just like me my need of on or our please so some tell
-    than that the their them then there these they this to too use using want
-    was way we what when where which who will with would you your
-    add build create give install installed installing make makes making new
-    something anything thing things bot bots agent agents
-    skill skills plugin plugins tool tools extension extensions app apps
-    look looking help helping job work working properly yourself myself
-    """.split()
-)
-
-# Outcome words people use, mapped to the words the catalog uses. Values are
-# added to the query, never to the entry, so an entry is never rewarded for
-# vocabulary it does not have.
-VOCABULARY = {
-    "remember": ["memory", "recall", "notes", "context"],
-    "remembering": ["memory", "recall"],
-    "memorize": ["memory", "recall"],
-    "forget": ["memory", "recall"],
-    "recall": ["memory"],
-    "notes": ["note"],
-    "brain": ["memory"],
-    "colors": ["theme", "skin", "palette"],
-    "colour": ["theme", "skin", "palette"],
-    "colours": ["theme", "skin", "palette"],
-    "look": ["theme", "skin"],
-    "looks": ["theme", "skin"],
-    "pretty": ["theme", "skin"],
-    "skin": ["theme"],
-    "dark": ["theme", "palette"],
-    "scrape": ["browser", "fetch", "web", "extract"],
-    "scraping": ["browser", "fetch", "web"],
-    "browse": ["browser"],
-    "speak": ["voice", "tts", "speech"],
-    "talk": ["voice", "tts"],
-    "audio": ["voice", "tts"],
-    "spreadsheet": ["excel", "xlsx", "csv", "sheet"],
-    "spreadsheets": ["excel", "xlsx", "csv", "sheet"],
-    "deck": ["slide", "presentation", "pptx", "powerpoint"],
-    "slides": ["slide", "presentation", "pptx", "powerpoint"],
-    "lights": ["home", "lamp", "light"],
-    "lamp": ["light", "home"],
-    "thermostat": ["home", "climate", "temperature"],
-    "invoice": ["pdf", "billing", "document"],
-    "contract": ["pdf", "document"],
-    "receipt": ["pdf", "expense", "document"],
-    "video": ["youtube", "transcript", "mp4"],
-    "podcast": ["audio", "transcript", "rss"],
-    "news": ["rss", "feed", "monitor"],
-    "site": ["web", "hosting", "deploy"],
-    "website": ["web", "hosting", "deploy"],
-    "prices": ["price", "monitor", "stock"],
-    "stocks": ["stock", "market"],
-    "inbox": ["email", "mail", "gmail"],
-    "song": ["music"],
-    "songs": ["music"],
-    "picture": ["image", "vision", "generate"],
-    "pictures": ["image", "vision"],
-    "photo": ["image", "vision"],
-    "draw": ["image", "generate"],
-    "code": ["coding", "developer", "repo"],
-    "coding": ["coding", "developer"],
-    "repo": ["git", "github", "repository"],
-    "calendar": ["calendar", "events", "schedule"],
-    "schedule": ["calendar", "cron", "schedule"],
-    "remind": ["calendar", "cron", "reminder", "notification"],
-    "reminder": ["calendar", "cron", "reminder", "notification"],
-    "email": ["mail", "smtp", "inbox"],
-    "database": ["sql", "database", "query"],
-    "search": ["search", "web"],
-    "notify": ["notification", "alert"],
-    "notifies": ["notification", "alert"],
-    "notification": ["notify", "alert"],
-    "notifications": ["notify", "alert"],
-    "alert": ["notification"],
-    "finish": ["notification", "complete", "done"],
-    "send": ["notification", "message", "alert", "telegram"],
-    "dashboard": ["board", "panel", "chart", "kpi"],
-    "boards": ["board", "panel", "chart"],
-    "filter": ["triage", "rule", "inbox", "label"],
-    "filters": ["triage", "rule", "inbox", "label"],
-    "finished": ["notification", "complete", "done"],
-    "done": ["notification", "remind"],
-    "push": ["notification", "reminder"],
-    "transcribe": ["transcript", "speech", "text"],
-    "transcript": ["transcript", "summary"],
-    "transcripts": ["transcript", "summary"],
-    "summarize": ["summary", "transcript"],
-    "summary": ["summary", "transcript"],
-    "stt": ["speech", "text"],
-    "tts": ["speech", "voice"],
-    "generate": ["image", "generation"],
-    "generation": ["image", "generate"],
-    "cluster": ["kubernetes"],
-    "fetch": ["page", "web"],
-    "extract": ["page", "web"],
-    "loud": ["aloud", "speech", "tts", "voice"],
-    "aloud": ["speech", "tts", "voice"],
-    "cost": ["overhead", "token", "cheap"],
-    "payments": ["payment", "pay", "checkout", "billing", "stripe", "invoice"],
-    "payment": ["pay", "checkout", "billing", "stripe"],
-    "card": ["payment", "checkout", "stripe"],
-    "cheaper": ["overhead", "token"],
-    "schemas": ["schema", "tool"],
-    "schema": ["tool"],
-}
 
 # Weights. A capability that does the job beats a name that merely mentions the
 # word: an entry whose tools do X should win over one whose name contains X.
@@ -194,7 +85,12 @@ class Candidate:
 
 
 def tokens(text: str) -> list:
-    return [t for t in _text.words(text) if t not in STOPWORDS and len(t) > 1]
+    """The query's own tokens: lower-cased alphanumerics longer than one char.
+
+    No stopword list filters them. Common words score near zero anyway,
+    because word_weights prices rarity, not a hand-written list.
+    """
+    return [t for t in _text.words(text) if len(t) > 1]
 
 
 def _fold(word: str) -> str:
@@ -211,20 +107,16 @@ def _joined(query: str) -> list:
 
 
 def expand(query: str) -> list:
-    """The query's words plus the mechanism words they translate into."""
+    """The query's own words, plus adjacent pairs written as one token.
+
+    No synonym table: only what the person actually said. A product written
+    as two words still has to reach the entry spelled as one ("home
+    assistant" finds homeassistant), so joined pairs ride along.
+    """
     words = tokens(query)
     seen = dict.fromkeys(words)
-    # A product written as two words still has to reach the entry spelled as
-    # one: "home assistant" finds homeassistant.
     for joined in _joined(query):
         seen.setdefault(joined, None)
-    for word in words:
-        for extra in VOCABULARY.get(word, ()):  # ordered, so results stay stable
-            seen.setdefault(extra, None)
-        # tokens() folds plurals, so "colors" arrives as "color": the same
-        # translation has to work for the folded spelling too.
-        for extra in VOCABULARY.get(_fold(word), ()):
-            seen.setdefault(extra, None)
     return list(seen)
 
 

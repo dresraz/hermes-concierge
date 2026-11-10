@@ -152,40 +152,126 @@ CAUTION_LINES = {
 }
 
 
-def asks_about_memory(ask: str) -> bool:
-    # The ask carries the user's own words; a memory ask names memory itself.
-    return "memory" in " ".join((ask or "").lower().split())
-
-
 def _field(row: Any, name: str) -> str:
     if isinstance(row, dict):
         return str(row.get(name, "") or "")
     return str(getattr(row, name, "") or "")
 
 
-def is_memory_provider(row: Any) -> bool:
-    """A thing that replaces how Hermes remembers, by its own description.
+MEMORY_ENTRY_PROMPT = """Does this marketplace entry provide memory: recalling notes across sessions,
+a memory provider, a context engine, persistent notes?
 
-    Kind is deliberately not consulted: a skill that swaps memory has the same
-    cost as a plugin that does. The entry names itself; no word list decides.
+Name: {name}
+Description: {description}
+Requires: {requires}
+
+Answer JSON only: {{"memory": true or false}}"""
+
+MEMORY_ASK_PROMPT = """Does this person ask for memory: remembering across sessions, recalling notes,
+a memory provider, persistent notes?
+
+Ask: {ask}
+
+Answer JSON only: {{"memory": true or false}}"""
+
+
+def asks_about_memory(ask: str, llm: Any = None) -> bool:
+    """True when the ask itself requests memory, by the model's reading.
+
+    With no model the answer is False, so a memory provider is still
+    flagged rather than installed quietly.
     """
-    blob = "{} {}".format(_field(row, "name"), _field(row, "description"))
-    return "memory" in blob.lower()
+    if llm is None:
+        return False
+    import json
+
+    try:
+        answer = llm.complete_structured(
+            instructions=MEMORY_ASK_PROMPT.format(
+                ask=" ".join(str(ask or "").split())[:300]),
+            input=[{"type": "text", "text": str(ask or "")}],
+            json_mode=True,
+            max_tokens=30,
+            temperature=0,
+            timeout=15,
+        )
+    except Exception:
+        return False
+    raw = (getattr(answer, "text", "") or "").strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return False
+    try:
+        return bool(json.loads(raw[start : end + 1]).get("memory"))
+    except Exception:
+        return False
 
 
-def caution_for(row: Any, ask: str) -> str:
+def is_memory_provider(row: Any, llm: Any = None) -> bool:
+    """A thing that replaces how Hermes remembers, by its own metadata.
+
+    Kind is deliberately not consulted: a skill that swaps memory has the
+    same cost as a plugin that does. The entry names itself; no name list
+    decides. With no model the entry's own name and description are read
+    plainly for the word itself.
+    """
+    name = _field(row, "name")
+    description = _field(row, "description") or _field(row, "title")
+    requires = ""
+    try:
+        from . import match as _match
+
+        caps = _match.capabilities(
+            row.get("payload") if isinstance(row, dict) and row.get("payload") is not None
+            else getattr(row, "payload", row)
+        )
+        required = caps.get("requires_env") or ()
+        if isinstance(required, str):
+            required = (required,)
+        requires = ", ".join(str(k) for k in required)
+    except Exception:
+        requires = ""
+    if llm is None:
+        blob = "{} {} {}".format(name, description, requires)
+        return "memory" in blob.lower()
+    import json
+
+    try:
+        answer = llm.complete_structured(
+            instructions=MEMORY_ENTRY_PROMPT.format(
+                name=name[:120], description=description[:600],
+                requires=requires[:200]),
+            input=[{"type": "text", "text": "{} {}".format(name, description)[:600]}],
+            json_mode=True,
+            max_tokens=30,
+            temperature=0,
+            timeout=15,
+        )
+    except Exception:
+        return "memory" in "{} {}".format(name, description).lower()
+    raw = (getattr(answer, "text", "") or "").strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return "memory" in "{} {}".format(name, description).lower()
+    try:
+        return bool(json.loads(raw[start : end + 1]).get("memory"))
+    except Exception:
+        return "memory" in "{} {}".format(name, description).lower()
+
+
+def caution_for(row: Any, ask: str, llm: Any = None) -> str:
     """Empty when the entry is safe to offer plainly.
 
     Two things are opt-in rather than automatic: a memory provider (often a paid
     hosted service) and a heavy skill (diffusion models, a GPU). The person may
     still want it - they just have to say so.
     """
-    if is_memory_provider(row) and not asks_about_memory(ask):
+    if is_memory_provider(row, llm) and not asks_about_memory(ask, llm):
         return "memory"
     try:
         from . import presets
 
-        if presets.heavy(str(row.get("name") if isinstance(row, dict) else getattr(row, "name", ""))):
+        if presets.heavy(row, llm):
             return "heavy"
     except Exception:
         pass
@@ -225,7 +311,7 @@ def _ask_whole(ask: str, llm: Any) -> Optional[Option]:
     for row in rows:
         if str(row.get("name", "")).lower() == pick.lower():
             return Option(row["name"], row.get("description", ""), row.get("kind", "plugin"),
-                          row, caution=caution_for(row, ask))
+                          row, caution=caution_for(row, ask, llm))
     return None
 
 
@@ -307,26 +393,142 @@ def shortlist(ask: str, entries: Optional[Iterable[Any]] = None, limit: int = SH
               llm: Any = None) -> list:
     """The best rows for `ask`, across both shelves, best first.
 
-    Two ways in, because one is not enough: the ranking for what does the job,
-    and a name sweep for anything called what the ask says. A plugin named
-    "telegram-notify" has to be visible for "send me telegram alerts" even when
-    a chatty neighbour outranks it on words.
+    With a model the ranked shortlist comes from the model's own ordering
+    of the candidate names. With no model it is plain token overlap between
+    the ask and each entry's own name and description: no synonym table, no
+    stopword list.
     """
     rows = pool(entries)
     if not rows:
         return []
-    found = match.rank(ask, rows, limit=limit)
-    # People describe jobs; catalogues name mechanisms. "Is it going to rain"
-    # shares no word with "weather", so the list is filled from the model's own
-    # words for the ask as well as the ask itself.
-    if llm is not None and len(found) < limit:
-        seen = {row.name.lower() for row in found}
-        for phrase in _phrases(ask, llm):
-            for row in match.rank(phrase, rows, limit=6):
-                if row.name.lower() not in seen:
-                    seen.add(row.name.lower())
-                    found.append(row)
-    return found[: max(limit, SHORTLIST)]
+    if llm is not None:
+        ordered = _model_order(ask, rows, llm, limit=max(limit, SHORTLIST))
+        if ordered:
+            return ordered
+    return _lexical_rank(ask, rows, limit=max(limit, SHORTLIST))
+
+
+ORDER_PROMPT = """You rank marketplace entries for one ask. Order the best fits first.
+
+Ask: {ask}
+
+Candidates (exact names):
+{candidates}
+
+Answer JSON only: {{"order": ["<exact name>", ...]}}
+List the best fits first, up to {limit} names. Only names from the candidates
+list, never a new one. Leave out anything that does not do the job. A shared
+word is not a fit."""
+
+
+def _model_order(ask: str, rows: list, llm: Any, limit: int) -> list:
+    """The candidate names in the model's order, best first.
+
+    The model may only choose from the names on the call; anything outside
+    the list is refused.
+    """
+    import json
+
+    by_name = {row.name.lower(): row for row in rows}
+    lines = "\n".join(
+        "- {}: {}".format(row.name, (row.description or "")[:70]) for row in rows[:400]
+    )
+    if not lines:
+        return []
+    try:
+        answer = llm.complete_structured(
+            instructions=ORDER_PROMPT.format(
+                ask=" ".join(str(ask or "").split())[:300],
+                candidates=lines,
+                limit=limit,
+            ),
+            input=[{"type": "text", "text": str(ask or "")}],
+            json_mode=True,
+            max_tokens=min(400, 20 * limit),
+            temperature=0,
+            timeout=45,
+        )
+    except Exception:
+        return []
+    raw = (getattr(answer, "text", "") or "").strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return []
+    try:
+        names = json.loads(raw[start : end + 1]).get("order") or []
+    except Exception:
+        return []
+    out = []
+    seen = set()
+    for name in names:
+        key = str(name or "").strip().lower()
+        if not key or key in seen:
+            continue
+        row = by_name.get(key)
+        if row is None:
+            continue
+        seen.add(key)
+        out.append(row)
+        if len(out) >= limit:
+            break
+    for index, row in enumerate(out):
+        try:
+            row.score = float(len(out) - index)
+        except Exception:
+            pass
+        try:
+            row.matched = ["model"]
+        except Exception:
+            pass
+    return out
+
+
+def _plain_tokens(text: str) -> set:
+    """Lower-cased alphanumeric tokens longer than one char, singular-folded."""
+    from . import text as _text
+
+    out = set()
+    for word in _text.words(text or ""):
+        if len(word) <= 1:
+            continue
+        folded = word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
+        out.add(folded)
+    return out
+
+
+def _lexical_rank(ask: str, rows: list, limit: int) -> list:
+    """Plain token overlap, no synonym table and no stopword list.
+
+    The offline fallback: words the ask shares with the entry's own name
+    weigh double, description words weigh single. Ties break by name so the
+    order is stable.
+    """
+    asked = _plain_tokens(ask)
+    if not asked:
+        return []
+    scored = []
+    for row in rows:
+        name_words = _plain_tokens(str(getattr(row, "name", "") or "").replace("-", " "))
+        desc_words = _plain_tokens(
+            str(getattr(row, "description", "") or "")
+            + " " + str(getattr(row, "title", "") or "")
+        )
+        shared_name = asked & name_words
+        shared_desc = asked & desc_words
+        score = 2 * len(shared_name) + len(shared_desc)
+        if score <= 0:
+            continue
+        try:
+            row.score = float(score)
+        except Exception:
+            pass
+        try:
+            row.matched = sorted(shared_name | shared_desc)
+        except Exception:
+            pass
+        scored.append(row)
+    scored.sort(key=lambda row: (-getattr(row, "score", 0.0), row.name))
+    return scored[:limit]
 
 
 def _fmt(rows: list) -> str:
@@ -412,11 +614,11 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
     which may only pick from the list. With no model available the best
     lexical row is still better than nothing, but only when it is decisive.
     """
-    rows = shortlist(ask, entries)
+    rows = shortlist(ask, entries, llm=llm)
     for row in rows:
         row._ask = ask
     if _decisive(rows):
-        rows[0].caution = caution_for(rows[0], ask)
+        rows[0].caution = caution_for(rows[0], ask, llm)
         return rows[0]
     if llm is not None:
         # Every name in the marketplace, one call. Measured against a keyword
@@ -427,7 +629,7 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
             return whole
         wide = _ask_wide(ask, rows[:30], llm)
         if wide is not None:
-            wide.caution = caution_for(wide, ask)
+            wide.caution = caution_for(wide, ask, llm)
             return wide
     if not rows:
         # Nothing shares a word with the ask. Ask the model whether Hermes
@@ -435,12 +637,12 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
         tool = _built_in(ask, llm) if llm is not None else ""
         return Option("Hermes itself", tool, "builtin") if tool else None
     if llm is None:
-        # No model: fall back to the old lexical rule. Weaker, but the plugin
+        # No model: fall back to the plain lexical rule. Weaker, but the plugin
         # still works offline and in tests instead of answering nothing. The
         # caution still applies - an offline pick must not skip the warning.
         if not _confident(rows):
             return None
-        rows[0].caution = caution_for(rows[0], ask)
+        rows[0].caution = caution_for(rows[0], ask, llm)
         return rows[0]
     chosen = _ask_model(ask, rows, llm)
     if not chosen or chosen.upper() == "NOTHING":
@@ -450,7 +652,7 @@ def pick(ask: str, llm: Any = None, entries: Optional[Iterable[Any]] = None) -> 
         return Option("Hermes itself", tool, "builtin") if tool else None
     for row in rows:
         if row.name.lower() == chosen.lower():
-            row.caution = caution_for(row, ask)
+            row.caution = caution_for(row, ask, llm)
             # A pick that sits far below the lexical top would be the model
             # ignoring the evidence, which is how a "pdf" ask turns into a
             # workspace plugin. It may reorder the leaders; it may not drag in

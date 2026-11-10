@@ -1,9 +1,14 @@
 """The picker: a wide menu for the model, an exact name taken without one."""
 
+import sys
 import unittest
+from pathlib import Path
 from unittest import mock
 
-from concierge import choose
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import harness  # noqa: E402
+
+choose = harness.load("choose")
 
 
 class Row:
@@ -22,13 +27,15 @@ class FakeLlm:
         self.pick = pick
         self.tool = tool
         self.seen = ""
+        self.seen_all = []
 
     def complete_structured(self, **kwargs):
         self.seen = kwargs["instructions"]
+        self.seen_all.append(kwargs["instructions"])
         pick, tool = self.pick, self.tool
 
         class Answer:
-            text = '{"pick": "%s", "tool": "%s", "why": "test"}' % (pick, tool)
+            text = '{"pick": "%s", "tool": "%s", "why": "test", "memory": false, "heavy": false}' % (pick, tool)
 
         return Answer()
 
@@ -47,12 +54,16 @@ class Choice(unittest.TestCase):
              mock.patch.object(choose, "_skills", lambda: [] if skills is None else skills):
             return choose.pick(ask, llm=llm, entries=[])
 
-    def test_a_name_asked_by_name_is_taken_without_a_model_call(self):
+    def test_a_name_asked_by_name_is_taken_without_a_pick_call(self):
         llm = FakeLlm("tabella")
         rows = [Row("pdf", "PDF files.", "skill", 20.0), Row("tabella", "Sheets.", "plugin", 2.0)]
         picked = self.pick("pdf", llm, rows)
         self.assertEqual(picked.name, "pdf")
-        self.assertEqual(llm.seen, "")
+        # The pick itself takes no model call; only the caution guard reads.
+        for prompt in llm.seen_all:
+            self.assertNotIn("Every entry in the Hermes marketplace", prompt)
+            self.assertNotIn("Choose what answers the ask", prompt)
+            self.assertNotIn("You are choosing one item from a shortlist", prompt)
 
     def test_the_model_is_shown_every_name_in_the_marketplace(self):
         llm = FakeLlm("pdf")
@@ -60,7 +71,9 @@ class Choice(unittest.TestCase):
         # The whole-list prompt carries the marketplace, not a shortlist; the
         # pick resolves against the index, so a name it invents is refused.
         self.assertTrue(picked is None or picked.name == "pdf")
-        self.assertIn("Every entry in the Hermes marketplace", llm.seen)
+        self.assertTrue(any(
+            "Every entry in the Hermes marketplace" in prompt for prompt in llm.seen_all
+        ))
 
     def test_the_model_may_pick_a_skill_that_was_not_on_the_shortlist(self):
         skills = [Row("arxiv", "Search arXiv papers.", "skill", 0.0)]

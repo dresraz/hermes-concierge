@@ -35,14 +35,6 @@ INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills.json"
 # + 526 GitHub is the 711 the marketplace shows.
 NOUS_SOURCES = frozenset({"built-in", "optional", "GitHub"})
 
-STOP = set(
-    """a an and are as at be by can could do does for from get got have how i if in into is it its
-    just like me my need of on or our please so some tell than that the their them then there these
-    they this to too use using want was way we what when where which who will with would you your
-    add build create give install installed installing make makes new something anything thing
-    things bot bots agent agents skill skills plugin plugins tool tools extension extensions app
-    apps look looking help helping job work working properly yourself myself""".split()
-)
 
 
 def _cache_dir() -> str:
@@ -58,7 +50,8 @@ def _cache_dir() -> str:
 
 
 def words(text: str) -> list:
-    return [w for w in _text.words(text) if w not in STOP and len(w) > 1]
+    """The text's own tokens: lower-cased alphanumerics longer than one char."""
+    return [w for w in _text.words(text) if len(w) > 1]
 
 
 def fold(word: str) -> str:
@@ -355,6 +348,19 @@ def index() -> Index:
     if _INDEX is None:
         refresh()
     return _INDEX
+
+
+def candidates(query: str, limit: int = 8) -> list:
+    """The one ranked list browse shows and install offers.
+
+    Both shelves read this, so the same words give the same names. Empty
+    when the index cannot answer; callers keep their own offline answer.
+    """
+    try:
+        rows = index().search(query, limit=limit)
+    except Exception:
+        return []
+    return rows or []
 
 
 def menu() -> str:

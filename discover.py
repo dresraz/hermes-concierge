@@ -54,17 +54,6 @@ def _has_shell_pipe(text: str) -> bool:
         start = at + 4
 
 
-STOP = frozenset(
-    """
-    and are but can for from has have into its not our out that the their then
-    there these they this use used using very was were what when where which
-    with you your all any get got how its just like make more most much need
-    only other over same some such than them then they bot bots agent agents
-    want wants wanted need needs give please help using read reads reading
-    """.split()
-)
-
-
 def _fold(word: str) -> str:
     """One plural rule for both sides: pdfs and pdf are the same word."""
     if len(word) > 3 and word.endswith("es") and not word.endswith("ses"):
@@ -74,24 +63,13 @@ def _fold(word: str) -> str:
     return word
 
 
-# Words that describe the marketplace rather than a job. A sentence asking for
-# help with a house shares "skills" and "plugins" with half the catalogue; that
-# is not evidence of anything, so these never carry weight.
-FILLER = frozenset(
-    """
-    skill skills plugin plugins tool tools agent agents bot bots
-    hermes marketplace catalog install setup use using help looking look find
-    get add need want could would should please job work properly thing things
-    """.split()
-)
-
-
 def _words(text: str) -> set[str]:
-    return {
-        _fold(w)
-        for w in _text.words(text)
-        if len(w) >= 3 and w not in STOP and w not in FILLER
-    }
+    """The text's own words, folded to singular, three letters or more.
+
+    No stopword or filler list filters them: rarity in the catalogue
+    decides what discriminates, not a hand-written table.
+    """
+    return {_fold(w) for w in _text.words(text) if len(w) >= 3}
 
 
 def _roots() -> list[Path]:

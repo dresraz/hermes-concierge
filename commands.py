@@ -155,6 +155,7 @@ def _run_route(
     session_key: str,
     known: Optional[Sequence[str]] = None,
     hire: Optional[Callable[..., Any]] = None,
+    seams: Any = None,
 ) -> Optional[str]:
     """Carry out the action the model named, with the code that owns it."""
     action = route.get("action")
@@ -169,8 +170,13 @@ def _run_route(
     if action == "browse":
         from . import shelf
 
+        words = (what or "").split()
+        page = 1
+        if len(words) > 1 and words[-1].isdigit() and len(words[-1]) <= 3:
+            page = int(words[-1])
+            what = " ".join(words[:-1])
         if what and what.lower() != text.lower():
-            return shelf.browse(what)
+            return shelf.browse(what, session_key=session_key, page=page)
         return shelf.overview()
     if action == "undo":
         global _ROUTING
@@ -187,9 +193,13 @@ def _run_route(
     if action == "create":
         return handle_hire(what, store=store, hire=hire, known=known)
     if action in ("fire", "reset"):
-        selector = (what.split() or [""])[0].strip(" .:-")
+        said = route.get("what") or ""
+        parts = (said.split() or [""])
+        selector = parts[0].strip(" .:-")
+        confirm = " ".join(parts[1:])
         from . import lifecycle
 
+        selector, note = _resolve_bot(store, said, selector)
         if not lifecycle.is_selector(store, selector):
             if selector and not selector.isdigit():
                 return "Concierge did not create {}, so it will not delete it.\n".format(selector)
@@ -197,9 +207,17 @@ def _run_route(
                 "Deleting a bot needs its number.\n"
                 "/concierge bots, then /concierge fire <number>\n"
             )
-        return handle_concierge(
-            "{} {}".format(action, selector), store=store, session_key=session_key
-        )
+        if _is_bot_profile():
+            return "A bot cannot delete or reset profiles. Ask the owner.\n"
+        _drop_cards(session_key)
+        try:
+            if action == "fire":
+                answer = lifecycle.fire(store, selector, confirm=confirm, seams=seams)
+            else:
+                answer = lifecycle.reset(store, selector, seams=seams)
+        except lifecycle.Refused as exc:
+            return "{}\n".format(exc)
+        return (note + "\n" if note else "") + answer
     if action == "none":
         from . import card as card_mod
 
@@ -258,181 +276,56 @@ def handle_concierge(
 
         store = state.Store()
 
-    refusal = _gateway_refusal(raw)
+    refusal = _gateway_refusal(raw, session_key)
     if refusal:
         return refusal
     text = _clean(raw)
     if text.lower().startswith("/concierge"):
         text = text[len("/concierge"):].strip()
-    low = text.lower()
     if not text:
         from . import shelf
 
         return shelf.overview()
 
-    # A card word with no card in front of it is not a search term: "more" was
-    # once answered by installing a random plugin.
-    bare = "".join(
-        char for char in low if "a" <= char <= "z" or "0" <= char <= "9" or char == " "
-    ).strip()
-    if bare in ("yes", "no", "more", "next", "1", "2") and not (
-        card.is_waiting(session_key) or market.is_waiting(session_key)
-    ):
-        from . import shelf
-
-        # A shelf was just shown: "no" closes it, it is not a mistake.
-        if bare == "no" or shelf._rows(session_key):
-            shelf.forget(session_key)
-            if bare == "no":
-                return "Nothing installed. Say the job: /concierge something that reads my pdfs.\n"
-        if bare in ("yes", "1"):
-            return "Nothing to say yes to yet. Say the job: /concierge something that reads my pdfs.\n"
-        return "Say the job in one sentence: /concierge something that reads my pdfs.\n"
-    if low in ("help all", "help -a", "help --all"):
-        _drop_cards(session_key)
-        return HELP
-    if low == "help":
+    # Offline conveniences: exact single-word commands, decided by
+    # whole-string equality on the command text. Everything else is free
+    # text for the model router.
+    lowered = text.lower()
+    if lowered == "help":
         _drop_cards(session_key)
         return HELP_SHORT
-
-
-    # A card this conversation was shown owns yes, no, more and 1. Checked before
-    # anything forgets it, or the flagship loop dies on its own receipt.
-    from . import card as card_mod
-
-    if card_mod.is_waiting(session_key):
-        word = low.strip().rstrip("!.")
-        if (
-            word in card_mod.YES
-            or word in card_mod.NO
-            or word in card_mod.MORE
-            or word in ("1", "2")
-        ):
-            return card_mod.handle(text, session_key=session_key, store=store)
-        # Any other sentence is a new request: the old card is dropped below.
-    if low == "undo":
+    if lowered == "undo":
         _drop_cards(session_key)
         return handle_undo(store=store, undo=undo, seams=seams)
 
-    if low.replace(" ", "").isdigit() and len(low.replace(" ", "")) > 4:
+    # A pending card owns this conversation until it is answered: the whole
+    # sentence goes to the model with the pending offer's description, and
+    # only CONFIRM installs while only DROP clears.
+    from . import card as card_mod
+
+    llm = _llm()
+    if card_mod.is_waiting(session_key):
+        return card_mod.handle(text, session_key=session_key, store=store, llm=llm)
+    from . import market as market_mod
+
+    if market_mod.is_waiting(session_key):
+        return market_mod.handle(text, session_key=session_key, store=store, llm=llm)
+
+    if lowered.replace(" ", "").isdigit() and len(lowered.replace(" ", "")) > 4:
         return (
             "That looks like a number, not a request.\n"
             "Say what you want in one sentence, like /concierge install obsidian.\n"
         )
 
-    head, _, _ = low.partition(" ")
-    rest = text[len(head):].strip()
-
-    if head in ("browse", "shelf"):
-        from . import shelf
-
-        _drop_cards(session_key)
-        words = rest.split()
-        page = 1
-        if len(words) > 1 and words[-1].isdigit() and len(words[-1]) <= 3:
-            page = int(words[-1])
-            rest = " ".join(words[:-1])
-        return shelf.browse(rest, session_key=session_key, page=page)
-
-    # A number picks from the last shelf this conversation was shown, but a
-    # waiting card owns every bare digit: the digit answers the card, and only
-    # when no card is waiting may it pick a shelf row.
+    # A number picks from the last shelf this conversation was shown, but only
+    # when no card is waiting: a pending card owns every reply.
     if text.isascii() and text.isdigit() and len(text) <= 3:
-        from . import market as market_mod
         from . import shelf
 
-        if card_mod.is_waiting(session_key):
-            return card_mod.handle(text, session_key=session_key, store=store)
-        if market_mod.is_waiting(session_key):
-            return market_mod.handle(text, session_key=session_key, store=store)
         if shelf.pending(session_key):
             picked = shelf.pick(int(text), session_key=session_key, store=store)
             if picked:
                 return picked
-
-    if head in ("skills", "show") and _names_a_bot(rest, store):
-        from . import improve, lifecycle, state
-
-        if not rest and not _is_bot_profile():
-            # No name in the owner's profile: a fleet summary, not 200 lines.
-            try:
-                made = [lifecycle.name_of(record) for record in lifecycle.bots(store)]
-            except Exception:
-                return "The bot list could not be read just now. Nothing was changed.\n"
-            if not made:
-                return "No bots yet. Make one: /concierge create a researcher.\n"
-            lines = ["Skills each bot has:", ""]
-            for bot in made:
-                home = improve.resolve(bot)
-                count = len(improve.installed(home)) if home is not None else 0
-                lines.append("{}: {}".format(bot, "{} skills".format(count) if count else "none yet"))
-            lines.append("")
-            lines.append("One bot in detail: /concierge skills <bot>.")
-            lines.append("")
-            return "\n".join(lines)
-        name = rest.split()[0] if rest else _self_name()
-        try:
-            home = improve.resolve(name)
-        except Exception:
-            home = None
-        if home is None:
-            return "No bot called {}. Say /concierge bots to see them.\n".format(name)
-        have = sorted(improve.installed(home))
-        if not have:
-            return "{} has no skills of its own yet.\nGive it one: /concierge improve {}: it needs to read scanned PDFs.\n".format(name, name)
-        return "{} has these skills: {}\n".format(name, ", ".join(have))
-
-    if head == "bots":
-        _drop_cards(session_key)
-        return _safe_bots(store)
-
-    if head in ("fire", "delete", "remove", "rm", "reset"):
-        if _is_bot_profile():
-            return "A bot cannot delete or reset profiles. Ask the owner.\n"
-        # "fire the intern" is a sentence, not a bot: only a selector fires.
-        parts = rest.split()
-        selector = parts[0] if parts else ""
-        confirm = " ".join(parts[1:])
-        if not lifecycle.is_selector(store, selector):
-            # An existing profile Concierge never made is still refused, and said
-            # plainly: this is not a typo, it is somebody else's bot.
-            if selector and not selector.isdigit():
-                return "Concierge did not create {}, so it will not delete it.\n".format(selector)
-            return (
-                "Deleting a bot needs its number.\n"
-                "/concierge bots, then /concierge {} <number>\n".format(head)
-            )
-        _drop_cards(session_key)
-        try:
-            if head in ("fire", "delete", "remove", "rm"):
-                return lifecycle.fire(store, selector, confirm=confirm, seams=seams)
-            return lifecycle.reset(store, selector, seams=seams)
-        except lifecycle.Refused as exc:
-            return "{}\n".format(exc)
-
-    if head == "create":
-        _drop_cards(session_key)
-        return handle_hire(rest, store=store, hire=hire, known=known)
-
-    if head == "improve":
-        _drop_cards(session_key)
-        return handle_improve(rest, store=store, known=known)
-
-    # "install <what> into <bot>" is the same sentence as a plain request, with
-    # the destination said out loud. Both shelves are searched: plugins first,
-    # then skills, and whichever answers gets one card and one yes.
-    if head == "install":
-        from . import market as market_mod
-
-        _drop_cards(session_key)
-        market_mod.forget(session_key)
-        return handle_install(rest, store=store, session_key=session_key)
-
-    # Bare yes/no/more belong to a card this conversation was shown.
-    from . import market as market_mod
-
-    if market_mod.is_waiting(session_key):
-        return market_mod.handle(text, session_key=session_key, store=store)
 
     # Free text goes to the model router. With no model there is no second
     # search and no guessing: one plain sentence says what to do instead.
@@ -444,13 +337,44 @@ def handle_concierge(
             "or run /concierge help.\n"
         )
     answer = _run_route(routed, text, store=store, session_key=session_key,
-                        known=known, hire=hire)
+                        known=known, hire=hire, seams=seams)
     if answer is not None:
         return answer
     return (
         "I need a model to read that. Name the thing and I will install it, "
         "or run /concierge help.\n"
     )
+
+
+def _read_note(typed: Any, resolved: str) -> str:
+    """One line when the model heard a different name than was typed."""
+    flat = lambda s: "".join(char for char in str(s or "").lower() if char.isalnum())
+    if not resolved or flat(typed) == flat(resolved):
+        return ""
+    return "Read {} as {}.".format(" ".join(str(typed).split()), resolved)
+
+
+def _resolve_bot(store: Any, said: str, selector: str) -> tuple:
+    """Exact bot name first, one model call on the miss path.
+
+    Returns (selector, note). With no model, or when nothing listed fits,
+    the selector comes back unchanged and the caller keeps its refusal.
+    """
+    from . import lifecycle
+
+    if lifecycle.is_selector(store, selector):
+        return selector, ""
+    if not selector or selector.isdigit():
+        return selector, ""
+    try:
+        from . import router as _router
+
+        heard = _router.resolve_name(said, "bot", _llm())
+    except Exception:
+        heard = ""
+    if heard and lifecycle.is_selector(store, heard):
+        return heard, _read_note(said, heard)
+    return selector, ""
 
 
 def _exact_entry(query: str, catalog: list) -> str:
@@ -468,14 +392,24 @@ def _exact_entry(query: str, catalog: list) -> str:
     return ""
 
 
-def _install_now(name, *, catalog, store, session_key, target, caution=""):
-    """Install the pick and print the receipt. There is no question to answer."""
-    from . import card
+def _install_now(name, *, catalog, store, session_key, target, caution="", llm=None):
+    """Install the pick and print the receipt. There is no question to answer.
 
+    The sentence already named the entry, so the card is shown and then the
+    pending offer is taken through the model like any other answer. With no
+    model the pending offer is answered directly: an exact name is plain
+    lexical evidence, not a guess.
+    """
+    from . import card
+    from . import market as market_mod
+
+    market_mod.forget(session_key)
     card.handle(name, entries=catalog, store=store, session_key=session_key,
-                target=target, caution=caution)
+                target=target, caution=caution, llm=llm)
+    if llm is None:
+        return card._answer(store=store, install=None, session_key=session_key)
     return card.handle("yes", entries=catalog, store=store, session_key=session_key,
-                       target=target, caution=caution)
+                       target=target, caution=caution, llm=llm)
 
 
 def _exact_skill(query: str) -> str:
@@ -551,31 +485,50 @@ def handle_install(
             catalog = seams.catalog()
         except Exception:
             catalog = []
-    # A waiting card owns yes/no/more and a bare number, so those answer before
-    # any search. A new sentence is a new request, not an answer to the card.
-    answer_word = "".join(
-        char for char in text.lower() if "a" <= char <= "z" or "0" <= char <= "9" or char == " "
-    ).strip()
-    if card.is_waiting(session_key) and (
-        answer_word in ("yes", "y", "no", "n", "more") or answer_word.isdigit()
-    ):
-        return _install_now(text, catalog=catalog, store=store,
-                            session_key=session_key, target=target)
+    # A waiting card owns every reply: the sentence is handed to the model
+    # with the pending offer's description, and only CONFIRM installs.
+    if card.is_waiting(session_key):
+        return card.handle(text, entries=catalog, store=store,
+                           session_key=session_key, target=target, llm=_llm())
 
     # Asked for by name, with nothing to choose: install and print the receipt.
     # The card exists to ask a question; when the sentence already answered it,
     # the question is friction.
+    # A near-miss by name gets one model call first: typos and spoken forms
+    # ("obsdian", "writer bot") resolve to the listed name.
+    note = ""
     exact = _exact_entry(query, catalog)
+    exact_skill = "" if exact else _exact_skill(query)
+    if not exact and not exact_skill:
+        try:
+            from . import router as _router
+
+            heard = _router.resolve_name(query, "thing", _llm())
+        except Exception:
+            heard = ""
+        if heard:
+            note = _read_note(query, heard)
+            query = heard
+            exact = _exact_entry(query, catalog)
+            if not exact:
+                exact_skill = _exact_skill(query)
     if exact:
-        card.handle(exact, entries=catalog, store=store, session_key=session_key, target=target)
-        return card.handle("yes", entries=catalog, store=store, session_key=session_key,
-                           target=target)
-    exact_skill = _exact_skill(query)
+        answer = _install_now(exact, catalog=catalog, store=store,
+                              session_key=session_key, target=target, llm=_llm())
+        return (note + "\n" if note else "") + answer
     if exact_skill:
-        market.handle(exact_skill, target=target, session_key=session_key,
-                      store=store, search_fn=search)
-        return market.handle("yes", target=target, session_key=session_key,
-                             store=store, search_fn=search)
+        from . import market as market_mod
+
+        market_mod.handle(exact_skill, target=target, session_key=session_key,
+                          store=store, search_fn=search, llm=_llm())
+        if _llm() is None:
+            # No model: the name already said what to install, so the pending
+            # offer is answered directly instead of guessed at.
+            answer = market_mod._answer(session_key=session_key, store=store)
+        else:
+            answer = market_mod.handle("yes", target=target, session_key=session_key,
+                                       store=store, search_fn=search, llm=_llm())
+        return (note + "\n" if note else "") + answer
 
     # The matcher builds a shortlist; the model picks from it. A name asked for
     # by name skips the model, so obvious asks stay instant.
@@ -592,16 +545,36 @@ def handle_install(
                 "If you want a bot that does it for you: /concierge create {}\n"
             ).format(tool, query[:60])
         if getattr(choice, "kind", "") == "skill":
-            return market.handle(choice.name, target=target, session_key=session_key,
-                                 store=store, search_fn=search, caution=caution)
-        return _install_now(choice.name, catalog=catalog, store=store,
-                            session_key=session_key, target=target, caution=caution)
+            answer = market.handle(choice.name, target=target, session_key=session_key,
+                                   store=store, search_fn=search, caution=caution,
+                                   llm=_llm())
+            return (note + "\n" if note else "") + answer
+        answer = _install_now(choice.name, catalog=catalog, store=store,
+                               session_key=session_key, target=target, caution=caution,
+                               llm=_llm())
+        return (note + "\n" if note else "") + answer
     if _llm() is None:
         # No model, no guessing: the sentence needs a reader.
         return (
             "I need a model to read that. Name the thing and I will install it, "
             "or run /concierge help.\n"
         )
+    # The same ranked list browse shows: the same words offer the same names.
+    try:
+        from . import search as search_mod
+
+        shared = search_mod.candidates(query, limit=8)
+    except Exception:
+        shared = []
+    if shared:
+        top = shared[0]
+        if top.get("kind") == "skill":
+            answer = market.handle(top["name"], target=target, session_key=session_key,
+                                   store=store, search_fn=search, llm=_llm())
+        else:
+            answer = card.handle(top["name"], entries=catalog, store=store,
+                                 session_key=session_key, target=target, llm=_llm())
+        return (note + "\n" if note else "") + answer
     # Nothing was picked, so nothing is installed. Falling through to a second
     # lexical search here is how a polite "keep my desk tidy" ended up offering
     # a submission ledger: two shots at a wrong answer instead of one honest no.
@@ -609,7 +582,7 @@ def handle_install(
     answer += (
         "If no tool can do it, a bot can try: /concierge create {}\n".format(query[:60])
     )
-    return answer
+    return (note + "\n" if note else "") + answer
 
 
 def handle_hire(
@@ -631,7 +604,7 @@ def handle_hire(
     if not text:
         return "Usage: /concierge create <sentence>. For example: /concierge create keeps my inbox at zero.\n"
 
-    plan = bots.spec(text)
+    plan = bots.spec(text, llm=_llm())
     if plan.name == lifecycle.DEFAULT:
         return (
             "{} is the profile you are talking to, not a bot. Name this one:\n"
@@ -647,7 +620,10 @@ def handle_hire(
         )
 
     try:
-        plan, path = (hire or bots.hire)(text)
+        if hire is None:
+            plan, path = bots.hire(text, llm=_llm())
+        else:
+            plan, path = hire(text)
     except bots.Collision as exc:
         return "{} already exists. Nothing was created.\n".format(exc.name)
     except Exception as exc:
@@ -678,8 +654,9 @@ def handle_hire(
 
     from . import presets
 
+    llm = _llm()
     lines, ok = bots.receipt(
-        plan, path, known=taken, count_skills=presets.detect(text) is None
+        plan, path, known=taken, count_skills=presets.detect(text, llm) is None
     )
     # Record what hire wrote, not just that a bot exists: the role preset's
     # skills are stock, and reset keeps stock while taking back later changes.
@@ -688,7 +665,7 @@ def handle_hire(
     role_name = ""
     preset_skills: list = []
     try:
-        role = presets.detect(text) or presets.get("assistant")
+        role = presets.detect(text, llm) or presets.get("assistant")
         if role is not None:
             role_name = str(role.name)
             try:
@@ -752,18 +729,20 @@ def _apply_preset(text: str, name: str, profile_path: Any) -> list[str]:
     """A role sentence also installs that role's skills. Never fatal: the bot exists."""
     from . import bots, presets
 
-    role = presets.detect(text)
-    if role is None:
-        # No role word in the sentence: a general assistant is more useful
-        # than a thin shell, and the job line still says what it is for.
-        role = presets.get("assistant")
+    llm = _llm()
+    role = presets.detect(text, llm) or presets.get("assistant")
+    if role is None:  # the roster always names an assistant; never crash the hire
+        return list(_job_line(text, profile_path, bots))
     try:
-        report = presets.install(name, Path(str(profile_path)), role)
+        report = presets.install(name, Path(str(profile_path)), role, llm=llm)
     except Exception as exc:
         return ["Role skills skipped: {}: {}.".format(type(exc).__name__, exc)] + _job_line(
             text, profile_path, bots
         )
     lines = report.lines() if report.wanted else []
+    if llm is None:
+        # No model, no role choice: say so instead of a silent default.
+        lines = list(lines) + [presets.ROLE_FALLBACK_NOTE]
     return lines + _job_line(text, profile_path, bots)
 
 
@@ -828,6 +807,20 @@ def handle_improve(
         )
     llm = _llm()
     plan = improve.plan(bot, sentence, llm=llm)
+    note = ""
+    if plan is None and (bot or "") and llm is not None:
+        # A near-miss ("my researcher bot") gets one model call before the no.
+        try:
+            from . import router as _router
+
+            heard = _router.resolve_name(bot, "bot", llm)
+        except Exception:
+            heard = ""
+        if heard:
+            retry = improve.plan(heard, sentence, llm=llm)
+            if retry is not None:
+                note = _read_note(bot, heard)
+                bot, plan = heard, retry
     if plan is None:
         return "No bot called {}. Say /concierge bots to see them.\n".format(bot)
     if not plan.items and not getattr(plan, "have", None) and llm is None:
@@ -837,7 +830,8 @@ def handle_improve(
             "I need a model to read that. Name the thing and I will install it, "
             "or run /concierge help.\n"
         )
-    return improve.receipt(plan, improve.apply(plan, store=store))
+    answer = improve.receipt(plan, improve.apply(plan, store=store))
+    return (note + "\n" if note else "") + answer
 
 
 def _llm() -> Any:
@@ -1187,7 +1181,7 @@ def _names_a_bot(rest: str, store: Any) -> bool:
         return False
 
 
-def _gateway_refusal(raw: Any) -> Optional[str]:
+def _gateway_refusal(raw: Any, session_key: str = "") -> Optional[str]:
     """A shared chat may look, not change. Returns the refusal, or None.
 
     The decision comes from core: a surface core calls messaging, or one named
@@ -1198,16 +1192,19 @@ def _gateway_refusal(raw: Any) -> Optional[str]:
     """
     # A card yes is still a change: it needs the same verdict as a normal
     # command. Only the owner's opt-in or a non-chat surface allows it.
-    # Dropping a card (no) or describing the runner-up (more) changes nothing,
-    # so those answers stay allowed: refusing them would strand the card.
+    # Dropping the card changes nothing, so a DROP stays allowed: refusing it
+    # would strand the card. The model reads the reply to decide.
     if _PLATFORM_ANSWER:
         try:
             from . import card as _card_mod
+            from . import reply as _reply_mod
 
-            _safe = set(_card_mod.NO) | set(_card_mod.MORE) | {"2"}
+            verdict = _card_mod.decide_answer(
+                _clean(raw), _reply_mod._pending_description(session_key), _llm()
+            )
         except Exception:
-            _safe = {"n", "no", "nope", "cancel", "stop", "more", "details", "2"}
-        if _clean(raw).lower() in _safe:
+            verdict = "OTHER"
+        if verdict == "DROP":
             return None
         if _allow_gateway():
             return None

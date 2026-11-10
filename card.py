@@ -53,9 +53,27 @@ def _slot(session_key: str = "") -> dict:
         key, {"sentence": "", "entries": [], "caution_accepted": False}
     )
 
-YES = frozenset({"y", "yes", "install", "do it", "ok", "okay", "go"})
-NO = frozenset({"n", "no", "cancel", "stop", "never mind", "nvm"})
-MORE = frozenset({"more", "details", "show me"})
+OUTCOMES = (
+    "CONFIRM",  # the person accepts the pending offer
+    "DROP",     # the person rejects the pending offer
+    "OTHER",    # anything else: not an answer to the card
+)
+
+ANSWER_PROMPT = """You read one reply to a pending install offer. The offer is shown; the reply follows.
+
+Offer: {description}
+
+Reply: {text}
+
+Answer JSON only: {{"answer": "<CONFIRM, DROP, or OTHER>"}}
+CONFIRM is the person accepting that offer. DROP is the person rejecting it.
+Anything else, including a new request or a question, is OTHER. Judge the
+outcome the reply asks for, not any single word inside it."""
+
+PENDING_NEEDS_MODEL = (
+    "I need a model to read that. The offer is still waiting: "
+    "answer yes to install it, or no to drop it.\n"
+)
 
 
 def _caps(entry) -> dict:
@@ -96,44 +114,103 @@ def _dep_name(spec: str) -> str:
     return "".join(out) if out else head
 
 
-# Word cues per jurisdiction, checked against text.words(blob). A single word
-# matches a whole token; "mexic" is a stem (mexico, mexican, ...); a cue with
-# a space needs both words side by side; "w2"/"nfe" also catch "w-2"/"nf-e",
-# because words() sees through the hyphen.
-JURISDICTIONS = (
-    (("mexic", "cfdi", "sat"), "Mexico (CFDI / SAT)"),
-    (("irs", "w2", "1099"), "the United States (IRS)"),
-    (("hmrc", "self assessment"), "the United Kingdom (HMRC)"),
-    (("nfe",), "Brazil (NF-e)"),
-    (("gst",), "Australia / India (GST)"),
-)
+def decide_answer(text: str, description: str = "", llm=None) -> str:
+    """What a reply to a pending card means: CONFIRM, DROP, or OTHER.
 
-
-def jurisdiction(entry) -> str:
-    """The country a plug-in is locked to, when it says so about itself.
-
-    Mexican invoicing is useless in Peru, and a new person should not have to
-    work that out from the description: the card says it, and the answer is no.
+    The model reads the whole reply against the pending offer's own
+    description and picks one of the three outcome names. Only CONFIRM
+    installs; only DROP clears. With no model the answer is OTHER and
+    nothing changes.
     """
-    from . import text as _text
+    if llm is None:
+        return "OTHER"
+    import json
 
-    blob = " ".join(
-        str(getattr(entry, key, "") or "") for key in ("name", "title", "description")
-    ).lower()
-    tokens = _text.words(blob)
-    pool = set(tokens) | set(_text.words(blob.replace("-", "")))
-    flat = " ".join(tokens)
-    for cues, label in JURISDICTIONS:
-        for cue in cues:
-            if " " in cue:
-                if cue in flat:
-                    return label
-            elif cue == "mexic":
-                if any(token.startswith("mexic") for token in tokens):
-                    return label
-            elif cue in pool:
-                return label
-    return ""
+    prompt = ANSWER_PROMPT.format(
+        description=" ".join(str(description or "").split())[:400] or "(no description)",
+        text=" ".join(str(text or "").split())[:400],
+    )
+    try:
+        answer = llm.complete_structured(
+            instructions=prompt,
+            input=[{"type": "text", "text": str(text or "")}],
+            json_mode=True,
+            max_tokens=30,
+            temperature=0,
+            timeout=15,
+        )
+    except Exception:
+        return "OTHER"
+    raw = (getattr(answer, "text", "") or "").strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return "OTHER"
+    try:
+        data = json.loads(raw[start : end + 1])
+    except Exception:
+        return "OTHER"
+    heard = str(data.get("answer") or "").strip().upper()
+    return heard if heard in OUTCOMES else "OTHER"
+
+
+def _pending_description(slot: dict) -> str:
+    """The pending offer in its own words: name plus description."""
+    try:
+        top = (slot.get("entries") or [])[0]
+    except Exception:
+        return ""
+    name = str(getattr(top, "name", "") or "")
+    desc = str(getattr(top, "description", "") or "")
+    if not desc:
+        try:
+            desc = str(getattr(getattr(top, "entry", None), "description", "") or "")
+        except Exception:
+            desc = ""
+    return "{}: {}".format(name, desc).strip(": ")
+
+
+def jurisdiction(entry, llm=None) -> str:
+    """The country a plug-in is locked to, when its own metadata names one.
+
+    Only the entry's own fields (name, title, description) are consulted,
+    and the model reads them: no word list decides. With no model nothing
+    is claimed.
+    """
+    name = str(getattr(entry, "name", "") or "")
+    title = str(getattr(entry, "title", "") or "")
+    description = str(getattr(entry, "description", "") or "")
+    if llm is None:
+        return ""
+    import json
+
+    prompt = (
+        "An entry in a plugin marketplace may be locked to one country "
+        "(for example, tax invoicing that only works in one place). "
+        "Read its own name, title and description and name the country "
+        "it is locked to, or empty when it works anywhere.\n"
+        "Name: {}\nTitle: {}\nDescription: {}\n"
+        "Answer JSON only: {{\"country\": \"<country label, or empty>\"}}"
+    ).format(name[:120], title[:200], description[:600])
+    try:
+        answer = llm.complete_structured(
+            instructions=prompt,
+            input=[{"type": "text", "text": "{} {} {}".format(name, title, description)[:600]}],
+            json_mode=True,
+            max_tokens=60,
+            temperature=0,
+            timeout=15,
+        )
+    except Exception:
+        return ""
+    raw = (getattr(answer, "text", "") or "").strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return ""
+    try:
+        data = json.loads(raw[start : end + 1])
+    except Exception:
+        return ""
+    return str(data.get("country") or "").strip()
 
 
 def _one_line(description: str, limit: int = 92) -> str:
@@ -165,7 +242,7 @@ def _caution_line(caution: str) -> str:
 
 
 def render(sentence: str, candidates: list, deps: Optional[list] = None,
-           target: str = "", caution: str = "") -> str:
+           target: str = "", caution: str = "", llm=None) -> str:
     """The card for one sentence and the candidates that earned a place on it.
 
     Written for someone who has never installed a plugin: the first line is the
@@ -182,7 +259,7 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
     )
     from . import choose
 
-    caution = caution or choose.caution_for(top, sentence)
+    caution = caution or choose.caution_for(top, sentence, llm=llm)
     lines = ["", "Install {}?".format(top.name), ""]
     sentence = _one_line(top.description)
     if not sentence:
@@ -206,7 +283,7 @@ def render(sentence: str, candidates: list, deps: Optional[list] = None,
     tail = " ".join(part for part in (adds, where) if part)
     if tail:
         lines.append(tail)
-    locked = jurisdiction(top.entry)
+    locked = jurisdiction(top.entry, llm=llm)
     if locked and locked.split(" (")[0].lower() not in sentence.lower():
         # Only when the ask did not name that country itself.
         lines.append("Only for {}. Not your country? Say no.".format(locked))
@@ -311,14 +388,36 @@ def nothing(sentence: str, entries: Optional[list] = None) -> str:
 
 
 def handle(sentence: str, *, entries=None, store=None, install=None,
-           session_key: str = "", target: str = "", caution: str = "") -> str:
-    """One sentence in, one card or one receipt out."""
+           session_key: str = "", target: str = "", caution: str = "",
+           llm=None) -> str:
+    """One sentence in, one card or one receipt out.
+
+    When this conversation already holds a card, the sentence is handed to
+    the model with the pending offer's description: CONFIRM installs, DROP
+    clears, OTHER starts a new request. With no model the pending offer is
+    left untouched.
+    """
     from . import match, seams
 
     slot = _slot(session_key)
     text = (sentence or "").strip()
     if not text:
         return "Concierge\n\nSay what you want in one sentence, like: /concierge remember my notes across sessions\n"
+
+    if slot.get("entries"):
+        verdict = decide_answer(text, _pending_description(slot), llm)
+        if verdict == "CONFIRM":
+            return _answer(store=store, install=install, session_key=session_key)
+        if verdict == "DROP":
+            forgotten = slot.get("sentence", "") or ""
+            _reset(session_key)
+            from . import market as _market
+
+            _market.forget(session_key)
+            return f"Nothing installed.{' Kept ' + forgotten + ' out.' if forgotten else ''}\n"
+        if llm is None:
+            return PENDING_NEEDS_MODEL
+        _reset(session_key)
 
     if not target:
         # A plain sentence can name a bot too, not only the install verb.
@@ -327,28 +426,6 @@ def handle(sentence: str, *, entries=None, store=None, install=None,
         text, target = market.split_target(text)
         if not text:
             return "Install what? Name the thing you want and the bot after it.\n"
-
-    lowered = text.lower()
-
-    if lowered not in NO and lowered not in YES and lowered not in ("more", "2"):
-        from . import market
-
-        market.forget(session_key)
-
-    if lowered in NO:
-        forgotten = slot.get("sentence", "") or ""
-        _reset(session_key)
-        return f"Nothing installed.{' Kept ' + forgotten + ' out.' if forgotten else ''}\n"
-
-    if lowered == "2":
-        # Refused rather than guessed: the card only ever describes one install.
-        return "One install at a time. /concierge yes takes the top match, or name the other one.\n"
-
-    if lowered in YES or lowered == "1":
-        return _answer(store=store, install=install, session_key=session_key)
-
-    if lowered in MORE:
-        return more(session_key=session_key)
 
     if entries is None:
         try:
@@ -368,7 +445,7 @@ def handle(sentence: str, *, entries=None, store=None, install=None,
         deps = seams.declared_deps_remote(candidates[0].entry)
     except Exception:
         deps = []
-    return render(text, candidates, deps=deps, target=target, caution=caution)
+    return render(text, candidates, deps=deps, target=target, caution=caution, llm=llm)
 
 
 def _answer(*, store=None, install=None, session_key: str = "") -> str:

@@ -24,19 +24,77 @@ MAX_SKILLS_SHOWN = 6
 INSTALL_TIMEOUT = 90  # one skill, not a whole role, has to finish in this
 
 
-# A preset is a sentence long. A skill this heavy is a decision the person makes
-# on purpose ("install comfyui"), never something a role drags in.
+# A role is never dragged in silently when it costs more than attention: the
+# model reads the skill's own metadata (name, description, requirements) and
+# says whether it is heavy. With no model nothing is treated as heavy.
+HEAVY_PROMPT = """A skill may be heavy: it downloads large models or datasets, wants a GPU,
+or ships a very large asset tree. Read its own name and description and say
+whether installing it should be an explicit choice, never a silent extra.
 
-# Not about kilobytes alone: comfyui drags in diffusion models and wants a GPU,
-# and popular-web-designs is 855 KB of reference images. A role never installs
-# either; a person asks for it by name when they want it.
-HEAVY_NAMES = frozenset({"comfyui", "popular-web-designs"})
+Name: {name}
+Description: {description}
+
+Answer JSON only: {{"heavy": true or false}}"""
 
 
-def heavy(name: str) -> bool:
-    if name.rsplit("/", 1)[-1] in HEAVY_NAMES:
-        return True
-    return False
+def heavy(name_or_entry, llm=None) -> bool:
+    """True when this skill should never ride along silently with a role.
+
+    Decided from the entry's own metadata plus the model's answer, never
+    from a name list. With no model nothing counts as heavy.
+    """
+    if isinstance(name_or_entry, str):
+        short = name_or_entry.rsplit("/", 1)[-1]
+        description = ""
+    else:
+        short = str(
+            name_or_entry.get("name") if isinstance(name_or_entry, dict)
+            else getattr(name_or_entry, "name", "")
+        ).rsplit("/", 1)[-1]
+        description = str(
+            name_or_entry.get("description") if isinstance(name_or_entry, dict)
+            else getattr(name_or_entry, "description", "") or ""
+        )
+    if not short:
+        return False
+    if llm is None:
+        return False
+    if not description:
+        description = _describe(short)
+    import json
+
+    try:
+        answer = llm.complete_structured(
+            instructions=HEAVY_PROMPT.format(name=short, description=description[:600]),
+            input=[{"type": "text", "text": short}],
+            json_mode=True,
+            max_tokens=30,
+            temperature=0,
+            timeout=15,
+        )
+    except Exception:
+        return False
+    raw = (getattr(answer, "text", "") or "").strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return False
+    try:
+        return bool(json.loads(raw[start : end + 1]).get("heavy"))
+    except Exception:
+        return False
+
+
+def _describe(name: str) -> str:
+    """The skill's own one-liner from the tree on disk, or empty."""
+    try:
+        from . import discover
+
+        for item in discover.catalogue():
+            if item["name"] == name:
+                return str(item.get("why") or item.get("description") or "")
+    except Exception:
+        pass
+    return ""
 
 
 @dataclass(frozen=True)
@@ -99,49 +157,6 @@ ROLES: tuple[Role, ...] = (
 
 _BY_NAME = {role.name: role for role in ROLES}
 
-# Words a person actually types. Matched on word boundaries, whole-sentence safe.
-CUES: dict[str, tuple[str, ...]] = {
-    "researcher": ("research", "researcher", "sources", "papers", "arxiv",
-                   "literature", "cite", "citations", "deep dive"),
-    "writer": ("write", "writer", "writing", "blog", "article", "newsletter",
-               "copywriting", "draft", "thread"),
-    "coder": ("code", "coder", "coding", "developer", "programmer",
-              "debug", "refactor", "repo", "pull request", "tests"),
-    # "assistant" is the generic word, not a role: leave it out so
-    # "hire a research assistant" lands on researcher.
-    "assistant": ("inbox", "email", "calendar", "schedule", "errands",
-                  "admin", "files", "logins",
-                  # The generic word is a cue only inside a phrase that cannot
-                  # be read as "research assistant" or "coding assistant".
-                  "general assistant", "personal assistant", "virtual assistant",
-                  "assistant bot", "my assistant", "an assistant",
-                  "office assistant", "executive assistant"),
-    "marketer": ("marketing", "marketer", "seo", "campaign", "audience", "growth",
-                 "instagram", "twitter", "reddit"),
-    # Bare "watch", "track" and "changes" are everyday words; only a phrase that
-    # means monitoring counts, or every fitness app becomes a watcher.
-    "watcher": ("watcher", "monitor", "alert", "ping me", "pings me", "notify",
-                "keep an eye", "keeps an eye", "when it changes", "keep track"),
-    "designer": ("design", "designer", "mockup", "mockups", "ui", "ux",
-                 "brand", "illustration", "logo"),
-    "analyst": ("analyse", "analyze", "analyst", "analysis", "spreadsheet",
-                "excel", "metrics", "chart", "dashboard"),
-    "tutor": ("tutor", "teach", "teacher", "explain", "study", "learn",
-              "flashcards", "quiz", "practice", "homework"),
-    "planner": ("planner", "planning", "plan my", "roadmap", "project", "sprint",
-                "priorities", "decision", "schedule my", "keep me on"),
-}
-
-# The first cues of a role are the nouns that define it (inbox, spreadsheet,
-# repo); the later ones are verbs anyone might use (draft, plan, watch). A verb
-# must not outrank a defining noun just because it is a longer word.
-_CUES = tuple(
-    (role.name, cue, 2 if index < 3 else 1)
-    for role in ROLES
-    for index, cue in enumerate(CUES[role.name])
-)
-
-
 def names() -> list[str]:
     return [role.name for role in ROLES]
 
@@ -150,36 +165,59 @@ def get(role: str) -> Role | None:
     return _BY_NAME.get((role or "").strip().lower())
 
 
-def _forms(cue: str) -> tuple[str, ...]:
-    """The cue plus how people actually inflect it: s, es, ing, ed."""
-    if " " in cue:
-        return (cue,)
-    return (cue, cue + "s", cue + "es", cue + "ing", cue + "ed")
+ROLE_PROMPT = """You choose the role for a new assistant from its one-line descriptions.
+
+Sentence: {sentence}
+
+Roles:
+{roles}
+
+Answer JSON only: {{"role": "<one role name from the list, or none>"}}
+Pick the role whose job matches the sentence. Pick "none" when the sentence
+names no role here. Answer with a name from the list, never a new one."""
+
+ROLE_FALLBACK_NOTE = (
+    "No model was reachable, so no role was picked."
+)
 
 
-def detect(sentence: str) -> Role | None:
-    """Best role for a sentence, or None. Longest cue wins, then roster order."""
-    # Punctuation is glued to words often enough to hide a role: "researcher," and
-    # "writer:" both have to read as the word.
-    cleaned = "".join(
-        char
-        if "a" <= char <= "z" or "0" <= char <= "9" or char in " '-" or char.isspace()
-        else " "
-        for char in (sentence or "").lower()
-    )
-    text = " " + " ".join(cleaned.split()) + " "
-    totals: dict[str, int] = {}
-    longest: dict[str, int] = {}
-    order: dict[str, int] = {}
-    for index, (role_name, cue, weight) in enumerate(_CUES):
-        if any(" {} ".format(form) in text for form in _forms(cue)):
-            totals[role_name] = totals.get(role_name, 0) + weight
-            longest[role_name] = max(longest.get(role_name, 0), len(cue))
-            order.setdefault(role_name, index)
-    if not totals:
+def detect(sentence: str, llm=None) -> Role | None:
+    """Best role for a sentence, or None.
+
+    The model reads the sentence against the preset names and their
+    one-line descriptions and picks one, or 'none'. The chosen role still
+    drives the same install list. With no model nothing is picked.
+    """
+    if llm is None:
         return None
-    winner = max(totals, key=lambda name: (totals[name], longest[name], -order[name]))
-    return _BY_NAME[winner]
+    import json
+
+    roles = "\n".join("- {}: {}".format(role.name, role.blurb) for role in ROLES)
+    try:
+        answer = llm.complete_structured(
+            instructions=ROLE_PROMPT.format(
+                sentence=" ".join(str(sentence or "").split())[:300],
+                roles=roles,
+            ),
+            input=[{"type": "text", "text": str(sentence or "")}],
+            json_mode=True,
+            max_tokens=40,
+            temperature=0,
+            timeout=20,
+        )
+    except Exception:
+        return None
+    raw = (getattr(answer, "text", "") or "").strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        heard = str(json.loads(raw[start : end + 1]).get("role") or "").strip().lower()
+    except Exception:
+        return None
+    if not heard or heard == "none":
+        return None
+    return _BY_NAME.get(heard)
 
 
 def official(role: Role) -> list[str]:
@@ -308,6 +346,7 @@ def install(
     runner: Callable[[Sequence[str]], tuple[int, str]] | None = None,
     hermes: str | None = None,
     copier: Callable[[Path, Sequence[str]], list[str]] | None = None,
+    llm=None,
 ) -> Report:
     """Land the role's skills in one profile, then believe the disk."""
     binary = hermes or _which_hermes()
@@ -326,8 +365,8 @@ def install(
         code, _ = (runner(args) if runner else _run(args, INSTALL_TIMEOUT, env))
         return identifier, code == 0
 
-    wanted = [item for item in official(role) if not heavy(item)]
-    skipped = [item for item in official(role) if heavy(item)]
+    wanted = [item for item in official(role) if not heavy(item, llm)]
+    skipped = [item for item in official(role) if heavy(item, llm)]
     outcomes = []
     misses = 0
     for identifier in wanted:

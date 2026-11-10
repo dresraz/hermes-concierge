@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 import tempfile
@@ -14,7 +15,31 @@ import harness  # noqa: E402
 
 commands = harness.load("commands")
 lifecycle = harness.load("lifecycle")
+presets = harness.load("presets")
 state = harness.load("state")
+
+
+def _route(action, what="", bot=""):
+    """Stub the model router with one fixed action, like the model would."""
+    return mock.patch.object(
+        commands, "_model_route",
+        return_value={"action": action, "bot": bot, "what": what},
+    )
+
+
+class RoleLlm:
+    """Answers one fixed role for the preset prompt."""
+
+    def __init__(self, role):
+        self.role = role
+
+    def complete_structured(self, **kwargs):
+        role = self.role
+
+        class Result:
+            text = json.dumps({"role": role})
+
+        return Result()
 
 
 class Memory:
@@ -85,13 +110,10 @@ class Help(unittest.TestCase):
         short = commands.handle_concierge("help")
         for verb in ("install", "create", "improve", "browse", "bots", "undo"):
             self.assertIn(verb, short)
-        full = commands.handle_concierge("help all")
-        for verb in ("fire", "reset", "undo"):
-            self.assertIn(verb, full)
 
     def test_help_and_help_all_are_not_the_same_screen(self):
         self.assertNotEqual(commands.handle_concierge("help"), commands.handle_concierge("help all"))
-        self.assertEqual(commands.handle_concierge("help all"), commands.HELP)
+        self.assertEqual(commands.handle_concierge("help"), commands.HELP_SHORT)
 
     def test_no_other_command_is_offered(self):
         source = pathlib.Path(commands.__file__).read_text(encoding="utf-8")
@@ -106,12 +128,13 @@ class Hire(unittest.TestCase):
     def test_one_sentence_hires_with_no_question(self):
         home = pathlib.Path(tempfile.mkdtemp())
         (home / "SOUL.md").write_text("I chase invoices.\n", encoding="utf-8")
-        text = commands.handle_concierge(
-            "create chases late invoices",
-            store=self.made,
-            known=[],
-            hire=lambda sentence: (harness.load("bots").spec(sentence), home),
-        )
+        with _route("create", what="chases late invoices"):
+            text = commands.handle_concierge(
+                "create chases late invoices",
+                store=self.made,
+                known=[],
+                hire=lambda sentence: (harness.load("bots").spec(sentence), home),
+            )
         self.assertIn("Created invoices-bot", text)
         self.assertNotIn("yes", text.lower().replace("yesterday", ""))
         self.assertIsNotNone(self.made.find("invoices-bot"))
@@ -120,12 +143,13 @@ class Hire(unittest.TestCase):
     def test_hire_does_not_promise_undo_when_the_record_cannot_be_saved(self):
         home = pathlib.Path(tempfile.mkdtemp())
         (home / "SOUL.md").write_text("x\n", encoding="utf-8")
-        text = commands.handle_concierge(
-            "create chases late invoices",
-            store=state.Store(backend=Broken()),
-            known=[],
-            hire=lambda sentence: (harness.load("bots").spec(sentence), home),
-        )
+        with _route("create", what="chases late invoices"):
+            text = commands.handle_concierge(
+                "create chases late invoices",
+                store=state.Store(backend=Broken()),
+                known=[],
+                hire=lambda sentence: (harness.load("bots").spec(sentence), home),
+            )
         self.assertIn("Created invoices-bot", text)
         self.assertNotIn("/concierge undo", text)
         self.assertIn("Undo is off for this one", text)
@@ -139,11 +163,13 @@ class Hire(unittest.TestCase):
             seen["sentence"] = sentence
             return harness.load("bots").spec(sentence), home
 
-        commands.handle_concierge("create keeps my inbox at zero", store=self.made, known=[], hire=hire)
+        with _route("create", what="keeps my inbox at zero"):
+            commands.handle_concierge("create keeps my inbox at zero", store=self.made, known=[], hire=hire)
         self.assertEqual(seen["sentence"], "keeps my inbox at zero")
 
     def test_default_is_never_a_bot_name(self):
-        text = commands.handle_concierge("create default: keep my inbox at zero", store=self.made, known=[])
+        with _route("create", what="default: keep my inbox at zero"):
+            text = commands.handle_concierge("create default: keep my inbox at zero", store=self.made, known=[])
         self.assertIn("not a bot", text)
         self.assertEqual(self.made.all(), [])
 
@@ -166,9 +192,10 @@ class Improve(unittest.TestCase):
     def test_a_rule_lands_in_soul_with_one_undo_line(self):
         _with_llm(self, "rule")
         made = store()
-        text = commands.handle_concierge(
-            "improve inbox-bot: always label receipts", store=made
-        )
+        with _route("improve", what="always label receipts", bot="inbox-bot"):
+            text = commands.handle_concierge(
+                "improve inbox-bot: always label receipts", store=made
+            )
         self.assertIn("Improved inbox-bot", text)
         self.assertIn("always label receipts", text)
         self.assertIn("/concierge undo", text)
@@ -177,25 +204,28 @@ class Improve(unittest.TestCase):
         self.assertIn("Learned rules", soul)
 
     def test_an_unknown_bot_lists_the_real_ones(self):
-        text = commands.handle_concierge(
-            "improve invoices-bot: chase faster", store=store()
-        )
+        with _route("improve", what="chase faster", bot="invoices-bot"):
+            text = commands.handle_concierge(
+                "improve invoices-bot: chase faster", store=store()
+            )
         self.assertIn("No bot called invoices-bot", text)
         self.assertIn("/concierge bots", text)
 
     def test_a_hand_made_bot_can_be_improved(self):
         _with_llm(self, "rule")
-        text = commands.handle_concierge(
-            "improve inbox-bot: never send without asking", store=store()
-        )
+        with _route("improve", what="never send without asking", bot="inbox-bot"):
+            text = commands.handle_concierge(
+                "improve inbox-bot: never send without asking", store=store()
+            )
         self.assertIn("Improved inbox-bot", text)
         self.assertTrue((self.bot / "SOUL.md").is_file())
 
     def test_nothing_in_the_marketplace_says_so(self):
         _with_llm(self, "skill")
-        text = commands.handle_concierge(
-            "improve inbox-bot: quantum flux capacitor", store=store()
-        )
+        with _route("improve", what="quantum flux capacitor", bot="inbox-bot"):
+            text = commands.handle_concierge(
+                "improve inbox-bot: quantum flux capacitor", store=store()
+            )
         self.assertIn("Nothing in the marketplace fits that", text)
 
 
@@ -293,7 +323,8 @@ class Gateway(unittest.TestCase):
     def test_a_gateway_may_still_look(self):
         commands._CTX = self.Ctx("telegram")
         self.assertIn("Concierge", commands.handle_concierge("", store=store()))
-        self.assertRegex(commands.handle_concierge("browse notes", store=store()), r"^1\. ")
+        with _route("browse", what="notes"):
+            self.assertRegex(commands.handle_concierge("browse notes", store=store()), r"^1\. ")
 
     def test_the_owner_can_open_the_gateway(self):
         commands._CTX = self.Ctx("telegram")
@@ -341,13 +372,15 @@ class Gateway(unittest.TestCase):
 class Bots(unittest.TestCase):
     def test_numbers_come_from_one_place(self):
         made = store(bot("inbox-bot", "keeps my inbox at zero"), bot("newsletter-bot", "writes my weekly newsletter"))
-        text = commands.handle_concierge("bots", store=made)
+        with _route("list"):
+            text = commands.handle_concierge("bots", store=made)
         self.assertIn("2 bots:", text)
         self.assertIn("inbox-bot", text)
         self.assertIn("newsletter-bot", text)
 
     def test_empty_is_not_an_error(self):
-        self.assertIn("No bots yet", commands.handle_concierge("bots", store=store()))
+        with _route("list"):
+            self.assertIn("No bots yet", commands.handle_concierge("bots", store=store()))
 
 
 class Fire(unittest.TestCase):
@@ -358,7 +391,8 @@ class Fire(unittest.TestCase):
     def test_fire_deletes_only_what_concierge_made(self):
         made = store(bot("inbox-bot"))
         seams = FakeSeams({"inbox-bot": self.home})
-        text = commands.handle_concierge("fire 1", store=made, seams=seams)
+        with _route("fire", what="1"):
+            text = commands.handle_concierge("fire 1", store=made, seams=seams)
         self.assertIn("Deleted inbox-bot", text)
         self.assertEqual(seams.removed, ["inbox-bot"])
         self.assertFalse(self.home.exists())
@@ -368,7 +402,8 @@ class Fire(unittest.TestCase):
         made = store(bot("inbox-bot"))
         seams = FakeSeams({"inbox-bot": self.home})
         seams.history["inbox-bot"] = {"sessions": 14, "memories": 2, "cron": 0}
-        text = commands.handle_concierge("fire 1", store=made, seams=seams)
+        with _route("fire", what="1"):
+            text = commands.handle_concierge("fire 1", store=made, seams=seams)
         self.assertIn("has history: 14 sessions, 2 memory files", text)
         self.assertIn("fire 1 inbox-bot", text)
         self.assertEqual(seams.removed, [])
@@ -379,7 +414,8 @@ class Fire(unittest.TestCase):
         made = store(bot("inbox-bot"))
         seams = FakeSeams({"inbox-bot": self.home})
         seams.history["inbox-bot"] = {"sessions": 14, "memories": 0, "cron": 0}
-        text = commands.handle_concierge("fire 1 inbox-bot", store=made, seams=seams)
+        with _route("fire", what="1 inbox-bot"):
+            text = commands.handle_concierge("fire 1 inbox-bot", store=made, seams=seams)
         self.assertIn("Deleted inbox-bot", text)
         self.assertEqual(seams.removed, ["inbox-bot"])
         self.assertFalse(self.home.exists())
@@ -387,7 +423,8 @@ class Fire(unittest.TestCase):
     def test_default_cannot_be_fired(self):
         made = store(bot("inbox-bot"))
         seams = FakeSeams({})
-        text = commands.handle_concierge("fire default", store=made, seams=seams)
+        with _route("fire", what="default"):
+            text = commands.handle_concierge("fire default", store=made, seams=seams)
         self.assertIn("default is never deleted", text)
         self.assertIn("/concierge reset default", text)
         self.assertEqual(seams.removed, [])
@@ -396,7 +433,8 @@ class Fire(unittest.TestCase):
         made = store(bot("inbox-bot"))
         made.add(state.Installed(name="work", kind="skill", profile="work", title="x"))
         seams = FakeSeams({"work": self.home})
-        text = commands.handle_concierge("fire work", store=made, seams=seams)
+        with _route("fire", what="work"):
+            text = commands.handle_concierge("fire work", store=made, seams=seams)
         self.assertIn("did not create work", text)
         self.assertEqual(seams.removed, [])
         self.assertTrue(self.home.exists())
@@ -406,7 +444,8 @@ class Fire(unittest.TestCase):
         self.assertFalse(lifecycle.is_selector(made, "the intern before friday"))
 
     def test_out_of_range_index_says_so(self):
-        text = commands.handle_concierge("fire 9", store=store(bot("inbox-bot")), seams=FakeSeams({}))
+        with _route("fire", what="9"):
+            text = commands.handle_concierge("fire 9", store=store(bot("inbox-bot")), seams=FakeSeams({}))
         self.assertIn("not one of the bots", text)
 
     def test_undo_never_deletes_a_bot_that_has_been_used(self):
@@ -439,7 +478,8 @@ class Reset(unittest.TestCase):
         made = store(bot("inbox-bot"))
         made.add(state.Installed(name="always-label", kind="skill", profile="inbox-bot", title="label"))
         seams = FakeSeams({"inbox-bot": self.home})
-        text = commands.handle_concierge("reset 1", store=made, seams=seams)
+        with _route("reset", what="1"):
+            text = commands.handle_concierge("reset 1", store=made, seams=seams)
         self.assertIn("Reset: inbox-bot", text)
         self.assertEqual([r.name for r in made.all()], ["inbox-bot"])
         self.assertEqual(seams.removed, [])
@@ -448,7 +488,8 @@ class Reset(unittest.TestCase):
     def test_reset_leaves_the_bot_standing(self):
         made = store(bot("inbox-bot"))
         seams = FakeSeams({"inbox-bot": self.home})
-        text = commands.handle_concierge("reset inbox-bot", store=made, seams=seams)
+        with _route("reset", what="inbox-bot"):
+            text = commands.handle_concierge("reset inbox-bot", store=made, seams=seams)
         self.assertIn("kept: the bot itself", text)
         self.assertIn("Nothing inside it to take back yet", text)
         self.assertEqual(seams.removed, [])
@@ -458,13 +499,15 @@ class Reset(unittest.TestCase):
         made = store()
         made.add(state.Installed(name="always-label", kind="skill", profile="default", title="label"))
         seams = FakeSeams({"default": self.home})
-        text = commands.handle_concierge("reset default", store=made, seams=seams)
+        with _route("reset", what="default"):
+            text = commands.handle_concierge("reset default", store=made, seams=seams)
         self.assertIn("Reset: default", text)
         self.assertEqual(seams.removed, [])
         self.assertTrue(self.home.exists())
 
     def test_reset_with_nothing_to_reset_says_so(self):
-        text = commands.handle_concierge("reset default", store=store(), seams=FakeSeams({}))
+        with _route("reset", what="default"):
+            text = commands.handle_concierge("reset default", store=store(), seams=FakeSeams({}))
         self.assertIn("nothing to take back", text)
 
 
@@ -497,16 +540,19 @@ class SelfOnly(unittest.TestCase):
         self.addCleanup(reset_hermes_home_override, token)
 
     def test_a_bot_cannot_make_bots(self):
-        text = commands.handle_concierge("create a researcher", store=store())
+        with _route("create", what="a researcher"):
+            text = commands.handle_concierge("create a researcher", store=store())
         self.assertIn("cannot make other bots", text)
 
     def test_a_bot_cannot_improve_another_bot(self):
-        text = commands.handle_concierge("improve coder-bot: always cite", store=store())
+        with _route("improve", what="always cite", bot="coder-bot"):
+            text = commands.handle_concierge("improve coder-bot: always cite", store=store())
         self.assertIn("only improve itself", text)
 
     def test_a_bot_can_improve_itself(self):
         _with_llm(self, "rule")
-        text = commands.handle_concierge("improve me: always answer in one line", store=store())
+        with _route("improve", what="always answer in one line", bot="me"):
+            text = commands.handle_concierge("improve me: always answer in one line", store=store())
         self.assertIn("Improved helper-two", text)
         self.assertTrue((self.bot / "SOUL.md").is_file())
 
@@ -526,9 +572,8 @@ class BotAskGuard(unittest.TestCase):
     """Free text never guesses: without a model it says so, with one it obeys."""
 
     def test_a_research_assistant_is_a_researcher_not_the_generic_one(self):
-        from concierge import presets
-
-        role = presets.detect("hire a research assistant")
+        llm = RoleLlm("researcher")
+        role = presets.detect("hire a research assistant", llm)
         self.assertIsNotNone(role)
         self.assertEqual(role.name, "researcher")
 
@@ -608,7 +653,8 @@ class RoundTwo(unittest.TestCase):
             def all(self):
                 raise OSError("disk gone")
 
-        text = commands.handle_concierge("bots", store=Broken())
+        with _route("list"):
+            text = commands.handle_concierge("bots", store=Broken())
         self.assertIn("could not be read", text)
 
     def test_the_command_layer_obeys_the_router_answer(self):
