@@ -6,7 +6,8 @@
 
 **The front door to the Hermes marketplace.**
 
-One sentence installs the right skill or plugin, or makes you a bot with the right ones already in it.
+Concierge sets your bots up and installs their packages. One sentence installs the right skill or
+plugin, or makes you a bot with the right ones already in it.
 No catalog to learn, no manifest to read, no restart. One sentence, one receipt read off the disk, and
 one undo.
 
